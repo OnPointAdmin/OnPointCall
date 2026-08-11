@@ -4,9 +4,14 @@ Laravel + Filament + PostgreSQL call center application for OnPoint Marketing.
 
 ## Documentation
 
-- **Architecture (source of truth):** [plans/call-center-architecture.md](plans/call-center-architecture.md)
-- Requirements: [Docs/REQUIREMENTS_chatgpt.md](Docs/REQUIREMENTS_chatgpt.md)
-- Soft Score API: [Docs/SoftScore/soft-score-api.md](Docs/SoftScore/soft-score-api.md)
+**Build only from the architecture plan.** Older specs are archived to avoid confusion (e.g. MySQL vs PostgreSQL).
+
+| Doc | Role |
+|-----|------|
+| [plans/call-center-architecture.md](plans/call-center-architecture.md) | **Source of truth** — stack, data model, locked owner decisions |
+| [Docs/REQUIREMENTS_chatgpt.md](Docs/REQUIREMENTS_chatgpt.md) | Requirements input (architecture wins on conflict) |
+| [Docs/SoftScore/soft-score-api.md](Docs/SoftScore/soft-score-api.md) | Soft Score API integration |
+| [Docs/Archive/](Docs/Archive/) | Superseded specs — reference only, do not implement |
 
 ## Stack
 

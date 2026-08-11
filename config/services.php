@@ -35,4 +35,10 @@ return [
         ],
     ],
 
+    'soft_score' => [
+        'base_url' => env('SOFT_SCORE_BASE_URL', 'https://prod.onpointapi.com'),
+        'client_id' => env('SOFT_SCORE_CLIENT_ID'),
+        'client_secret' => env('SOFT_SCORE_CLIENT_SECRET'),
+    ],
+
 ];

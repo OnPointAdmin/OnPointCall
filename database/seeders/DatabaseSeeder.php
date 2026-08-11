@@ -2,24 +2,25 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
+use App\Models\Company;
+use App\Support\CompanyContext;
 use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
 {
-    use WithoutModelEvents;
-
-    /**
-     * Seed the application's database.
-     */
     public function run(): void
     {
-        // User::factory(10)->create();
+        $this->call(CompanySeeder::class);
 
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-        ]);
+        $company = Company::query()->where('name', 'OnPoint Call Center')->firstOrFail();
+
+        CompanyContext::set($company->id);
+
+        $this->callWith(StateRuleSeeder::class, ['companyId' => $company->id]);
+        $this->callWith(CallingListSeeder::class, ['companyId' => $company->id]);
+        $this->callWith(AppSettingSeeder::class, ['companyId' => $company->id]);
+        $this->callWith(ImportMappingSeeder::class, ['companyId' => $company->id]);
+
+        CompanyContext::clear();
     }
 }

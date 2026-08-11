@@ -1,3 +1,5 @@
+> **Requirements input only** — not the build contract. Locked decisions (stack, Postgres, no undo, slim migration, etc.) are in [plans/call-center-architecture.md](../plans/call-center-architecture.md). **Where they conflict, architecture wins.**
+
 # Call Center Application — Requirements
 
 **Purpose of this document:** complete functional and non-functional requirements for a custom call center application. You are asked to propose the system architecture, data model, and technology stack you believe best satisfies these requirements. No stack or architecture is prescribed here — propose and justify your own.

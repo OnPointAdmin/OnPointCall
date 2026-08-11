@@ -1,3 +1,6 @@
+> **ARCHIVED — do not implement from this file.**  
+> Superseded by [plans/call-center-architecture.md](../../plans/call-center-architecture.md). This spec describes MySQL and an older model; the app uses **PostgreSQL** and the locked architecture plan.
+
 # On Point Marketing — Call Center Web App Specification
 
 **Version 2.0 — for AI-assisted build (Cursor). Supersedes v1.0 entirely.**

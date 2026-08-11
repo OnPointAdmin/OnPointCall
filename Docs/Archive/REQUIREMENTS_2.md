@@ -1,3 +1,6 @@
+> **ARCHIVED — do not implement from this file.**  
+> Superseded by [plans/call-center-architecture.md](../../plans/call-center-architecture.md) and [REQUIREMENTS_chatgpt.md](../REQUIREMENTS_chatgpt.md) where noted.
+
 # Call Center Application — Requirements
 
 **Purpose of this document:** complete functional and non-functional requirements for a custom call center application. You are asked to propose the system architecture, data model, and technology stack you believe best satisfies these requirements. No stack or architecture is prescribed here — propose and justify your own.

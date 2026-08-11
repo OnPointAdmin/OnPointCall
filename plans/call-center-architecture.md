@@ -30,7 +30,7 @@ isProject: false
 
 Sources of truth for this plan:
 
-- [Documentation/REQUIREMENTS_chatgpt.md](Documentation/REQUIREMENTS_chatgpt.md) (primary requirements scan)
+- [Docs/REQUIREMENTS_chatgpt.md](../Docs/REQUIREMENTS_chatgpt.md) (requirements input; architecture wins on conflict)
 - Owner clarifications (override chatgpt where they conflict — see locked decisions)
 
 ## Decisions locked from owner answers
