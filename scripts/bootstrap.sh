@@ -43,19 +43,15 @@ if [[ ! -f .env ]]; then
     cp .env.example .env
 fi
 
+echo "Building app image (PHP 8.4 + intl)..."
+docker compose build app
+
 echo "Installing Filament and Socialite..."
-docker run --rm \
-    -u "$(id -u):$(id -g)" \
-    -v "$ROOT:/app" \
-    -w /app \
-    composer:2 \
-    require filament/filament:"^3.2" laravel/socialite --no-interaction
+docker compose run --rm app composer require filament/filament:"^4.0" laravel/socialite --no-interaction
 
 echo ""
 echo "Bootstrap complete. Next steps:"
-echo "  1. cp .env.example .env   # if not already done"
-echo "  2. Edit .env (DB_*, APP_URL, OAuth keys)"
-echo "  3. docker compose up -d --build"
-echo "  4. docker compose exec app php artisan key:generate"
-echo "  5. docker compose exec app php artisan migrate"
-echo "  6. docker compose exec app php artisan filament:install --panels"
+echo "  1. Edit .env (DB_*, APP_URL, OAuth keys)"
+echo "  2. docker compose up -d --build"
+echo "  3. docker compose exec app php artisan migrate"
+echo "  4. docker compose exec app php artisan filament:install --panels --no-interaction"

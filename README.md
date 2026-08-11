@@ -12,8 +12,8 @@ Laravel + Filament + PostgreSQL call center application for OnPoint Marketing.
 
 | Layer | Choice |
 |-------|--------|
-| App | Laravel 11+ (PHP 8.3) |
-| Admin | Filament 3 |
+| App | Laravel 13 (PHP 8.4) |
+| Admin | Filament 4 |
 | Agent UI | Livewire + Blade + Tailwind |
 | Database | PostgreSQL 16 |
 | Auth | Laravel Socialite (Google + Microsoft) |

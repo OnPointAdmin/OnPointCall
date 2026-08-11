@@ -43,17 +43,23 @@ if (-not (Test-Path ".env")) {
     Copy-Item ".env.example" ".env"
 }
 
+Write-Host "Building app image (PHP 8.4 + intl)..."
+docker compose build app
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Docker build failed."
+    exit 1
+}
+
 Write-Host "Installing Filament and Socialite..."
-docker run --rm `
-    -v "${Root}:/app" `
-    -w /app `
-    composer:2 `
-    require filament/filament:"^3.2" laravel/socialite --no-interaction
+docker compose run --rm app composer require filament/filament:"^4.0" laravel/socialite --no-interaction
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Composer require failed."
+    exit 1
+}
 
 Write-Host ""
 Write-Host "Bootstrap complete. Next steps:"
 Write-Host "  1. Edit .env (DB_*, APP_URL, OAuth keys)"
 Write-Host "  2. docker compose up -d --build"
-Write-Host "  3. docker compose exec app php artisan key:generate"
-Write-Host "  4. docker compose exec app php artisan migrate"
-Write-Host "  5. docker compose exec app php artisan filament:install --panels"
+Write-Host "  3. docker compose exec app php artisan migrate"
+Write-Host "  4. docker compose exec app php artisan filament:install --panels --no-interaction"
