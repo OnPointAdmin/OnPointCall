@@ -121,4 +121,38 @@ class UserInviteTest extends TestCase
         $this->assertSame(UserRole::Admin, UserRole::coerce(UserRole::Admin));
         $this->assertSame(UserRole::Agent, UserRole::coerce('agent'));
     }
+
+    public function test_agent_invite_email_omits_admin_link(): void
+    {
+        $mail = new UserInviteMail(
+            User::factory()->make([
+                'role' => UserRole::Agent,
+            ]),
+            'temp-password',
+        );
+
+        $html = $mail->render();
+
+        $this->assertFalse($mail->canAccessAdmin);
+        $this->assertStringContainsString('/agent/login', $html);
+        $this->assertStringNotContainsString('/admin', $html);
+    }
+
+    public function test_admin_and_manager_invite_emails_include_admin_link(): void
+    {
+        foreach ([UserRole::Admin, UserRole::Manager] as $role) {
+            $mail = new UserInviteMail(
+                User::factory()->make([
+                    'role' => $role,
+                ]),
+                'temp-password',
+            );
+
+            $html = $mail->render();
+
+            $this->assertTrue($mail->canAccessAdmin, $role->value.' should get admin access');
+            $this->assertStringContainsString('/agent/login', $html);
+            $this->assertStringContainsString('/admin', $html);
+        }
+    }
 }

@@ -21,4 +21,9 @@ enum UserRole: string
     {
         return $value instanceof self ? $value : self::from($value);
     }
+
+    public function canAccessAdmin(): bool
+    {
+        return $this === self::Admin || $this === self::Manager;
+    }
 }

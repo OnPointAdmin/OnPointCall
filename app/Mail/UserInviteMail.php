@@ -10,10 +10,24 @@ use Illuminate\Mail\Mailables\Envelope;
 
 class UserInviteMail extends Mailable
 {
+    public bool $canAccessAdmin;
+
+    public string $agentLoginUrl;
+
+    public string $adminLoginUrl;
+
     public function __construct(
         public User $user,
         public string $plainPassword,
-    ) {}
+    ) {
+        $role = $this->user->role instanceof UserRole
+            ? $this->user->role
+            : UserRole::coerce((string) $this->user->role);
+
+        $this->canAccessAdmin = $role->canAccessAdmin();
+        $this->agentLoginUrl = url('/agent/login');
+        $this->adminLoginUrl = url('/admin');
+    }
 
     public function envelope(): Envelope
     {
@@ -24,17 +38,8 @@ class UserInviteMail extends Mailable
 
     public function content(): Content
     {
-        $canAccessAdmin = in_array($this->user->role, [UserRole::Admin, UserRole::Manager], true);
-
         return new Content(
             view: 'mail.user-invite',
-            with: [
-                'user' => $this->user,
-                'plainPassword' => $this->plainPassword,
-                'agentLoginUrl' => url('/agent/login'),
-                'adminLoginUrl' => url('/admin'),
-                'canAccessAdmin' => $canAccessAdmin,
-            ],
         );
     }
 }
