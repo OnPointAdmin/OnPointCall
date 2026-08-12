@@ -168,7 +168,7 @@ class LeadImportService
         $knownFields = [
             'phone', 'first_name', 'last_name', 'address', 'city', 'state', 'zip',
             'email', 'date_of_birth', 'venue', 'event', 'external_lead_id',
-            'consent_token', 'partner_list',
+            'consent_token', 'partner_list', 'file_name',
         ];
 
         $attributes = [
@@ -186,6 +186,7 @@ class LeadImportService
             'external_lead_id' => null,
             'consent_token' => null,
             'partner_list' => null,
+            'file_name' => null,
             'lead_type' => $leadType,
             'imported_at' => $importedAt,
             'extra_fields' => [],

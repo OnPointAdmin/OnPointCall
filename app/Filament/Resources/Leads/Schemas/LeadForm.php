@@ -55,6 +55,8 @@ class LeadForm
                     ->relationship('importBatch', 'id'),
                 Textarea::make('partner_list')
                     ->columnSpanFull(),
+                TextInput::make('file_name')
+                    ->label('File name'),
                 TextInput::make('queue_rank')
                     ->required()
                     ->numeric()

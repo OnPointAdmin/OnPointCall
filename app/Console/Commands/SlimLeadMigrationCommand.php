@@ -105,6 +105,7 @@ class SlimLeadMigrationCommand extends Command
                 'event' => $data['event'] ?? $data['Event'] ?? null,
                 'external_lead_id' => $externalId,
                 'partner_list' => $data['partner_list'] ?? $data['Partner List'] ?? null,
+                'file_name' => $data['file_name'] ?? $data['File Name'] ?? null,
                 'timezone' => $timezoneResolver->resolve($state, $zip),
                 'status' => $status,
                 'lead_type' => $leadType,

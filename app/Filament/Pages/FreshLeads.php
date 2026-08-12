@@ -24,19 +24,19 @@ use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 
-class HoldingRelease extends Page
+class FreshLeads extends Page
 {
     protected static string|\UnitEnum|null $navigationGroup = 'Leads';
 
     protected static ?int $navigationSort = 0;
 
-    protected static ?string $navigationLabel = 'Holding Release';
+    protected static ?string $navigationLabel = 'Fresh Leads';
 
-    protected static ?string $title = 'Holding Release';
+    protected static ?string $title = 'Fresh Leads';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedArrowRightCircle;
 
-    protected string $view = 'filament.pages.holding-release';
+    protected string $view = 'filament.pages.fresh-leads';
 
     public int $holdingCount = 0;
 
@@ -103,7 +103,7 @@ class HoldingRelease extends Page
     {
         return $schema
             ->components([
-                Section::make('Release')
+                Section::make('Assign to List')
                     ->schema([
                         Select::make('calling_list_id')
                             ->label('Target calling list')
@@ -122,8 +122,8 @@ class HoldingRelease extends Page
                             ->searchable(),
                         Radio::make('release_mode')
                             ->options([
-                                'all' => 'Release all matching leads',
-                                'fresh' => 'Release N freshest (by import date)',
+                                'all' => 'Assign all matching leads',
+                                'fresh' => 'Assign N freshest (by import date)',
                             ])
                             ->default('all')
                             ->live(),
@@ -158,7 +158,7 @@ class HoldingRelease extends Page
                     ->footer([
                         Actions::make([
                             Action::make('release')
-                                ->label('Release leads')
+                                ->label('Assign Leads')
                                 ->submit('release')
                                 ->color('primary'),
                         ]),
@@ -209,7 +209,7 @@ class HoldingRelease extends Page
         $this->refreshCount($releaseService);
 
         Notification::make()
-            ->title("Released {$released} lead(s)")
+            ->title("Assigned {$released} lead(s)")
             ->success()
             ->send();
     }

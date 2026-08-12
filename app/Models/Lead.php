@@ -41,6 +41,7 @@ class Lead extends Model
         'imported_at',
         'import_batch_id',
         'partner_list',
+        'file_name',
         'queue_rank',
         'lead_type',
         'extra_fields',
