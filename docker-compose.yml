@@ -23,9 +23,13 @@ services:
     restart: unless-stopped
     volumes:
       - .:/var/www/html
+      - vendor:/var/www/html/vendor
+      - storage_framework:/var/www/html/storage/framework
+      - ./docker/php-dev.ini:/usr/local/etc/php/conf.d/99-dev.ini:ro
     environment:
       APP_ENV: ${APP_ENV:-local}
       APP_DEBUG: ${APP_DEBUG:-true}
+      APP_URL: ${APP_URL:-http://localhost}
       DB_CONNECTION: pgsql
       DB_HOST: db
       DB_PORT: 5432
@@ -33,6 +37,8 @@ services:
       DB_USERNAME: ${DB_USERNAME:-onpoint}
       DB_PASSWORD: ${DB_PASSWORD:-secret}
       QUEUE_CONNECTION: ${QUEUE_CONNECTION:-database}
+      SESSION_DRIVER: ${SESSION_DRIVER:-file}
+      CACHE_STORE: ${CACHE_STORE:-file}
     depends_on:
       db:
         condition: service_healthy
@@ -45,8 +51,12 @@ services:
     command: php artisan queue:work --sleep=3 --tries=3 --max-time=3600
     volumes:
       - .:/var/www/html
+      - vendor:/var/www/html/vendor
+      - storage_framework:/var/www/html/storage/framework
+      - ./docker/php-dev.ini:/usr/local/etc/php/conf.d/99-dev.ini:ro
     environment:
       APP_ENV: ${APP_ENV:-local}
+      APP_URL: ${APP_URL:-http://localhost}
       DB_CONNECTION: pgsql
       DB_HOST: db
       DB_PORT: 5432
@@ -54,6 +64,8 @@ services:
       DB_USERNAME: ${DB_USERNAME:-onpoint}
       DB_PASSWORD: ${DB_PASSWORD:-secret}
       QUEUE_CONNECTION: ${QUEUE_CONNECTION:-database}
+      SESSION_DRIVER: ${SESSION_DRIVER:-file}
+      CACHE_STORE: ${CACHE_STORE:-file}
     depends_on:
       - app
       - db
@@ -79,3 +91,5 @@ volumes:
   pgdata:
   caddy_data:
   caddy_config:
+  vendor:
+  storage_framework:

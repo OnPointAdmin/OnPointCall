@@ -21,17 +21,20 @@ class JasonPaineAdminSeeder extends Seeder
 
         $list = CallingList::query()->where('name', 'Standard')->firstOrFail();
 
-        $user = User::query()->updateOrCreate(
-            ['email' => 'jason.paine@onpointcall.com'],
-            [
-                'company_id' => $company->id,
-                'name' => 'Jason Paine',
-                'password' => Hash::make('password'),
-                'role' => UserRole::Admin,
-                'active' => true,
-                'email_verified_at' => now(),
-            ],
-        );
+        $user = User::query()->firstOrNew(['email' => 'jason.paine@onpointcall.com']);
+        $user->fill([
+            'company_id' => $company->id,
+            'name' => 'Jason Paine',
+            'role' => UserRole::Admin,
+            'active' => true,
+            'email_verified_at' => $user->email_verified_at ?? now(),
+        ]);
+
+        if (! $user->password || ! Hash::check('password', $user->password)) {
+            $user->password = 'password';
+        }
+
+        $user->save();
 
         AllowedEmail::query()->updateOrCreate(
             ['company_id' => $company->id, 'email' => 'jason.paine@onpointcall.com'],

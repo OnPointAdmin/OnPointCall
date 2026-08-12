@@ -10,7 +10,7 @@
         type="button"
         id="phone-copy-btn"
         data-phone="{{ $phone }}"
-        class="mt-1 block w-full text-4xl font-bold tracking-wide text-slate-900 hover:text-amber-700 md:text-5xl"
+        class="mt-1 block w-full text-4xl font-bold tracking-wide text-slate-900 hover:text-blue-700 md:text-5xl"
         onclick="copyPhone('{{ $phone }}')"
     >
         {{ $phone }}
@@ -20,7 +20,7 @@
     @if (! $manualDialOnly)
         <a
             href="tel:{{ $phone }}"
-            class="mt-2 inline-block text-sm text-amber-700 md:hidden"
+            class="mt-2 inline-block text-sm text-blue-700 md:hidden"
         >
             Tap to dial
         </a>

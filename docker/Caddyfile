@@ -5,6 +5,9 @@
 :80 {
     root * /var/www/html/public
     encode gzip
-    php_fastcgi app:9000
+    php_fastcgi app:9000 {
+        dial_timeout 10s
+        read_timeout 120s
+    }
     file_server
 }

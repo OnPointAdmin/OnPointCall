@@ -15,7 +15,13 @@ class LiveDashboardStats extends StatsOverviewWidget
 
     protected function getStats(): array
     {
-        $stats = app(ManagerDashboardService::class)->todayStats(Auth::user()->company_id);
+        $user = Auth::user();
+
+        if (! $user?->company_id) {
+            return [];
+        }
+
+        $stats = app(ManagerDashboardService::class)->todayStats($user->company_id);
 
         return [
             Stat::make('Bookings Today', $stats['bookings'])

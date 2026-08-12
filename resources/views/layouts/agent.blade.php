@@ -12,7 +12,7 @@
     <header class="border-b border-slate-200 bg-white">
         <div class="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
             <div>
-                <p class="text-sm font-semibold text-amber-700">{{ config('app.name') }}</p>
+                <p class="text-sm font-semibold text-blue-700">{{ config('app.name') }}</p>
                 <p class="text-xs text-slate-500">Agent Workspace</p>
             </div>
             <div class="flex items-center gap-3 text-sm">

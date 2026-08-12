@@ -9,6 +9,7 @@ Laravel + Filament + PostgreSQL call center application for OnPoint Marketing.
 | Doc | Role |
 |-----|------|
 | [plans/call-center-architecture.md](plans/call-center-architecture.md) | **Source of truth** — stack, data model, locked owner decisions |
+| [Docs/COMMANDS.md](Docs/COMMANDS.md) | Copy-paste Docker / artisan / npm commands |
 | [Docs/REQUIREMENTS_chatgpt.md](Docs/REQUIREMENTS_chatgpt.md) | Requirements input (architecture wins on conflict) |
 | [Docs/SoftScore/soft-score-api.md](Docs/SoftScore/soft-score-api.md) | Soft Score API integration |
 | [Docs/Archive/](Docs/Archive/) | Superseded specs — reference only, do not implement |
@@ -49,6 +50,48 @@ docker compose exec app php artisan filament:install --panels
 ```
 
 Open http://localhost (or your `APP_DOMAIN`).
+
+## How to test locally (Windows + Docker)
+
+```bash
+cd D:\sf\OnPointCall
+docker compose up -d --build
+npm install && npm run build
+docker compose exec app php artisan migrate --force
+docker compose exec app php artisan db:seed --force
+docker compose exec -u root app php artisan filament:assets
+docker compose exec -u root app php artisan livewire:publish --assets
+docker compose exec app php artisan icons:cache
+docker compose exec app php artisan filament:cache-components
+docker compose exec app php artisan optimize:clear
+```
+
+`vendor/` and compiled views run from Linux Docker volumes (not the Windows bind mount). Edit code on `D:\` as usual — no local deploy. After `composer.lock` changes, run `docker compose exec app composer install`.
+
+Do **not** run `php artisan optimize` locally. It caches config/routes, can 500 Filament after login, and can make `php artisan test` wipe Postgres. Use `icons:cache` / `filament:cache-components` instead.
+
+| Check | URL / command |
+|---|---|
+| Health | http://localhost/up |
+| Admin | http://localhost/admin |
+| Agent | http://localhost/agent/login |
+| Tests | `docker compose exec app php artisan test` |
+
+Admin login: `jason.paine@onpointcall.com` / `password`
+
+### Invite a user by email
+
+The app can email a temporary password. Mail is `log` until you set SMTP in `.env` (see `.env.example` for Resend).
+
+```bash
+docker compose exec app php artisan user:invite jasonpaine1@gmail.com --name="Jason Paine" --role=admin --lists=Standard
+```
+
+Or in Admin → Users → **Invite user**. Without SMTP, the message is written to `storage/logs/laravel.log` instead of being delivered.
+
+Tests use sqlite `:memory:` only. They will not touch Docker Postgres. If admin login says credentials do not match, re-seed (`db:seed --force`) — the user was missing, not the password.
+
+If `/admin` is a white screen or the Sign in button sticks: hard-refresh, republish assets (`filament:assets` + `livewire:publish --assets`), and run `optimize:clear`. First boot after a volume recreate runs `composer install` inside the container and can take a minute.
 
 ## Services
 

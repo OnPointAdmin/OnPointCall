@@ -16,4 +16,9 @@ enum UserRole: string
             self::Agent => 'Agent',
         };
     }
+
+    public static function coerce(self|string $value): self
+    {
+        return $value instanceof self ? $value : self::from($value);
+    }
 }

@@ -6,14 +6,14 @@
                 <button
                     type="button"
                     wire:click="getNextLead"
-                    class="rounded-md bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700"
+                    class="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
                 >
                     Get Next Lead
                 </button>
             </div>
 
             @if ($emptyMessage)
-                <p class="mt-4 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                <p class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
                     {{ $emptyMessage }}
                 </p>
             @endif
@@ -96,7 +96,7 @@
                     type="text"
                     wire:model="lookupQuery"
                     placeholder="Phone, name, or email"
-                    class="block w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    class="block w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 >
                 <button
                     type="button"

@@ -2,9 +2,14 @@
 
 namespace App\Filament\Resources\Users\Tables;
 
+use App\Models\User;
+use App\Services\Users\UserInviteService;
+use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Notifications\Notification;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
@@ -47,6 +52,20 @@ class UsersTable
                 //
             ])
             ->recordActions([
+                Action::make('resendInvite')
+                    ->label('Resend invite')
+                    ->icon(Heroicon::OutlinedEnvelope)
+                    ->requiresConfirmation()
+                    ->modalHeading('Resend invite email?')
+                    ->modalDescription('This resets their password and emails a new temporary password.')
+                    ->action(function (User $record, UserInviteService $invites): void {
+                        $invites->resend($record);
+
+                        Notification::make()
+                            ->title("Invite resent to {$record->email}")
+                            ->success()
+                            ->send();
+                    }),
                 EditAction::make(),
             ])
             ->toolbarActions([

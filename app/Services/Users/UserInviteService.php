@@ -1,0 +1,102 @@
+<?php
+
+namespace App\Services\Users;
+
+use App\Enums\UserRole;
+use App\Mail\UserInviteMail;
+use App\Models\AllowedEmail;
+use App\Models\CallingList;
+use App\Models\Company;
+use App\Models\ListAssignment;
+use App\Models\User;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
+use InvalidArgumentException;
+
+class UserInviteService
+{
+    /**
+     * @param  list<int>  $callingListIds
+     * @return array{user: User, password: string}
+     */
+    public function invite(
+        Company $company,
+        string $name,
+        string $email,
+        UserRole $role,
+        array $callingListIds = [],
+        bool $sendEmail = true,
+    ): array {
+        $email = strtolower(trim($email));
+        $password = Str::password(12);
+
+        $user = User::withoutGlobalScopes()
+            ->where('company_id', $company->id)
+            ->where('email', $email)
+            ->first();
+
+        if ($user) {
+            $user->fill([
+                'name' => $name,
+                'role' => $role,
+                'active' => true,
+                'password' => $password,
+            ]);
+            $user->save();
+        } else {
+            $user = new User([
+                'company_id' => $company->id,
+                'name' => $name,
+                'email' => $email,
+                'role' => $role,
+                'active' => true,
+                'password' => $password,
+                'email_verified_at' => now(),
+            ]);
+            $user->save();
+        }
+
+        AllowedEmail::withoutGlobalScopes()->updateOrCreate(
+            ['company_id' => $company->id, 'email' => $email],
+            [],
+        );
+
+        foreach ($callingListIds as $listId) {
+            $list = CallingList::withoutGlobalScopes()
+                ->where('company_id', $company->id)
+                ->whereKey($listId)
+                ->first();
+
+            if (! $list) {
+                throw new InvalidArgumentException("Calling list {$listId} not found for this company.");
+            }
+
+            ListAssignment::withoutGlobalScopes()->updateOrCreate(
+                [
+                    'company_id' => $company->id,
+                    'user_id' => $user->id,
+                    'calling_list_id' => $list->id,
+                ],
+                [],
+            );
+        }
+
+        if ($sendEmail) {
+            Mail::to($user->email)->send(new UserInviteMail($user, $password));
+        }
+
+        return ['user' => $user->refresh(), 'password' => $password];
+    }
+
+    public function resend(User $user): string
+    {
+        $password = Str::password(12);
+        $user->password = $password;
+        $user->active = true;
+        $user->save();
+
+        Mail::to($user->email)->send(new UserInviteMail($user, $password));
+
+        return $password;
+    }
+}

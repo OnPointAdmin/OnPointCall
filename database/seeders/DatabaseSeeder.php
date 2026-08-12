@@ -20,6 +20,7 @@ class DatabaseSeeder extends Seeder
         $this->callWith(CallingListSeeder::class, ['companyId' => $company->id]);
         $this->callWith(AppSettingSeeder::class, ['companyId' => $company->id]);
         $this->callWith(ImportMappingSeeder::class, ['companyId' => $company->id]);
+        $this->call(JasonPaineAdminSeeder::class);
 
         CompanyContext::clear();
     }

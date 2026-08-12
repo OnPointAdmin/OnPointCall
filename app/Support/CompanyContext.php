@@ -2,8 +2,6 @@
 
 namespace App\Support;
 
-use Illuminate\Support\Facades\Auth;
-
 class CompanyContext
 {
     protected static ?int $companyId = null;
@@ -20,7 +18,7 @@ class CompanyContext
 
     public static function id(): ?int
     {
-        return static::get() ?? Auth::user()?->company_id;
+        return static::$companyId;
     }
 
     public static function clear(): void

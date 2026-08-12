@@ -127,7 +127,7 @@
             <button
                 type="button"
                 wire:click="applyDisposition('skip')"
-                class="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100"
+                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50"
             >
                 Skip (bottom of queue)
             </button>
