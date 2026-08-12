@@ -3,9 +3,9 @@
 namespace App\Filament\Pages;
 
 use App\DataTransferObjects\HoldingFilter;
-use App\Enums\LeadType;
 use App\Enums\SoftScoreStatus;
 use App\Exceptions\HoldingReleaseException;
+use App\Filament\Support\LeadTypeSelect;
 use App\Models\CallingList;
 use App\Models\ImportBatch;
 use App\Services\Import\HoldingReleaseService;
@@ -53,7 +53,7 @@ class FreshLeads extends Page
     public function mount(HoldingReleaseService $releaseService): void
     {
         $this->filterForm->fill([
-            'lead_type' => LeadType::Standard->value,
+            'lead_type' => 'standard',
         ]);
 
         $this->releaseForm->fill([
@@ -70,17 +70,12 @@ class FreshLeads extends Page
             ->components([
                 Section::make('Filters')
                     ->schema([
-                        Select::make('lead_type')
-                            ->options(LeadType::class)
-                            ->required()
-                            ->live(),
-                        TextInput::make('state')
-                            ->maxLength(2)
-                            ->live(debounce: 500),
-                        TextInput::make('venue')
-                            ->live(debounce: 500),
-                        TextInput::make('event')
-                            ->live(debounce: 500),
+                        LeadTypeSelect::make(allowCreate: true)
+                            ->live()
+                            ->helperText('Only calling lists with this lead type can receive matching holding leads.'),
+                        $this->holdingSelect('state', 'State'),
+                        $this->holdingSelect('venue', 'Venue'),
+                        $this->holdingSelect('event', 'Event'),
                         Select::make('import_batch_id')
                             ->label('Import batch')
                             ->options(fn () => ImportBatch::query()->orderByDesc('imported_at')->pluck('source_filename', 'id'))
@@ -88,11 +83,29 @@ class FreshLeads extends Page
                         DatePicker::make('imported_from'),
                         DatePicker::make('imported_to'),
                         TextInput::make('zip')
-                            ->maxLength(10),
-                        TextInput::make('partner'),
-                        Select::make('soft_score_status')
-                            ->options(SoftScoreStatus::class),
-                        TextInput::make('soft_score_code'),
+                            ->maxLength(10)
+                            ->live(debounce: 500),
+                        Select::make('partner')
+                            ->options(fn () => app(HoldingReleaseService::class)->distinctHoldingPartners(
+                                auth()->user()->company_id,
+                                $this->selectedLeadType(),
+                            ))
+                            ->searchable()
+                            ->live(),
+                        TextInput::make('file_name')
+                            ->label('Source file')
+                            ->live(debounce: 500),
+                        $this->softScoreStatusSelect(),
+                        $this->holdingSelect('soft_score_code', 'Soft score code'),
+                        $this->holdingSelect('age_range', 'Age range'),
+                        $this->holdingSelect('annual_income', 'Annual income'),
+                        $this->holdingSelect('marital_status', 'Marital status'),
+                        $this->holdingSelect('gender', 'Gender'),
+                        $this->holdingSelect('home_owner', 'Home owner'),
+                        $this->holdingSelect('tour_location', 'Tour location')
+                            ->visible(fn (): bool => $this->selectedLeadType() === 'tnb'),
+                        $this->holdingSelect('tour_date', 'Tour date range')
+                            ->visible(fn (): bool => $this->selectedLeadType() === 'tnb'),
                     ])
                     ->columns(3),
             ])
@@ -214,6 +227,49 @@ class FreshLeads extends Page
             ->send();
     }
 
+    private function holdingSelect(string $column, string $label): Select
+    {
+        return Select::make($column)
+            ->label($label)
+            ->options(fn () => app(HoldingReleaseService::class)->distinctHoldingColumn(
+                auth()->user()->company_id,
+                $this->selectedLeadType(),
+                $column,
+            ))
+            ->searchable()
+            ->live();
+    }
+
+    private function softScoreStatusSelect(): Select
+    {
+        return Select::make('soft_score_status')
+            ->label('Soft score status')
+            ->options(function (): array {
+                $options = app(HoldingReleaseService::class)->distinctHoldingColumn(
+                    auth()->user()->company_id,
+                    $this->selectedLeadType(),
+                    'soft_score_status',
+                );
+
+                return collect($options)
+                    ->mapWithKeys(function (string $label, string $value): array {
+                        $status = SoftScoreStatus::tryFrom($value);
+
+                        return [$value => $status?->label() ?? $label];
+                    })
+                    ->all();
+            })
+            ->searchable()
+            ->live();
+    }
+
+    private function selectedLeadType(): ?string
+    {
+        $leadType = $this->filterData['lead_type'] ?? null;
+
+        return $leadType !== null && $leadType !== '' ? (string) $leadType : null;
+    }
+
     private function refreshCount(HoldingReleaseService $releaseService): void
     {
         $this->holdingCount = $releaseService->countHolding(
@@ -227,7 +283,9 @@ class FreshLeads extends Page
         $data = $this->filterData ?? [];
 
         return new HoldingFilter(
-            leadType: isset($data['lead_type']) ? LeadType::from($data['lead_type']) : null,
+            leadType: isset($data['lead_type']) && $data['lead_type'] !== ''
+                ? (string) $data['lead_type']
+                : null,
             state: $data['state'] ?? null,
             venue: $data['venue'] ?? null,
             event: $data['event'] ?? null,
@@ -236,8 +294,16 @@ class FreshLeads extends Page
             importedTo: $data['imported_to'] ?? null,
             zip: $data['zip'] ?? null,
             partner: $data['partner'] ?? null,
+            fileName: $data['file_name'] ?? null,
             softScoreStatus: $data['soft_score_status'] ?? null,
             softScoreCode: $data['soft_score_code'] ?? null,
+            ageRange: $data['age_range'] ?? null,
+            annualIncome: $data['annual_income'] ?? null,
+            maritalStatus: $data['marital_status'] ?? null,
+            gender: $data['gender'] ?? null,
+            homeOwner: $data['home_owner'] ?? null,
+            tourLocation: $data['tour_location'] ?? null,
+            tourDate: $data['tour_date'] ?? null,
         );
     }
 }

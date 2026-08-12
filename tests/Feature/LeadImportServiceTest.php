@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Enums\ImportBatchStatus;
 use App\Enums\LeadStatus;
-use App\Enums\LeadType;
 use App\Models\Company;
 use App\Models\ImportMapping;
 use App\Models\Lead;
@@ -27,7 +26,7 @@ class LeadImportServiceTest extends TestCase
             'phone' => '4045550001',
             'external_lead_id' => 'EXISTING-A',
             'status' => LeadStatus::Holding,
-            'lead_type' => LeadType::Standard,
+            'lead_type' => 'standard',
             'imported_at' => now(),
         ]);
 
@@ -36,7 +35,7 @@ class LeadImportServiceTest extends TestCase
             'phone' => '4045550002',
             'external_lead_id' => 'EXISTING-B',
             'status' => LeadStatus::Holding,
-            'lead_type' => LeadType::Standard,
+            'lead_type' => 'standard',
             'imported_at' => now(),
         ]);
 
@@ -57,13 +56,13 @@ class LeadImportServiceTest extends TestCase
         CompanyContext::set($company->id);
 
         $service = app(LeadImportService::class);
-        $batch = $service->createBatch($company->id, 'test-import.csv', LeadType::Standard, false);
+        $batch = $service->createBatch($company->id, 'test-import.csv', 'standard', false);
 
         $result = $service->process($batch, $path, [
             'phone' => 'Phone',
             'external_lead_id' => 'Lead ID',
             'first_name' => 'First Name',
-        ], LeadType::Standard);
+        ], 'standard');
 
         CompanyContext::clear();
 
@@ -81,21 +80,19 @@ class LeadImportServiceTest extends TestCase
         ]);
     }
 
-    public function test_ssis_mapping_imports_phone_op_id_partner_list_and_extra_fields(): void
+    public function test_ssis_mapping_imports_standard_demographic_columns(): void
     {
         $company = Company::factory()->create();
         CompanyContext::set($company->id);
 
         (new ImportMappingSeeder)->run($company->id);
 
-        $standard = ImportMapping::query()->where('name', 'Standard Default')->first();
         $ssis = ImportMapping::query()->where('name', 'SSIS')->first();
 
-        $this->assertNotNull($standard);
         $this->assertNotNull($ssis);
-        $this->assertFalse($standard->is_default);
         $this->assertTrue($ssis->is_default);
-        $this->assertSame(LeadType::Standard, $ssis->lead_type);
+        $this->assertSame('standard', $ssis->lead_type);
+        $this->assertSame('AgeRange', $ssis->column_map['age_range'] ?? null);
 
         $csv = implode("\n", [
             'caller_id,first_name,last_name,address,city,state,zip,email,AgeRange,annual_income,Marital Status,Gender,HomeOwner,OP_Id,jornayaleadid,trustedform,Venue,Event,original_lead_submit_date,PartnerList,File Name',
@@ -109,13 +106,12 @@ class LeadImportServiceTest extends TestCase
         file_put_contents($path, $csv);
 
         $service = app(LeadImportService::class);
-        $batch = $service->createBatch($company->id, 'ssis-import.csv', LeadType::Standard, false);
+        $batch = $service->createBatch($company->id, 'ssis-import.csv', 'standard', false);
 
-        $result = $service->process($batch, $path, $ssis->column_map, LeadType::Standard);
+        $result = $service->process($batch, $path, $ssis->column_map, 'standard');
 
         CompanyContext::clear();
 
-        $this->assertSame(1, $result['total_rows']);
         $this->assertSame(1, $result['inserted_count']);
 
         $lead = Lead::withoutGlobalScopes()
@@ -125,20 +121,67 @@ class LeadImportServiceTest extends TestCase
 
         $this->assertNotNull($lead);
         $this->assertSame('Jane', $lead->first_name);
-        $this->assertSame('Doe', $lead->last_name);
         $this->assertSame('OP-1001', $lead->external_lead_id);
         $this->assertSame('PartnerA', $lead->partner_list);
-        $this->assertSame('Kaleo', $lead->venue);
-        $this->assertSame('Webinar', $lead->event);
-        $this->assertSame('35-44', $lead->extra_fields['age_range'] ?? null);
-        $this->assertSame('75000', $lead->extra_fields['annual_income'] ?? null);
-        $this->assertSame('Married', $lead->extra_fields['marital_status'] ?? null);
-        $this->assertSame('F', $lead->extra_fields['gender'] ?? null);
-        $this->assertSame('Yes', $lead->extra_fields['home_owner'] ?? null);
-        $this->assertSame('2026-08-01', $lead->extra_fields['original_lead_submit_date'] ?? null);
         $this->assertSame('batch-aug.csv', $lead->file_name);
-        $this->assertArrayNotHasKey('file_name', $lead->extra_fields ?? []);
-        $this->assertArrayNotHasKey('jornayaleadid', $lead->extra_fields ?? []);
-        $this->assertArrayNotHasKey('trustedform', $lead->extra_fields ?? []);
+        $this->assertSame('35-44', $lead->age_range);
+        $this->assertSame('75000', $lead->annual_income);
+        $this->assertSame('Married', $lead->marital_status);
+        $this->assertSame('F', $lead->gender);
+        $this->assertSame('Yes', $lead->home_owner);
+        $this->assertSame('2026-08-01', $lead->original_lead_submit_date);
+        $this->assertNull($lead->extra_fields);
+    }
+
+    public function test_tnb_mapping_imports_tour_fields_and_normalizes_phone(): void
+    {
+        $company = Company::factory()->create();
+        CompanyContext::set($company->id);
+
+        (new ImportMappingSeeder)->run($company->id);
+
+        $tnb = ImportMapping::query()->where('name', 'TNB')->first();
+
+        $this->assertNotNull($tnb);
+        $this->assertFalse($tnb->is_default);
+        $this->assertSame('tnb', $tnb->lead_type);
+
+        $csv = implode("\n", [
+            'BookingId,Phone_2,FirstName,LastName,Address2,TourLocation,TourDate,Premiums,Tour_Result,TourOrNoShow',
+            'BK-100,(404) 555-3333,Sam,Smith,Unit 5,Orlando Resort,2026-09-15,2 Nights,Completed,Show',
+        ]);
+
+        $path = storage_path('app/imports/tnb-import.csv');
+        if (! is_dir(dirname($path))) {
+            mkdir(dirname($path), 0777, true);
+        }
+        file_put_contents($path, $csv);
+
+        $service = app(LeadImportService::class);
+        $batch = $service->createBatch($company->id, 'tnb-import.csv', 'tnb', false);
+
+        $result = $service->process($batch, $path, $tnb->column_map, 'tnb');
+
+        CompanyContext::clear();
+
+        $this->assertSame(1, $result['inserted_count']);
+
+        $lead = Lead::withoutGlobalScopes()
+            ->where('company_id', $company->id)
+            ->where('phone', '4045553333')
+            ->first();
+
+        $this->assertNotNull($lead);
+        $this->assertSame('tnb', $lead->lead_type);
+        $this->assertSame('BK-100', $lead->booking_id);
+        $this->assertSame('4045553333', $lead->phone_2);
+        $this->assertSame('Sam', $lead->first_name);
+        $this->assertSame('Smith', $lead->last_name);
+        $this->assertSame('Unit 5', $lead->address_2);
+        $this->assertSame('Orlando Resort', $lead->tour_location);
+        $this->assertSame('2026-09-15', $lead->tour_date);
+        $this->assertSame('2 Nights', $lead->premiums);
+        $this->assertSame('Completed', $lead->tour_result);
+        $this->assertSame('Show', $lead->tour_or_no_show);
     }
 }

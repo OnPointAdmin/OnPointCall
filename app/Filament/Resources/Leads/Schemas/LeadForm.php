@@ -3,9 +3,8 @@
 namespace App\Filament\Resources\Leads\Schemas;
 
 use App\Enums\LeadStatus;
-use App\Enums\LeadType;
 use App\Enums\SoftScoreStatus;
-use Filament\Forms\Components\DatePicker;
+use App\Filament\Support\LeadTypeSelect;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -21,19 +20,36 @@ class LeadForm
                 TextInput::make('phone')
                     ->tel()
                     ->required(),
+                TextInput::make('phone_2')
+                    ->label('Phone 2')
+                    ->tel(),
                 TextInput::make('first_name'),
                 TextInput::make('last_name'),
                 TextInput::make('address'),
+                TextInput::make('address_2')
+                    ->label('Address 2'),
                 TextInput::make('city'),
                 TextInput::make('state'),
                 TextInput::make('zip'),
                 TextInput::make('email')
                     ->label('Email address')
                     ->email(),
-                DatePicker::make('date_of_birth'),
+                TextInput::make('age_range'),
+                TextInput::make('annual_income'),
+                TextInput::make('marital_status'),
+                TextInput::make('gender'),
+                TextInput::make('home_owner'),
+                TextInput::make('original_lead_submit_date'),
                 TextInput::make('venue'),
                 TextInput::make('event'),
+                TextInput::make('tour_location'),
+                TextInput::make('tour_date'),
+                TextInput::make('premiums'),
+                TextInput::make('tour_result'),
+                TextInput::make('tour_or_no_show')
+                    ->label('Tour / no show'),
                 TextInput::make('external_lead_id'),
+                TextInput::make('booking_id'),
                 TextInput::make('timezone'),
                 Select::make('status')
                     ->options(LeadStatus::class)
@@ -61,9 +77,7 @@ class LeadForm
                     ->required()
                     ->numeric()
                     ->default(0),
-                Select::make('lead_type')
-                    ->options(LeadType::class)
-                    ->required(),
+                LeadTypeSelect::make(allowCreate: true),
                 TextInput::make('extra_fields'),
                 TextInput::make('soft_score_code'),
                 Select::make('soft_score_status')

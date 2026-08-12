@@ -35,20 +35,22 @@
             <p class="text-slate-500">Partners</p>
             <p class="select-none text-slate-900" oncopy="return false">{{ $lead->partner_list }}</p>
         </div>
+        @if ($lead->file_name)
+            <div>
+                <p class="text-slate-500">Source file</p>
+                <p class="select-none text-slate-900" oncopy="return false">{{ $lead->file_name }}</p>
+            </div>
+        @endif
         <div>
             <p class="text-slate-500">Attempts</p>
             <p class="text-slate-900">{{ $lead->attempt_count }}</p>
         </div>
-        @if ($lead->extra_fields)
-            <div class="sm:col-span-2">
-                <p class="text-slate-500">Demographics</p>
-                <p class="select-none text-slate-900" oncopy="return false">
-                    @foreach ($lead->extra_fields as $key => $value)
-                        {{ $key }}: {{ is_array($value) ? json_encode($value) : $value }}{{ !$loop->last ? '; ' : '' }}
-                    @endforeach
-                </p>
+        @foreach (\App\Support\LeadDisplayFields::agentFields($lead) as $field)
+            <div>
+                <p class="text-slate-500">{{ $field['label'] }}</p>
+                <p class="select-none text-slate-900" oncopy="return false">{{ $field['value'] }}</p>
             </div>
-        @endif
+        @endforeach
     </div>
 
   @if ($lead->soft_score_status)

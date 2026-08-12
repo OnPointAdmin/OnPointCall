@@ -4,10 +4,10 @@ namespace App\Filament\Resources\Leads\Tables;
 
 use App\Enums\Disposition;
 use App\Enums\LeadStatus;
-use App\Enums\LeadType;
 use App\Enums\SoftScoreStatus;
 use App\Jobs\SoftScoreLeadJob;
 use App\Models\CallingList;
+use App\Models\LeadTypeDefinition;
 use App\Services\Leads\DispositionService;
 use App\Services\Leads\LeadMergeService;
 use App\Services\Leads\LeadRecycleService;
@@ -45,6 +45,10 @@ class LeadsTable
                 TextColumn::make('callingList.name')
                     ->label('List')
                     ->searchable(),
+                TextColumn::make('file_name')
+                    ->label('Source file')
+                    ->searchable()
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('lead_type')
                     ->badge(),
                 TextColumn::make('soft_score_code')
@@ -65,7 +69,7 @@ class LeadsTable
                 SelectFilter::make('status')
                     ->options(collect(LeadStatus::cases())->mapWithKeys(fn ($s) => [$s->value => $s->label()])),
                 SelectFilter::make('lead_type')
-                    ->options(collect(LeadType::cases())->mapWithKeys(fn ($t) => [$t->value => $t->label()])),
+                    ->options(fn (): array => LeadTypeDefinition::allOptions()),
                 SelectFilter::make('calling_list_id')
                     ->label('Calling list')
                     ->options(fn (): array => CallingList::query()->orderBy('name')->pluck('name', 'id')->all()),

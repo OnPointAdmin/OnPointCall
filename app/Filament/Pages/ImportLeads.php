@@ -2,8 +2,8 @@
 
 namespace App\Filament\Pages;
 
-use App\Enums\LeadType;
 use App\Filament\Resources\ImportBatches\ImportBatchResource;
+use App\Filament\Support\LeadTypeSelect;
 use App\Jobs\ProcessLeadImportJob;
 use App\Models\ImportMapping;
 use App\Services\Import\LeadImportService;
@@ -45,7 +45,7 @@ class ImportLeads extends Page
         $defaultMapping = ImportMapping::query()->where('is_default', true)->first();
 
         $this->form->fill([
-            'lead_type' => $defaultMapping?->lead_type?->value ?? LeadType::Standard->value,
+            'lead_type' => $defaultMapping?->lead_type ?? 'standard',
             'run_soft_score' => false,
             'import_mapping_id' => $defaultMapping?->id,
         ]);
@@ -83,12 +83,11 @@ class ImportLeads extends Page
                         $mapping = ImportMapping::query()->find($state);
 
                         if ($mapping?->lead_type) {
-                            $set('lead_type', $mapping->lead_type->value);
+                            $set('lead_type', $mapping->lead_type);
                         }
                     }),
-                Select::make('lead_type')
-                    ->options(LeadType::class)
-                    ->required(),
+                LeadTypeSelect::make()
+                    ->helperText('Creates a type for filtering Fresh Leads. Assign to a calling list with the same lead type.'),
                 Toggle::make('run_soft_score')
                     ->label('Run Soft Score on import')
                     ->helperText('Queues a soft-score check for each new lead after import completes.'),
@@ -161,7 +160,7 @@ class ImportLeads extends Page
             return;
         }
 
-        $leadType = LeadType::from($data['lead_type']);
+        $leadType = (string) $data['lead_type'];
 
         $batch = $importService->createBatch(
             companyId: auth()->user()->company_id,

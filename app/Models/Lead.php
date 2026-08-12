@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use App\Enums\LeadStatus;
-use App\Enums\LeadType;
 use App\Enums\SoftScoreStatus;
 use App\Models\Concerns\BelongsToCompany;
 use Illuminate\Database\Eloquent\Model;
@@ -18,17 +17,30 @@ class Lead extends Model
     protected $fillable = [
         'company_id',
         'phone',
+        'phone_2',
         'first_name',
         'last_name',
         'address',
+        'address_2',
         'city',
         'state',
         'zip',
         'email',
-        'date_of_birth',
+        'age_range',
+        'annual_income',
+        'marital_status',
+        'gender',
+        'home_owner',
+        'original_lead_submit_date',
         'venue',
         'event',
+        'tour_location',
+        'tour_date',
+        'premiums',
+        'tour_result',
+        'tour_or_no_show',
         'external_lead_id',
+        'booking_id',
         'consent_token',
         'timezone',
         'status',
@@ -54,9 +66,7 @@ class Lead extends Model
     protected function casts(): array
     {
         return [
-            'date_of_birth' => 'date',
             'status' => LeadStatus::class,
-            'lead_type' => LeadType::class,
             'last_attempt_at' => 'datetime',
             'callback_at' => 'datetime',
             'imported_at' => 'datetime',

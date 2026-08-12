@@ -17,6 +17,7 @@ class DatabaseSeeder extends Seeder
         CompanyContext::set($company->id);
 
         $this->callWith(StateRuleSeeder::class, ['companyId' => $company->id]);
+        $this->callWith(LeadTypeSeeder::class, ['companyId' => $company->id]);
         $this->callWith(CallingListSeeder::class, ['companyId' => $company->id]);
         $this->callWith(AppSettingSeeder::class, ['companyId' => $company->id]);
         $this->callWith(ImportMappingSeeder::class, ['companyId' => $company->id]);

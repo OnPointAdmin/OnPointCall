@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use App\Enums\LeadType;
 use App\Models\Concerns\BelongsToCompany;
 use App\Models\Concerns\RecordsSettingsChanges;
 use Illuminate\Database\Eloquent\Model;
@@ -23,7 +22,6 @@ class ImportMapping extends Model
     {
         return [
             'column_map' => 'array',
-            'lead_type' => LeadType::class,
             'is_default' => 'boolean',
         ];
     }

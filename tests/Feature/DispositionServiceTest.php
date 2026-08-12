@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Enums\Disposition;
 use App\Enums\LeadStatus;
-use App\Enums\LeadType;
 use App\Enums\UserRole;
 use App\Exceptions\CallbackOutsideWindowException;
 use App\Models\CallingList;
@@ -30,7 +29,7 @@ class DispositionServiceTest extends TestCase
         $list = CallingList::withoutGlobalScopes()->create([
             'company_id' => $company->id,
             'name' => 'Standard',
-            'lead_type' => LeadType::Standard,
+            'lead_type' => 'standard',
             'cadence' => ['day_parts' => ['morning'], 'min_gap_minutes' => 60],
             'active' => true,
         ]);
@@ -41,7 +40,7 @@ class DispositionServiceTest extends TestCase
             'state' => 'NY',
             'timezone' => 'America/New_York',
             'status' => LeadStatus::Callable,
-            'lead_type' => LeadType::Standard,
+            'lead_type' => 'standard',
             'calling_list_id' => $list->id,
             'attempt_count' => 2,
             'queue_rank' => 1,
@@ -54,7 +53,7 @@ class DispositionServiceTest extends TestCase
             'state' => 'NY',
             'timezone' => 'America/New_York',
             'status' => LeadStatus::Callable,
-            'lead_type' => LeadType::Standard,
+            'lead_type' => 'standard',
             'calling_list_id' => $list->id,
             'queue_rank' => 5,
             'imported_at' => now(),
@@ -104,7 +103,7 @@ class DispositionServiceTest extends TestCase
             'state' => 'NY',
             'timezone' => 'America/New_York',
             'status' => LeadStatus::Callable,
-            'lead_type' => LeadType::Standard,
+            'lead_type' => 'standard',
             'imported_at' => now(),
         ]);
 

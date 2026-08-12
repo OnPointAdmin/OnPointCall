@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Enums\LeadStatus;
-use App\Enums\LeadType;
 use App\Models\Company;
 use App\Models\Lead;
 use App\Models\LeadClaim;
@@ -25,7 +24,7 @@ class LeadClaimServiceTest extends TestCase
             'company_id' => $company->id,
             'phone' => '4045554001',
             'status' => LeadStatus::Callable,
-            'lead_type' => LeadType::Standard,
+            'lead_type' => 'standard',
             'imported_at' => now(),
         ]);
 

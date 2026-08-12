@@ -4,7 +4,6 @@ namespace App\Services\Import;
 
 use App\Enums\ImportBatchStatus;
 use App\Enums\LeadStatus;
-use App\Enums\LeadType;
 use App\Jobs\SoftScoreLeadJob;
 use App\Models\ImportBatch;
 use App\Models\Lead;
@@ -17,10 +16,44 @@ use SplFileObject;
 class LeadImportService
 {
     /**
+     * @var array<string, string>
+     */
+    public const KNOWN_IMPORT_FIELDS = [
+        'phone' => 'Phone',
+        'first_name' => 'First name',
+        'last_name' => 'Last name',
+        'address' => 'Address',
+        'city' => 'City',
+        'state' => 'State',
+        'zip' => 'Zip',
+        'email' => 'Email',
+        'venue' => 'Venue',
+        'event' => 'Event',
+        'external_lead_id' => 'External lead ID',
+        'consent_token' => 'Consent token',
+        'partner_list' => 'Partner list',
+        'file_name' => 'File name',
+        'age_range' => 'Age range',
+        'annual_income' => 'Annual income',
+        'marital_status' => 'Marital status',
+        'gender' => 'Gender',
+        'home_owner' => 'Homeowner',
+        'original_lead_submit_date' => 'Original submit date',
+        'booking_id' => 'Booking ID',
+        'phone_2' => 'Phone 2',
+        'address_2' => 'Address 2',
+        'tour_location' => 'Tour location',
+        'tour_date' => 'Tour date',
+        'premiums' => 'Premiums',
+        'tour_result' => 'Tour result',
+        'tour_or_no_show' => 'Tour / no show',
+    ];
+
+    /**
      * @param  array<string, string>  $columnMap  lead_field => csv_header
      * @return array{inserted: list<int>, inserted_count: int, duplicate_count: int, conflict_count: int, total_rows: int}
      */
-    public function process(ImportBatch $batch, string $filePath, array $columnMap, LeadType $leadType): array
+    public function process(ImportBatch $batch, string $filePath, array $columnMap, string $leadType): array
     {
         if (! is_readable($filePath)) {
             throw new RuntimeException("Import file is not readable: {$filePath}");
@@ -163,34 +196,15 @@ class LeadImportService
      * @param  array<string, string>  $columnMap
      * @return array<string, mixed>
      */
-    private function mapRow(array $row, array $headerIndex, array $columnMap, LeadType $leadType, Carbon $importedAt): array
+    private function mapRow(array $row, array $headerIndex, array $columnMap, string $leadType, Carbon $importedAt): array
     {
-        $knownFields = [
-            'phone', 'first_name', 'last_name', 'address', 'city', 'state', 'zip',
-            'email', 'date_of_birth', 'venue', 'event', 'external_lead_id',
-            'consent_token', 'partner_list', 'file_name',
-        ];
+        $knownFields = array_keys(self::KNOWN_IMPORT_FIELDS);
 
-        $attributes = [
-            'phone' => null,
-            'first_name' => null,
-            'last_name' => null,
-            'address' => null,
-            'city' => null,
-            'state' => null,
-            'zip' => null,
-            'email' => null,
-            'date_of_birth' => null,
-            'venue' => null,
-            'event' => null,
-            'external_lead_id' => null,
-            'consent_token' => null,
-            'partner_list' => null,
-            'file_name' => null,
-            'lead_type' => $leadType,
-            'imported_at' => $importedAt,
-            'extra_fields' => [],
-        ];
+        $attributes = array_fill_keys($knownFields, null);
+        $attributes['lead_type'] = $leadType;
+        $attributes['imported_at'] = $importedAt;
+        $attributes['extra_fields'] = [];
+        $attributes['timezone'] = null;
 
         foreach ($columnMap as $leadField => $csvHeader) {
             if ($csvHeader === '') {
@@ -215,20 +229,13 @@ class LeadImportService
         }
 
         $attributes['phone'] = PhoneNormalizer::normalize($attributes['phone']);
+        $attributes['phone_2'] = PhoneNormalizer::normalize($attributes['phone_2']);
         $attributes['state'] = $attributes['state'] ? strtoupper(substr($attributes['state'], 0, 2)) : null;
         $attributes['timezone'] = TimezoneResolver::resolve(
             $attributes['state'],
             $attributes['zip'],
             $attributes['city'],
         );
-
-        if ($attributes['date_of_birth']) {
-            try {
-                $attributes['date_of_birth'] = Carbon::parse($attributes['date_of_birth'])->toDateString();
-            } catch (\Throwable) {
-                $attributes['date_of_birth'] = null;
-            }
-        }
 
         if ($attributes['extra_fields'] === []) {
             $attributes['extra_fields'] = null;
@@ -299,7 +306,7 @@ class LeadImportService
     public function createBatch(
         int $companyId,
         string $sourceFilename,
-        LeadType $leadType,
+        string $leadType,
         bool $runSoftScore,
     ): ImportBatch {
         return ImportBatch::withoutGlobalScopes()->create([

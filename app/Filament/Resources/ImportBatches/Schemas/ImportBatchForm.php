@@ -3,7 +3,7 @@
 namespace App\Filament\Resources\ImportBatches\Schemas;
 
 use App\Enums\ImportBatchStatus;
-use App\Enums\LeadType;
+use App\Filament\Support\LeadTypeSelect;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -21,8 +21,7 @@ class ImportBatchForm
                 Select::make('status')
                     ->options(ImportBatchStatus::class),
                 DateTimePicker::make('imported_at'),
-                Select::make('lead_type')
-                    ->options(LeadType::class),
+                LeadTypeSelect::make(allowCreate: false, activeOnly: false),
                 Toggle::make('run_soft_score'),
                 TextInput::make('total_rows')->numeric(),
                 TextInput::make('inserted_count')->numeric(),

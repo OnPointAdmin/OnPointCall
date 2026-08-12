@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use App\Enums\LeadType;
 use App\Models\Concerns\BelongsToCompany;
 use App\Models\Concerns\RecordsSettingsChanges;
 use Illuminate\Database\Eloquent\Model;
@@ -26,7 +25,6 @@ class CallingList extends Model
     protected function casts(): array
     {
         return [
-            'lead_type' => LeadType::class,
             'cadence' => 'array',
             'booking_param_map' => 'array',
             'active' => 'boolean',

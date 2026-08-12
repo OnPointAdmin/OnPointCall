@@ -4,7 +4,6 @@ namespace App\Console\Commands;
 
 use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
-use App\Enums\LeadType;
 use App\Models\Company;
 use App\Models\Lead;
 use App\Models\LeadHistory;
@@ -19,7 +18,7 @@ class SlimLeadMigrationCommand extends Command
     protected $signature = 'leads:migrate-slim
         {file : Path to CSV file}
         {--company= : Company ID}
-        {--lead-type=standard : Lead type (standard|tnb)}
+        {--lead-type=standard : Lead type slug (e.g. standard, tnb)}
         {--list= : Optional calling list ID to assign released leads}';
 
     protected $description = 'One-time slim migration: import leads with last disposition and last owner only';
@@ -37,7 +36,7 @@ class SlimLeadMigrationCommand extends Command
         $company = $this->resolveCompany();
         CompanyContext::set($company->id);
 
-        $leadType = LeadType::from($this->option('lead-type'));
+        $leadType = (string) $this->option('lead-type');
         $listId = $this->option('list') ? (int) $this->option('list') : null;
         $status = $listId ? LeadStatus::Callable : LeadStatus::Holding;
 

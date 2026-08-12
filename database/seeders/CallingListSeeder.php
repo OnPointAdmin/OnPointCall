@@ -2,7 +2,6 @@
 
 namespace Database\Seeders;
 
-use App\Enums\LeadType;
 use App\Models\CallingList;
 use Illuminate\Database\Seeder;
 
@@ -13,7 +12,7 @@ class CallingListSeeder extends Seeder
         $lists = [
             [
                 'name' => 'Standard',
-                'lead_type' => LeadType::Standard,
+                'lead_type' => 'standard',
                 'cadence' => [
                     'day_parts' => ['morning', 'afternoon', 'evening'],
                     'min_gap_minutes' => 60,
@@ -22,7 +21,7 @@ class CallingListSeeder extends Seeder
             ],
             [
                 'name' => 'TNB',
-                'lead_type' => LeadType::Tnb,
+                'lead_type' => 'tnb',
                 'cadence' => [
                     'day_parts' => ['morning', 'afternoon', 'evening'],
                     'min_gap_minutes' => 60,

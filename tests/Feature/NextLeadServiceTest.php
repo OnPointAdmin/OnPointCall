@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Enums\EmptyQueueReason;
 use App\Enums\LeadStatus;
-use App\Enums\LeadType;
 use App\Enums\UserRole;
 use App\Models\AppSetting;
 use App\Models\CallingList;
@@ -40,7 +39,7 @@ class NextLeadServiceTest extends TestCase
             'state' => 'NY',
             'timezone' => 'America/New_York',
             'status' => LeadStatus::Callback,
-            'lead_type' => LeadType::Standard,
+            'lead_type' => 'standard',
             'calling_list_id' => $list->id,
             'callback_owner_id' => $user->id,
             'callback_at' => now()->subHour(),
@@ -94,7 +93,7 @@ class NextLeadServiceTest extends TestCase
         $list = CallingList::withoutGlobalScopes()->create([
             'company_id' => $company->id,
             'name' => 'Standard',
-            'lead_type' => LeadType::Standard,
+            'lead_type' => 'standard',
             'cadence' => [
                 'day_parts' => ['morning', 'afternoon', 'evening'],
                 'min_gap_minutes' => 60,
@@ -125,7 +124,7 @@ class NextLeadServiceTest extends TestCase
             'state' => 'NY',
             'timezone' => 'America/New_York',
             'status' => LeadStatus::Callable,
-            'lead_type' => LeadType::Standard,
+            'lead_type' => 'standard',
             'calling_list_id' => $listId,
             'imported_at' => now(),
             'queue_rank' => $rank,

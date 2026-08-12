@@ -2,8 +2,10 @@
 
 namespace App\Filament\Resources\ImportMappings\Schemas;
 
-use App\Enums\LeadType;
-use Filament\Forms\Components\KeyValue;
+use App\Filament\Support\LeadTypeSelect;
+use App\Services\Import\LeadImportService;
+use Filament\Forms\Components\Repeater;
+use Filament\Forms\Components\Repeater\TableColumn;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -18,15 +20,24 @@ class ImportMappingForm
                 TextInput::make('name')
                     ->required()
                     ->maxLength(255),
-                KeyValue::make('column_map')
-                    ->label('Column map')
-                    ->keyLabel('Lead field')
-                    ->valueLabel('CSV header')
-                    ->required()
-                    ->helperText('Map lead fields to CSV column headers. Use extra.field_name for TNB/custom columns.')
+                Repeater::make('mapping_rows')
+                    ->label('Column mapping')
+                    ->table([
+                        TableColumn::make('CSV column'),
+                        TableColumn::make('Lead field'),
+                    ])
+                    ->compact()
+                    ->schema([
+                        TextInput::make('source')
+                            ->required(),
+                        Select::make('destination')
+                            ->options(LeadImportService::KNOWN_IMPORT_FIELDS)
+                            ->searchable()
+                            ->required(),
+                    ])
+                    ->addActionLabel('Add row')
                     ->columnSpanFull(),
-                Select::make('lead_type')
-                    ->options(LeadType::class),
+                LeadTypeSelect::make(),
                 Toggle::make('is_default')
                     ->label('Default mapping'),
             ]);

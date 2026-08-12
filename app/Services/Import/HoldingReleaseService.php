@@ -11,9 +11,25 @@ use App\Models\Lead;
 use App\Models\LeadHistory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
+use InvalidArgumentException;
 
 class HoldingReleaseService
 {
+    private const DISTINCT_COLUMNS = [
+        'state',
+        'venue',
+        'event',
+        'soft_score_status',
+        'soft_score_code',
+        'age_range',
+        'annual_income',
+        'marital_status',
+        'gender',
+        'home_owner',
+        'tour_location',
+        'tour_date',
+    ];
+
     public function queryHolding(int $companyId, HoldingFilter $filter): Builder
     {
         $query = Lead::withoutGlobalScopes()
@@ -29,11 +45,11 @@ class HoldingReleaseService
         }
 
         if ($filter->venue) {
-            $query->where('venue', 'ilike', '%'.$filter->venue.'%');
+            $query->where('venue', $filter->venue);
         }
 
         if ($filter->event) {
-            $query->where('event', 'ilike', '%'.$filter->event.'%');
+            $query->where('event', $filter->event);
         }
 
         if ($filter->importBatchId) {
@@ -56,6 +72,10 @@ class HoldingReleaseService
             $query->where('partner_list', 'ilike', '%'.$filter->partner.'%');
         }
 
+        if ($filter->fileName) {
+            $query->where('file_name', 'ilike', '%'.$filter->fileName.'%');
+        }
+
         if ($filter->softScoreStatus) {
             $query->where('soft_score_status', $filter->softScoreStatus);
         }
@@ -64,7 +84,87 @@ class HoldingReleaseService
             $query->where('soft_score_code', $filter->softScoreCode);
         }
 
+        if ($filter->ageRange) {
+            $query->where('age_range', $filter->ageRange);
+        }
+
+        if ($filter->annualIncome) {
+            $query->where('annual_income', $filter->annualIncome);
+        }
+
+        if ($filter->maritalStatus) {
+            $query->where('marital_status', $filter->maritalStatus);
+        }
+
+        if ($filter->gender) {
+            $query->where('gender', $filter->gender);
+        }
+
+        if ($filter->homeOwner) {
+            $query->where('home_owner', $filter->homeOwner);
+        }
+
+        if ($filter->tourLocation) {
+            $query->where('tour_location', $filter->tourLocation);
+        }
+
+        if ($filter->tourDate) {
+            $query->where('tour_date', $filter->tourDate);
+        }
+
         return $query;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function distinctHoldingColumn(int $companyId, ?string $leadType, string $column): array
+    {
+        if (! in_array($column, self::DISTINCT_COLUMNS, true)) {
+            throw new InvalidArgumentException("Unsupported holding filter column: {$column}");
+        }
+
+        $values = $this->holdingBaseQuery($companyId, $leadType)
+            ->whereNotNull($column)
+            ->where($column, '!=', '')
+            ->distinct()
+            ->orderBy($column)
+            ->pluck($column);
+
+        $options = [];
+
+        foreach ($values as $value) {
+            $options[(string) $value] = (string) $value;
+        }
+
+        return $options;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function distinctHoldingPartners(int $companyId, ?string $leadType): array
+    {
+        $partnerLists = $this->holdingBaseQuery($companyId, $leadType)
+            ->whereNotNull('partner_list')
+            ->where('partner_list', '!=', '')
+            ->pluck('partner_list');
+
+        $partners = [];
+
+        foreach ($partnerLists as $partnerList) {
+            foreach (explode(',', (string) $partnerList) as $partner) {
+                $partner = trim($partner);
+
+                if ($partner !== '') {
+                    $partners[$partner] = $partner;
+                }
+            }
+        }
+
+        ksort($partners);
+
+        return $partners;
     }
 
     public function countHolding(int $companyId, HoldingFilter $filter): int
@@ -93,6 +193,19 @@ class HoldingReleaseService
         }
 
         return $this->release($companyId, $filter, $callingListId, $count, $actorId);
+    }
+
+    private function holdingBaseQuery(int $companyId, ?string $leadType): Builder
+    {
+        $query = Lead::withoutGlobalScopes()
+            ->where('company_id', $companyId)
+            ->where('status', LeadStatus::Holding);
+
+        if ($leadType) {
+            $query->where('lead_type', $leadType);
+        }
+
+        return $query;
     }
 
     private function release(

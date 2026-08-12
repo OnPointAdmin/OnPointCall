@@ -2,8 +2,7 @@
 
 namespace App\Filament\Resources\CallingLists\Schemas;
 
-use App\Enums\LeadType;
-use Filament\Forms\Components\Select;
+use App\Filament\Support\LeadTypeSelect;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -17,9 +16,7 @@ class CallingListForm
             ->components([
                 TextInput::make('name')
                     ->required(),
-                Select::make('lead_type')
-                    ->options(LeadType::class)
-                    ->required(),
+                LeadTypeSelect::make(),
                 TextInput::make('cadence')
                     ->required()
                     ->default('{}'),

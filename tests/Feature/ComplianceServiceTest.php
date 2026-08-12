@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Enums\LeadStatus;
-use App\Enums\LeadType;
 use App\Models\CallingList;
 use App\Models\Company;
 use App\Models\Lead;
@@ -73,7 +72,7 @@ class ComplianceServiceTest extends TestCase
         $list = CallingList::withoutGlobalScopes()->create([
             'company_id' => $companyId,
             'name' => 'Standard',
-            'lead_type' => LeadType::Standard,
+            'lead_type' => 'standard',
             'cadence' => [
                 'day_parts' => ['morning', 'afternoon', 'evening'],
                 'min_gap_minutes' => 60,
@@ -87,7 +86,7 @@ class ComplianceServiceTest extends TestCase
             'state' => 'NY',
             'timezone' => 'America/New_York',
             'status' => LeadStatus::Callable,
-            'lead_type' => LeadType::Standard,
+            'lead_type' => 'standard',
             'calling_list_id' => $list->id,
             'imported_at' => now(),
             'queue_rank' => 1,

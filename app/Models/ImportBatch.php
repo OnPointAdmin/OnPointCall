@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use App\Enums\ImportBatchStatus;
-use App\Enums\LeadType;
 use App\Models\Concerns\BelongsToCompany;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -34,7 +33,6 @@ class ImportBatch extends Model
     {
         return [
             'imported_at' => 'datetime',
-            'lead_type' => LeadType::class,
             'run_soft_score' => 'boolean',
             'status' => ImportBatchStatus::class,
         ];
