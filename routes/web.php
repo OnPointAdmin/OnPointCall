@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Agent\AuthController;
+use App\Http\Controllers\Agent\PasswordResetController;
 use App\Http\Middleware\EnsureCanCall;
 use App\Http\Middleware\SetCompanyContext;
 use App\Livewire\Agent\Workspace;
@@ -14,7 +15,12 @@ Route::get('/agent/login', [AuthController::class, 'showLogin'])->name('agent.lo
 Route::post('/agent/login', [AuthController::class, 'login']);
 Route::post('/agent/logout', [AuthController::class, 'logout'])->name('agent.logout');
 
-Route::middleware(['auth', SetCompanyContext::class, EnsureCanCall::class])
+Route::get('/agent/forgot-password', [PasswordResetController::class, 'showForgotPassword'])->name('agent.password.request');
+Route::post('/agent/forgot-password', [PasswordResetController::class, 'sendResetLink'])->name('agent.password.email');
+Route::get('/agent/reset-password/{token}', [PasswordResetController::class, 'showResetPassword'])->name('agent.password.reset');
+Route::post('/agent/reset-password', [PasswordResetController::class, 'resetPassword'])->name('agent.password.update');
+
+Route::middleware(['auth:agent', SetCompanyContext::class, EnsureCanCall::class])
     ->prefix('agent')
     ->group(function (): void {
         Route::get('/', Workspace::class)->name('agent.workspace');

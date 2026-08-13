@@ -10,7 +10,7 @@ class EnsureCanCall
 {
     public function handle(Request $request, Closure $next): Response
     {
-        $user = $request->user();
+        $user = $request->user('agent') ?? $request->user();
 
         if (! $user || ! $user->active || ! $user->canCall()) {
             abort(403, 'You are not assigned to any calling lists.');

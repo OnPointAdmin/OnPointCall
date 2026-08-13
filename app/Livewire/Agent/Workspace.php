@@ -6,6 +6,7 @@ use App\Enums\Disposition;
 use App\Enums\EmptyQueueReason;
 use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
+use App\Enums\SoftScoreStatus;
 use App\Exceptions\CallbackOutsideWindowException;
 use App\Models\Lead;
 use App\Models\LeadHistory;
@@ -49,7 +50,7 @@ class Workspace extends Component
     {
         $this->lookupResults = collect();
 
-        $claim = app(LeadClaimService::class)->activeClaimForUser(Auth::user());
+        $claim = app(LeadClaimService::class)->activeClaimForUser(Auth::guard('agent')->user());
 
         if ($claim?->lead) {
             $this->loadLead($claim->lead);
@@ -63,7 +64,7 @@ class Workspace extends Component
         $this->lookupReadOnly = false;
         $this->softScoreMessage = '';
 
-        $result = app(NextLeadService::class)->getNext(Auth::user());
+        $result = app(NextLeadService::class)->getNext(Auth::guard('agent')->user());
 
         if ($result->hasLead()) {
             $this->loadLead($result->lead);
@@ -104,7 +105,7 @@ class Workspace extends Component
 
             app(DispositionService::class)->apply(
                 $lead,
-                Auth::user(),
+                Auth::guard('agent')->user(),
                 $disposition,
                 $callbackAt,
                 $disposition === Disposition::Skip ? trim($this->skipReason) : null,
@@ -127,20 +128,22 @@ class Workspace extends Component
             return;
         }
 
-        app(SoftScoreService::class)->scoreLead($lead, Auth::id());
+        app(SoftScoreService::class)->scoreLead($lead, Auth::guard('agent')->id());
 
         $lead->refresh();
 
-        $status = $lead->soft_score_status?->label() ?? 'Unknown';
-        $code = $lead->soft_score_code ?? '—';
-
-        $this->softScoreMessage = "Soft Score: {$status} ({$code})";
+        $this->softScoreMessage = match ($lead->soft_score_status) {
+            SoftScoreStatus::Error => 'Soft Score: Error'.($lead->soft_score_last_error ? ' — '.$lead->soft_score_last_error : ''),
+            SoftScoreStatus::Pending => 'Soft Score: Pending',
+            SoftScoreStatus::Complete => 'Soft Score: '.($lead->soft_score_code ?: '—'),
+            default => 'Soft Score: Unknown',
+        };
     }
 
     public function searchLeads(): void
     {
         $this->lookupResults = app(LeadLookupService::class)
-            ->search(Auth::user()->company_id, $this->lookupQuery);
+            ->search(Auth::guard('agent')->user()->company_id, $this->lookupQuery);
 
         $this->lookupLeadId = null;
         $this->lookupReadOnly = false;
@@ -150,7 +153,7 @@ class Workspace extends Component
     {
         $lead = Lead::withoutGlobalScopes()
             ->with(['callingList', 'claim', 'callbackOwner', 'history' => fn ($q) => $q->orderByDesc('occurred_at')->limit(20)])
-            ->where('company_id', Auth::user()->company_id)
+            ->where('company_id', Auth::guard('agent')->user()->company_id)
             ->find($leadId);
 
         if (! $lead) {
@@ -158,15 +161,15 @@ class Workspace extends Component
         }
 
         $lookup = app(LeadLookupService::class);
-        $this->lookupReadOnly = $lookup->isReadOnly($lead, Auth::user());
+        $this->lookupReadOnly = $lookup->isReadOnly($lead, Auth::guard('agent')->user());
 
-        if ($lookup->canWorkImmediately($lead, Auth::user())) {
-            app(LeadClaimService::class)->claimForLookup($lead, Auth::user());
+        if ($lookup->canWorkImmediately($lead, Auth::guard('agent')->user())) {
+            app(LeadClaimService::class)->claimForLookup($lead, Auth::guard('agent')->user());
 
             LeadHistory::withoutGlobalScopes()->create([
                 'company_id' => $lead->company_id,
                 'lead_id' => $lead->id,
-                'actor_id' => Auth::id(),
+                'actor_id' => Auth::guard('agent')->id(),
                 'event_type' => LeadHistoryType::Claim,
                 'occurred_at' => now(),
                 'payload' => ['source' => 'lookup'],
@@ -182,21 +185,21 @@ class Workspace extends Component
 
     public function getStatsProperty(): array
     {
-        return app(AgentStatsService::class)->statsForUser(Auth::user());
+        return app(AgentStatsService::class)->statsForUser(Auth::guard('agent')->user());
     }
 
     public function getLeaderboardProperty(): Collection
     {
-        return app(AgentStatsService::class)->leaderboard(Auth::user()->company_id);
+        return app(AgentStatsService::class)->leaderboard(Auth::guard('agent')->user()->company_id);
     }
 
     public function getCallbacksProperty(): Collection
     {
         return Lead::withoutGlobalScopes()
             ->with('callingList')
-            ->where('company_id', Auth::user()->company_id)
+            ->where('company_id', Auth::guard('agent')->user()->company_id)
             ->where('status', LeadStatus::Callback)
-            ->where('callback_owner_id', Auth::id())
+            ->where('callback_owner_id', Auth::guard('agent')->id())
             ->orderBy('callback_at')
             ->get();
     }
@@ -209,7 +212,7 @@ class Workspace extends Component
 
         return Lead::withoutGlobalScopes()
             ->with(['callingList', 'history' => fn ($q) => $q->orderByDesc('occurred_at')->limit(20)])
-            ->where('company_id', Auth::user()->company_id)
+            ->where('company_id', Auth::guard('agent')->user()->company_id)
             ->find($this->lookupLeadId);
     }
 
@@ -246,7 +249,7 @@ class Workspace extends Component
 
         return Lead::withoutGlobalScopes()
             ->with(['callingList', 'claim', 'history' => fn ($q) => $q->orderByDesc('occurred_at')->limit(20)])
-            ->where('company_id', Auth::user()->company_id)
+            ->where('company_id', Auth::guard('agent')->user()->company_id)
             ->find($this->leadId);
     }
 

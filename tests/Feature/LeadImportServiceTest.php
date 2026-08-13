@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Enums\ImportBatchStatus;
 use App\Enums\LeadStatus;
+use App\Enums\SoftScoreStatus;
+use App\Jobs\SoftScoreLeadJob;
 use App\Models\Company;
 use App\Models\ImportMapping;
 use App\Models\Lead;
@@ -11,6 +13,7 @@ use App\Services\Import\LeadImportService;
 use App\Support\CompanyContext;
 use Database\Seeders\ImportMappingSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class LeadImportServiceTest extends TestCase
@@ -183,5 +186,40 @@ class LeadImportServiceTest extends TestCase
         $this->assertSame('2 Nights', $lead->premiums);
         $this->assertSame('Completed', $lead->tour_result);
         $this->assertSame('Show', $lead->tour_or_no_show);
+    }
+
+    public function test_import_marks_soft_score_pending_when_enabled(): void
+    {
+        Queue::fake();
+
+        $company = Company::factory()->create();
+        CompanyContext::set($company->id);
+
+        $csv = implode("\n", [
+            'Phone,First Name',
+            '4045554444,Jane',
+        ]);
+
+        $path = storage_path('app/imports/soft-score-import.csv');
+        if (! is_dir(dirname($path))) {
+            mkdir(dirname($path), 0777, true);
+        }
+        file_put_contents($path, $csv);
+
+        $service = app(LeadImportService::class);
+        $batch = $service->createBatch($company->id, 'soft-score-import.csv', 'standard', true);
+
+        $service->process($batch, $path, [
+            'phone' => 'Phone',
+            'first_name' => 'First Name',
+        ], 'standard');
+
+        CompanyContext::clear();
+
+        $lead = Lead::withoutGlobalScopes()->where('phone', '4045554444')->first();
+
+        $this->assertNotNull($lead);
+        $this->assertSame(SoftScoreStatus::Pending, $lead->soft_score_status);
+        Queue::assertPushed(SoftScoreLeadJob::class, 1);
     }
 }

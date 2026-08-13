@@ -11,12 +11,9 @@
 <body class="min-h-screen bg-slate-100 text-slate-900 antialiased">
     <header class="border-b border-slate-200 bg-white">
         <div class="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
-            <div>
-                <p class="text-sm font-semibold text-blue-700">{{ config('app.name') }}</p>
-                <p class="text-xs text-slate-500">Agent Workspace</p>
-            </div>
+            <x-brand-mark size="sm" />
             <div class="flex items-center gap-3 text-sm">
-                <span class="text-slate-600">{{ auth()->user()->name }}</span>
+                <span class="text-slate-600">{{ auth('agent')->user()->name }}</span>
                 <form method="POST" action="{{ route('agent.logout') }}">
                     @csrf
                     <button type="submit" class="rounded-md border border-slate-300 px-3 py-1.5 text-slate-700 hover:bg-slate-50">

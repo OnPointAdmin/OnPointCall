@@ -20,6 +20,10 @@ class CompaniesTable
                     ->sortable(),
                 IconColumn::make('active')
                     ->boolean(),
+                TextColumn::make('salesforce_id')
+                    ->label('Salesforce ID')
+                    ->searchable()
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()

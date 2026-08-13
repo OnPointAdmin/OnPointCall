@@ -56,10 +56,15 @@
   @if ($lead->soft_score_status)
         <div class="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
             <span class="text-slate-500">Soft Score:</span>
-            <span class="font-medium">{{ $lead->soft_score_status->label() }}</span>
-            @if ($lead->soft_score_code)
-                <span class="text-slate-700">({{ $lead->soft_score_code }})</span>
-            @endif
+            <span class="font-medium">
+                @if ($lead->soft_score_status === \App\Enums\SoftScoreStatus::Error)
+                    Error
+                @elseif ($lead->soft_score_status === \App\Enums\SoftScoreStatus::Pending)
+                    Pending
+                @else
+                    {{ $lead->soft_score_code ?: '—' }}
+                @endif
+            </span>
         </div>
     @endif
 

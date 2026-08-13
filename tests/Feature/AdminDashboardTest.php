@@ -18,7 +18,7 @@ class AdminDashboardTest extends TestCase
         $this->seed(DatabaseSeeder::class);
         $this->seed(JasonPaineAdminSeeder::class);
 
-        $user = User::where('email', 'jason.paine@onpointcall.com')->firstOrFail();
+        $user = User::where('email', 'jason.paine@onpointmrg.com')->firstOrFail();
 
         $response = $this->actingAs($user)->get('/admin');
 
@@ -31,7 +31,7 @@ class AdminDashboardTest extends TestCase
         $this->seed(JasonPaineAdminSeeder::class);
 
         $user = User::withoutGlobalScopes()
-            ->where('email', 'jason.paine@onpointcall.com')
+            ->where('email', 'jason.paine@onpointmrg.com')
             ->firstOrFail();
 
         CompanyContext::clear();

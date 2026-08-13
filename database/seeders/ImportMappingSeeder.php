@@ -86,6 +86,7 @@ class ImportMappingSeeder extends Seeder
                     'last_name' => 'LastName',
                     'address_2' => 'Address2',
                     'tour_location' => 'TourLocation',
+                    'tour_date_start' => 'TourDateStart',
                     'tour_date' => 'TourDate',
                     'premiums' => 'Premiums',
                     'tour_result' => 'Tour_Result',

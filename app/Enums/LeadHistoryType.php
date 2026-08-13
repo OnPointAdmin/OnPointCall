@@ -15,6 +15,7 @@ enum LeadHistoryType: string
     case ClaimExpire = 'claim_expire';
     case StatusChange = 'status_change';
     case SoftScore = 'soft_score';
+    case RndCheck = 'rnd_check';
 
     public function label(): string
     {
@@ -30,6 +31,7 @@ enum LeadHistoryType: string
             self::ClaimExpire => 'Claim Expire',
             self::StatusChange => 'Status Change',
             self::SoftScore => 'Soft Score',
+            self::RndCheck => 'RND Check',
         };
     }
 }

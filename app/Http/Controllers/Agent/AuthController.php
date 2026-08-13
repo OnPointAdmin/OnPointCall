@@ -10,9 +10,11 @@ use Illuminate\View\View;
 
 class AuthController extends Controller
 {
+    private const GUARD = 'agent';
+
     public function showLogin(): View|RedirectResponse
     {
-        if (Auth::check() && Auth::user()->canCall()) {
+        if (Auth::guard(self::GUARD)->check() && Auth::guard(self::GUARD)->user()->canCall()) {
             return redirect()->route('agent.workspace');
         }
 
@@ -26,7 +28,7 @@ class AuthController extends Controller
             'password' => ['required', 'string'],
         ]);
 
-        if (! Auth::attempt($credentials, $request->boolean('remember'))) {
+        if (! Auth::guard(self::GUARD)->attempt($credentials, $request->boolean('remember'))) {
             return back()
                 ->withInput($request->only('email'))
                 ->withErrors(['email' => 'Invalid credentials.']);
@@ -34,10 +36,10 @@ class AuthController extends Controller
 
         $request->session()->regenerate();
 
-        $user = Auth::user();
+        $user = Auth::guard(self::GUARD)->user();
 
         if (! $user->active) {
-            Auth::logout();
+            Auth::guard(self::GUARD)->logout();
 
             return back()
                 ->withInput($request->only('email'))
@@ -45,7 +47,7 @@ class AuthController extends Controller
         }
 
         if (! $user->canCall()) {
-            Auth::logout();
+            Auth::guard(self::GUARD)->logout();
 
             return back()
                 ->withInput($request->only('email'))
@@ -57,10 +59,10 @@ class AuthController extends Controller
 
     public function logout(Request $request): RedirectResponse
     {
-        Auth::logout();
+        Auth::guard(self::GUARD)->logout();
 
-        $request->session()->invalidate();
-        $request->session()->regenerateToken();
+        // Keep the Filament (web) session intact if present.
+        $request->session()->regenerate();
 
         return redirect()->route('agent.login');
     }

@@ -1,0 +1,57 @@
+---
+description: Conventions for transactional email (Mailables, Resend, tests, logging)
+alwaysApply: false
+globs: app/Mail/**,resources/views/mail/**,app/Services/**,app/Models/User.php,tests/Feature/*Mail*,tests/Feature/*Invite*,tests/Feature/*Password*
+---
+
+# Email Features
+
+Use **Mailables**, not Laravel Notifications, for transactional email in this app.
+
+## Structure
+
+- **Mailable**: `app/Mail/{Name}Mail.php` — extend `Mailable`, use `Envelope` + `Content`
+- **Template**: `resources/views/mail/{name}.blade.php` — plain HTML like existing invite/reset templates
+- **Send from**: a service, controller, or model method — never inline in Blade/Livewire
+
+```php
+Mail::to($user->email)->send(new UserInviteMail($user, $password));
+```
+
+Reference implementations: `UserInviteMail`, `PasswordResetMail`, `DashboardDigestMail`.
+
+## Mailer config
+
+- **Local default**: `MAIL_MAILER=log` (writes to `storage/logs`)
+- **Production**: `MAIL_MAILER=resend` + `RESEND_API_KEY` in `.env`
+- **From address**: `noreply@send.onpointmrg.com` (`MAIL_FROM_ADDRESS` / `MAIL_FROM_NAME`)
+- **Manual test**: `php artisan mail:test you@example.com`
+
+Do not add Mailtrap or other providers unless explicitly requested.
+
+## Sending rules
+
+- Send **synchronously** (`Mail::send`) unless there is a clear need to queue; do not implement `ShouldQueue` by default.
+- **Active users only** for account-related mail (invite, password reset). Log and return early for inactive users.
+- **Security UX**: for forgot-password / account-recovery flows, show a generic success message whether or not the email exists. Do not leak account status.
+- **Log outcomes** at `info`/`error`: sent, skipped (inactive), transport failure. See `User::sendPasswordResetNotification()`.
+
+## Password reset
+
+- Agent vs admin reset links are built in `App\Support\PasswordResetUrlBuilder` using `PasswordResetContext`.
+- Set context (`useAgentSurface()` / `useAdminSurface()`) before `Password::sendResetLink()`, reset in `finally`.
+- Agent reset routes live under `/agent/forgot-password` and `/agent/reset-password/{token}`.
+- Admin reset uses Filament `->passwordReset()` at `/admin/password-reset/...`.
+
+## Tests
+
+Use `Mail::fake()` and assert on the Mailable class:
+
+```php
+Mail::fake();
+// ... trigger action ...
+Mail::assertSent(UserInviteMail::class, fn (UserInviteMail $mail) => $mail->hasTo($user->email));
+Mail::assertNothingSent();
+```
+
+See `UserInviteTest` and `PasswordResetTest`.

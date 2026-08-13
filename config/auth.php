@@ -42,6 +42,12 @@ return [
             'driver' => 'session',
             'provider' => 'users',
         ],
+
+        // Separate from Filament admin so both can stay logged in at once.
+        'agent' => [
+            'driver' => 'session',
+            'provider' => 'users',
+        ],
     ],
 
     /*

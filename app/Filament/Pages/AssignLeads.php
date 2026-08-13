@@ -3,7 +3,6 @@
 namespace App\Filament\Pages;
 
 use App\DataTransferObjects\HoldingFilter;
-use App\Enums\SoftScoreStatus;
 use App\Exceptions\HoldingReleaseException;
 use App\Filament\Support\LeadTypeSelect;
 use App\Models\CallingList;
@@ -24,19 +23,19 @@ use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 
-class FreshLeads extends Page
+class AssignLeads extends Page
 {
     protected static string|\UnitEnum|null $navigationGroup = 'Leads';
 
     protected static ?int $navigationSort = 0;
 
-    protected static ?string $navigationLabel = 'Fresh Leads';
+    protected static ?string $navigationLabel = 'Assign Leads';
 
-    protected static ?string $title = 'Fresh Leads';
+    protected static ?string $title = 'Assign Leads';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedArrowRightCircle;
 
-    protected string $view = 'filament.pages.fresh-leads';
+    protected string $view = 'filament.pages.assign-leads';
 
     public int $holdingCount = 0;
 
@@ -68,46 +67,61 @@ class FreshLeads extends Page
     {
         return $schema
             ->components([
-                Section::make('Filters')
+                Section::make('Import')
                     ->schema([
-                        LeadTypeSelect::make(allowCreate: true)
-                            ->live()
-                            ->helperText('Only calling lists with this lead type can receive matching holding leads.'),
-                        $this->holdingSelect('state', 'State'),
-                        $this->holdingSelect('venue', 'Venue'),
-                        $this->holdingSelect('event', 'Event'),
+                        LeadTypeSelect::make(allowCreate: true)->live(),
                         Select::make('import_batch_id')
                             ->label('Import batch')
                             ->options(fn () => ImportBatch::query()->orderByDesc('imported_at')->pluck('source_filename', 'id'))
                             ->searchable(),
-                        DatePicker::make('imported_from'),
-                        DatePicker::make('imported_to'),
-                        TextInput::make('zip')
-                            ->maxLength(10)
+                        TextInput::make('file_name')
+                            ->label('Source file')
                             ->live(debounce: 500),
+                        DatePicker::make('imported_from')
+                            ->label('Import start date'),
+                        DatePicker::make('imported_to')
+                            ->label('Import end date'),
+                    ])
+                    ->columns(3),
+                Section::make('Venue & event')
+                    ->schema([
+                        $this->holdingSelect('venue', 'Venue'),
+                        $this->holdingSelect('event', 'Event'),
                         Select::make('partner')
+                            ->label('Partner')
                             ->options(fn () => app(HoldingReleaseService::class)->distinctHoldingPartners(
                                 auth()->user()->company_id,
                                 $this->selectedLeadType(),
                             ))
+                            ->multiple()
                             ->searchable()
                             ->live(),
-                        TextInput::make('file_name')
-                            ->label('Source file')
-                            ->live(debounce: 500),
-                        $this->softScoreStatusSelect(),
-                        $this->holdingSelect('soft_score_code', 'Soft score code'),
+                    ])
+                    ->columns(3),
+                Section::make('Lead profile')
+                    ->schema([
                         $this->holdingSelect('age_range', 'Age range'),
-                        $this->holdingSelect('annual_income', 'Annual income'),
+                        $this->holdingSelect('annual_income', 'Income range'),
                         $this->holdingSelect('marital_status', 'Marital status'),
                         $this->holdingSelect('gender', 'Gender'),
                         $this->holdingSelect('home_owner', 'Home owner'),
-                        $this->holdingSelect('tour_location', 'Tour location')
-                            ->visible(fn (): bool => $this->selectedLeadType() === 'tnb'),
-                        $this->holdingSelect('tour_date', 'Tour date range')
-                            ->visible(fn (): bool => $this->selectedLeadType() === 'tnb'),
+                        $this->holdingSelect('state', 'State'),
+                        TextInput::make('zip')
+                            ->label('Zip')
+                            ->maxLength(10)
+                            ->live(debounce: 500),
+                        $this->holdingSelect('soft_score_code', 'Soft score code'),
                     ])
                     ->columns(3),
+                Section::make('Tour Info')
+                    ->schema([
+                        $this->holdingSelect('tour_location', 'Tour Location'),
+                        $this->holdingSelect('tour_date_start', 'Tour Date Start'),
+                        $this->holdingSelect('tour_date', 'Tour Date'),
+                        $this->holdingSelect('tour_result', 'Tour Result'),
+                    ])
+                    ->columns(3)
+                    ->visible(fn (): bool => $this->selectedLeadType() === 'tnb'),
             ])
             ->statePath('filterData');
     }
@@ -236,29 +250,7 @@ class FreshLeads extends Page
                 $this->selectedLeadType(),
                 $column,
             ))
-            ->searchable()
-            ->live();
-    }
-
-    private function softScoreStatusSelect(): Select
-    {
-        return Select::make('soft_score_status')
-            ->label('Soft score status')
-            ->options(function (): array {
-                $options = app(HoldingReleaseService::class)->distinctHoldingColumn(
-                    auth()->user()->company_id,
-                    $this->selectedLeadType(),
-                    'soft_score_status',
-                );
-
-                return collect($options)
-                    ->mapWithKeys(function (string $label, string $value): array {
-                        $status = SoftScoreStatus::tryFrom($value);
-
-                        return [$value => $status?->label() ?? $label];
-                    })
-                    ->all();
-            })
+            ->multiple()
             ->searchable()
             ->live();
     }
@@ -286,24 +278,43 @@ class FreshLeads extends Page
             leadType: isset($data['lead_type']) && $data['lead_type'] !== ''
                 ? (string) $data['lead_type']
                 : null,
-            state: $data['state'] ?? null,
-            venue: $data['venue'] ?? null,
-            event: $data['event'] ?? null,
+            state: $this->selectedList($data['state'] ?? null),
+            venue: $this->selectedList($data['venue'] ?? null),
+            event: $this->selectedList($data['event'] ?? null),
             importBatchId: isset($data['import_batch_id']) ? (int) $data['import_batch_id'] : null,
             importedFrom: $data['imported_from'] ?? null,
             importedTo: $data['imported_to'] ?? null,
             zip: $data['zip'] ?? null,
-            partner: $data['partner'] ?? null,
+            partner: $this->selectedList($data['partner'] ?? null),
             fileName: $data['file_name'] ?? null,
-            softScoreStatus: $data['soft_score_status'] ?? null,
-            softScoreCode: $data['soft_score_code'] ?? null,
-            ageRange: $data['age_range'] ?? null,
-            annualIncome: $data['annual_income'] ?? null,
-            maritalStatus: $data['marital_status'] ?? null,
-            gender: $data['gender'] ?? null,
-            homeOwner: $data['home_owner'] ?? null,
-            tourLocation: $data['tour_location'] ?? null,
-            tourDate: $data['tour_date'] ?? null,
+            softScoreCode: $this->selectedList($data['soft_score_code'] ?? null),
+            ageRange: $this->selectedList($data['age_range'] ?? null),
+            annualIncome: $this->selectedList($data['annual_income'] ?? null),
+            maritalStatus: $this->selectedList($data['marital_status'] ?? null),
+            gender: $this->selectedList($data['gender'] ?? null),
+            homeOwner: $this->selectedList($data['home_owner'] ?? null),
+            tourLocation: $this->selectedList($data['tour_location'] ?? null),
+            tourDateStart: $this->selectedList($data['tour_date_start'] ?? null),
+            tourDate: $this->selectedList($data['tour_date'] ?? null),
+            tourResult: $this->selectedList($data['tour_result'] ?? null),
         );
+    }
+
+    /**
+     * @return list<string>|null
+     */
+    private function selectedList(mixed $value): ?array
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        $values = is_array($value) ? $value : [$value];
+        $normalized = array_values(array_filter(
+            array_map(static fn (mixed $item): string => trim((string) $item), $values),
+            static fn (string $item): bool => $item !== '',
+        ));
+
+        return $normalized === [] ? null : $normalized;
     }
 }

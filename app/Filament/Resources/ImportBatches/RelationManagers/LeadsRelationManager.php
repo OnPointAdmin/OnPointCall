@@ -1,0 +1,103 @@
+<?php
+
+namespace App\Filament\Resources\ImportBatches\RelationManagers;
+
+use App\Enums\LeadStatus;
+use App\Enums\RndStatus;
+use App\Enums\SoftScoreStatus;
+use App\Models\Lead;
+use Filament\Resources\RelationManagers\RelationManager;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Table;
+use Livewire\Attributes\On;
+
+class LeadsRelationManager extends RelationManager
+{
+    protected static string $relationship = 'leads';
+
+    protected static ?string $title = 'Leads';
+
+    public function isReadOnly(): bool
+    {
+        return true;
+    }
+
+    #[On('import-batch-refreshed')]
+    public function refreshLeadsTable(): void
+    {
+        $this->resetTable();
+    }
+
+    public function table(Table $table): Table
+    {
+        return $table
+            ->recordTitleAttribute('phone')
+            ->defaultSort('id')
+            ->columns([
+                TextColumn::make('id')
+                    ->label('ID')
+                    ->sortable(),
+                TextColumn::make('phone')
+                    ->searchable()
+                    ->sortable(),
+                TextColumn::make('first_name')
+                    ->searchable()
+                    ->sortable(),
+                TextColumn::make('last_name')
+                    ->searchable()
+                    ->sortable(),
+                TextColumn::make('status')
+                    ->badge()
+                    ->formatStateUsing(fn (?LeadStatus $state): ?string => $state?->label())
+                    ->sortable(),
+                TextColumn::make('soft_score_code')
+                    ->label('Soft score')
+                    ->badge()
+                    ->placeholder(fn (Lead $record): string => match ($record->soft_score_status) {
+                        SoftScoreStatus::Pending => 'Pending',
+                        SoftScoreStatus::Error => 'Error',
+                        SoftScoreStatus::Complete => '—',
+                        default => '—',
+                    })
+                    ->sortable(),
+                TextColumn::make('rnd_status')
+                    ->label('RND')
+                    ->badge()
+                    ->formatStateUsing(fn (?RndStatus $state): ?string => $state?->label())
+                    ->sortable(),
+                TextColumn::make('error')
+                    ->label('Error')
+                    ->wrap()
+                    ->limit(100)
+                    ->tooltip(fn (?string $state): ?string => $state)
+                    ->getStateUsing(function (Lead $record): ?string {
+                        $parts = array_filter([
+                            $record->soft_score_last_error,
+                            $record->rnd_last_error,
+                        ]);
+
+                        return $parts === [] ? null : implode(' | ', $parts);
+                    }),
+            ])
+            ->filters([
+                SelectFilter::make('status')
+                    ->options(collect(LeadStatus::cases())->mapWithKeys(
+                        fn (LeadStatus $status): array => [$status->value => $status->label()]
+                    )),
+                SelectFilter::make('soft_score_status')
+                    ->label('Soft score')
+                    ->options(collect(SoftScoreStatus::cases())->mapWithKeys(
+                        fn (SoftScoreStatus $status): array => [$status->value => $status->label()]
+                    )),
+                SelectFilter::make('rnd_status')
+                    ->label('RND')
+                    ->options(collect(RndStatus::cases())->mapWithKeys(
+                        fn (RndStatus $status): array => [$status->value => $status->label()]
+                    )),
+            ])
+            ->headerActions([])
+            ->recordActions([])
+            ->toolbarActions([]);
+    }
+}

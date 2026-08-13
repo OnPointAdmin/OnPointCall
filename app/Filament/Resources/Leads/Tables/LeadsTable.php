@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Leads\Tables;
 use App\Enums\Disposition;
 use App\Enums\LeadStatus;
 use App\Enums\SoftScoreStatus;
+use App\Jobs\RndLeadJob;
 use App\Jobs\SoftScoreLeadJob;
 use App\Models\CallingList;
 use App\Models\LeadTypeDefinition;
@@ -191,6 +192,20 @@ class LeadsTable
 
                             Notification::make()
                                 ->title('Soft Score jobs queued')
+                                ->success()
+                                ->send();
+                        }),
+                    BulkAction::make('rerunRnd')
+                        ->label('Re-run RND')
+                        ->icon('heroicon-o-phone-arrow-up-right')
+                        ->requiresConfirmation()
+                        ->action(function (Collection $records): void {
+                            foreach ($records as $record) {
+                                RndLeadJob::dispatch($record->id, $record->import_batch_id, Auth::id());
+                            }
+
+                            Notification::make()
+                                ->title('RND jobs queued')
                                 ->success()
                                 ->send();
                         }),

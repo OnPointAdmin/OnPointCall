@@ -1,0 +1,49 @@
+---
+description: Never wipe or rebuild the local/dev/prod database unless the user explicitly asks
+alwaysApply: true
+---
+
+# Never wipe the database without asking
+
+The Docker Postgres database (`onpoint_call`) is the real local dataset (imported leads, users, batches). Destroying it is a data-loss event. **Do not wipe it unless the user explicitly says to in this conversation.**
+
+If a test, debug script, or “reset the environment” step would drop tables, **stop and ask first**. Do not proceed on implied consent, convenience, or a previous chat.
+
+## Forbidden unless the user explicitly requested it
+
+- `php artisan migrate:fresh` / `migrate:refresh` / `db:wipe` / `db:seed --class=...` after a wipe
+- `Artisan::call('migrate:fresh')` (or refresh/wipe) in any script, tinker, or one-off PHP file
+- `DROP DATABASE`, `DROP SCHEMA`, `TRUNCATE`, `DELETE FROM` without a narrow `WHERE`
+- `docker compose down -v` (removes the `pgdata` volume)
+- Setting `ALLOW_DESTRUCTIVE_DB=true` to bypass the app guard
+- Pointing PHPUnit/`RefreshDatabase` at Postgres (`DB_CONNECTION=pgsql`, host `db`)
+
+```php
+// BAD — this wiped imported leads
+Artisan::call('migrate:fresh', ['--force' => true]);
+
+// GOOD — tests stay on sqlite :memory: (already enforced in tests/TestCase.php)
+php artisan test
+```
+
+```bash
+# BAD
+docker compose exec app php artisan migrate:fresh --force
+docker compose down -v
+
+# GOOD — schema only, keeps data
+docker compose exec app php artisan migrate --force
+```
+
+## Allowed without asking
+
+- `php artisan migrate` (forward migrations only)
+- `php artisan db:seed` **without** a preceding wipe, when adding missing reference data
+- `php artisan test` using sqlite `:memory:` (never the Docker DB)
+- Read-only `psql` / tinker selects
+
+## If a wipe is truly required
+
+1. Tell the user it will **permanently delete leads and other local data**.
+2. Wait for an explicit yes in this chat (e.g. “wipe the database”).
+3. Only then set `ALLOW_DESTRUCTIVE_DB=true` for that one command, then unset it.

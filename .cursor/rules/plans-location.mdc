@@ -1,0 +1,14 @@
+---
+description: Save all project plans and architecture documents in the plans/ folder
+alwaysApply: false
+globs: plans/**
+---
+
+# Plan File Location
+
+All project plans, architecture documents, and planning artifacts must be created in the `plans/` folder at the project root.
+
+- **Path**: `plans/` (e.g. `plans/call-center-architecture.md`)
+- **Never** use Cursor's default user-level storage (`~/.cursor/plans/`)
+- **Do not** create plan files in the project root, `docs/`, or other directories
+- When updating an existing plan, edit the file in `plans/` rather than creating a duplicate elsewhere

@@ -16,12 +16,17 @@ class JasonPaineAdminSeeder extends Seeder
 {
     public function run(): void
     {
-        $company = Company::query()->where('name', 'OnPoint Call Center')->firstOrFail();
+        $company = Company::query()->where('name', 'OnPoint Call Center')->first()
+            ?? Company::query()->firstOrFail();
         CompanyContext::set($company->id);
 
-        $list = CallingList::query()->where('name', 'Standard')->firstOrFail();
+        $list = CallingList::query()->where('name', 'Standard')->first()
+            ?? CallingList::withoutGlobalScopes()->firstOrCreate(
+                ['company_id' => $company->id, 'name' => 'Standard'],
+                ['lead_type' => 'standard', 'active' => true],
+            );
 
-        $user = User::query()->firstOrNew(['email' => 'jason.paine@onpointcall.com']);
+        $user = User::query()->firstOrNew(['email' => 'jason.paine@onpointmrg.com']);
         $user->fill([
             'company_id' => $company->id,
             'name' => 'Jason Paine',
@@ -37,7 +42,7 @@ class JasonPaineAdminSeeder extends Seeder
         $user->save();
 
         AllowedEmail::query()->updateOrCreate(
-            ['company_id' => $company->id, 'email' => 'jason.paine@onpointcall.com'],
+            ['company_id' => $company->id, 'email' => 'jason.paine@onpointmrg.com'],
             [],
         );
 

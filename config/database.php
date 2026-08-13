@@ -20,6 +20,12 @@ return [
     'default' => env('DB_CONNECTION', 'sqlite'),
 
     /*
+    | Destructive artisan commands (migrate:fresh, migrate:refresh, db:wipe)
+    | are blocked outside testing unless this is true.
+    */
+    'allow_destructive' => (bool) env('ALLOW_DESTRUCTIVE_DB', false),
+
+    /*
     |--------------------------------------------------------------------------
     | Database Connections
     |--------------------------------------------------------------------------

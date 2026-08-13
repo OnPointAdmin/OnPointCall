@@ -20,6 +20,14 @@ return Application::configure(basePath: dirname(__DIR__))
         $schedule->command('db:backup')->dailyAt('02:00');
     })
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->redirectGuestsTo(function (Request $request) {
+            if ($request->is('admin') || $request->is('admin/*')) {
+                return url('/admin/login');
+            }
+
+            return route('agent.login');
+        });
+
         $middleware->alias([
             'can.call' => EnsureCanCall::class,
             'company.context' => SetCompanyContext::class,

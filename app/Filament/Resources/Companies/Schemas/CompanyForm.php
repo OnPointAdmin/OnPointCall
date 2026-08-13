@@ -18,6 +18,10 @@ class CompanyForm
                 Toggle::make('active')
                     ->default(true)
                     ->required(),
+                TextInput::make('salesforce_id')
+                    ->label('Salesforce ID')
+                    ->maxLength(18)
+                    ->unique(ignoreRecord: true),
             ]);
     }
 }

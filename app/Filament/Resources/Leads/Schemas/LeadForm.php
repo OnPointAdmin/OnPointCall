@@ -43,6 +43,7 @@ class LeadForm
                 TextInput::make('venue'),
                 TextInput::make('event'),
                 TextInput::make('tour_location'),
+                TextInput::make('tour_date_start'),
                 TextInput::make('tour_date'),
                 TextInput::make('premiums'),
                 TextInput::make('tour_result'),

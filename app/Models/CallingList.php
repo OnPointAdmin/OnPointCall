@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\LeadStatus;
 use App\Models\Concerns\BelongsToCompany;
 use App\Models\Concerns\RecordsSettingsChanges;
 use Illuminate\Database\Eloquent\Model;
@@ -34,6 +35,11 @@ class CallingList extends Model
     public function leads(): HasMany
     {
         return $this->hasMany(Lead::class);
+    }
+
+    public function availableLeads(): HasMany
+    {
+        return $this->leads()->where('status', LeadStatus::Callable);
     }
 
     public function listAssignments(): HasMany

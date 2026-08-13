@@ -32,6 +32,10 @@ class UserForm
                     ->required(),
                 TextInput::make('google_id'),
                 TextInput::make('microsoft_id'),
+                TextInput::make('salesforce_id')
+                    ->label('Salesforce ID')
+                    ->maxLength(18)
+                    ->unique(ignoreRecord: true),
             ]);
     }
 }

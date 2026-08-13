@@ -16,6 +16,7 @@ class Company extends Model
     protected $fillable = [
         'name',
         'active',
+        'salesforce_id',
     ];
 
     protected function casts(): array

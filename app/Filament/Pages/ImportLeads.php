@@ -47,6 +47,7 @@ class ImportLeads extends Page
         $this->form->fill([
             'lead_type' => $defaultMapping?->lead_type ?? 'standard',
             'run_soft_score' => false,
+            'run_rnd_check' => false,
             'import_mapping_id' => $defaultMapping?->id,
         ]);
     }
@@ -87,10 +88,13 @@ class ImportLeads extends Page
                         }
                     }),
                 LeadTypeSelect::make()
-                    ->helperText('Creates a type for filtering Fresh Leads. Assign to a calling list with the same lead type.'),
+                    ->helperText('Creates a type for filtering Assign Leads. Assign to a calling list with the same lead type.'),
                 Toggle::make('run_soft_score')
                     ->label('Run Soft Score on import')
-                    ->helperText('Queues a soft-score check for each new lead after import completes.'),
+                    ->helperText('Queues a soft-score check per lead. Leads stay unassignable until scored.'),
+                Toggle::make('run_rnd_check')
+                    ->label('Run RND check on import')
+                    ->helperText('Queues an FCC Reassigned Numbers Database check per lead. Leads stay unassignable until checked; reassigned numbers are rejected.'),
             ]);
     }
 
@@ -167,6 +171,7 @@ class ImportLeads extends Page
             sourceFilename: $sourceFilename,
             leadType: $leadType,
             runSoftScore: (bool) ($data['run_soft_score'] ?? false),
+            runRndCheck: (bool) ($data['run_rnd_check'] ?? false),
         );
 
         ProcessLeadImportJob::dispatch($batch->id, $storedPath, $columnMap);

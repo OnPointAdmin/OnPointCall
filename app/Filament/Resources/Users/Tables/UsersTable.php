@@ -47,6 +47,10 @@ class UsersTable
                     ->searchable(),
                 TextColumn::make('microsoft_id')
                     ->searchable(),
+                TextColumn::make('salesforce_id')
+                    ->label('Salesforce ID')
+                    ->searchable()
+                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
                 //

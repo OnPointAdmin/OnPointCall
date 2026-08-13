@@ -23,6 +23,7 @@ class LeadDisplayFields
         'booking_id' => 'Booking ID',
         'phone_2' => 'Phone 2',
         'tour_location' => 'Tour location',
+        'tour_date_start' => 'Tour date start',
         'tour_date' => 'Tour date',
         'premiums' => 'Premiums',
         'tour_result' => 'Tour result',

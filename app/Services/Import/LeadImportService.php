@@ -4,12 +4,16 @@ namespace App\Services\Import;
 
 use App\Enums\ImportBatchStatus;
 use App\Enums\LeadStatus;
+use App\Enums\RndStatus;
+use App\Enums\SoftScoreStatus;
+use App\Jobs\RndLeadJob;
 use App\Jobs\SoftScoreLeadJob;
 use App\Models\ImportBatch;
 use App\Models\Lead;
 use App\Support\PhoneNormalizer;
 use App\Support\TimezoneResolver;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 use RuntimeException;
 use SplFileObject;
 
@@ -43,6 +47,7 @@ class LeadImportService
         'phone_2' => 'Phone 2',
         'address_2' => 'Address 2',
         'tour_location' => 'Tour location',
+        'tour_date_start' => 'Tour date start',
         'tour_date' => 'Tour date',
         'premiums' => 'Premiums',
         'tour_result' => 'Tour result',
@@ -51,7 +56,7 @@ class LeadImportService
 
     /**
      * @param  array<string, string>  $columnMap  lead_field => csv_header
-     * @return array{inserted: list<int>, inserted_count: int, duplicate_count: int, conflict_count: int, total_rows: int}
+     * @return array{inserted: list<int>, inserted_count: int, updated_count: int, duplicate_count: int, conflict_count: int, total_rows: int}
      */
     public function process(ImportBatch $batch, string $filePath, array $columnMap, string $leadType): array
     {
@@ -73,6 +78,9 @@ class LeadImportService
 
         $headerIndex = $this->buildHeaderIndex($headers);
         $insertedLeadIds = [];
+        $updatedLeadIds = [];
+        $softScoreJobLeadIds = [];
+        $rndJobLeadIds = [];
         $duplicateCount = 0;
         $conflictCount = 0;
         $importedAt = now();
@@ -90,56 +98,180 @@ class LeadImportService
                 continue;
             }
 
-            $dedupe = $this->checkDedupe($batch->company_id, $attributes['external_lead_id'], $attributes['phone']);
+            $dedupe = $this->resolveDedupe($batch->company_id, $attributes['external_lead_id'], $attributes['phone']);
 
-            if ($dedupe === 'conflict') {
+            if ($dedupe['status'] === 'conflict') {
                 $conflictCount++;
 
                 continue;
             }
 
-            if ($dedupe === 'duplicate') {
+            if ($dedupe['status'] === 'duplicate') {
                 $duplicateCount++;
 
                 continue;
             }
 
-            $lead = Lead::withoutGlobalScopes()->create([
+            if ($dedupe['status'] === 'recoverable') {
+                $lead = $dedupe['lead'];
+                $queued = $this->updateRecoverableLead($lead, $batch, $attributes);
+
+                $updatedLeadIds[] = $lead->id;
+                $softScoreJobLeadIds = [...$softScoreJobLeadIds, ...$queued['soft_score']];
+                $rndJobLeadIds = [...$rndJobLeadIds, ...$queued['rnd']];
+
+                continue;
+            }
+
+            $leadAttributes = [
                 ...$attributes,
                 'company_id' => $batch->company_id,
                 'import_batch_id' => $batch->id,
                 'status' => LeadStatus::Holding,
-            ]);
+            ];
+
+            if ($batch->run_rnd_check) {
+                $leadAttributes['rnd_status'] = RndStatus::Pending;
+            }
+
+            if ($batch->run_soft_score) {
+                $leadAttributes['soft_score_status'] = SoftScoreStatus::Pending;
+            }
+
+            $lead = Lead::withoutGlobalScopes()->create($leadAttributes);
 
             $insertedLeadIds[] = $lead->id;
+
+            if ($batch->run_soft_score) {
+                $softScoreJobLeadIds[] = $lead->id;
+            }
+
+            if ($batch->run_rnd_check) {
+                $rndJobLeadIds[] = $lead->id;
+            }
         }
 
         $totalRows = count($rows);
         $insertedCount = count($insertedLeadIds);
+        $updatedCount = count($updatedLeadIds);
 
         $batch->update([
             'status' => ImportBatchStatus::Completed,
             'imported_at' => $importedAt,
             'total_rows' => $totalRows,
             'inserted_count' => $insertedCount,
+            'updated_count' => $updatedCount,
             'duplicate_count' => $duplicateCount,
             'conflict_count' => $conflictCount,
-            'soft_score_pending' => $batch->run_soft_score ? $insertedCount : 0,
+            'soft_score_pending' => count($softScoreJobLeadIds),
+            'rnd_pending' => count($rndJobLeadIds),
         ]);
 
-        if ($batch->run_soft_score && $insertedLeadIds !== []) {
-            foreach ($insertedLeadIds as $leadId) {
-                SoftScoreLeadJob::dispatch($leadId, $batch->id);
-            }
+        foreach ($softScoreJobLeadIds as $leadId) {
+            SoftScoreLeadJob::dispatch($leadId, $batch->id);
+        }
+
+        foreach ($rndJobLeadIds as $leadId) {
+            RndLeadJob::dispatch($leadId, $batch->id);
         }
 
         return [
             'inserted' => $insertedLeadIds,
             'inserted_count' => $insertedCount,
+            'updated_count' => $updatedCount,
             'duplicate_count' => $duplicateCount,
             'conflict_count' => $conflictCount,
             'total_rows' => $totalRows,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     * @return array{soft_score: list<int>, rnd: list<int>}
+     */
+    private function updateRecoverableLead(Lead $lead, ImportBatch $batch, array $attributes): array
+    {
+        $oldBatchId = $lead->import_batch_id;
+        $oldSoftScore = $lead->soft_score_status;
+        $oldRnd = $lead->rnd_status;
+
+        $retrySoftScore = $batch->run_soft_score && $oldSoftScore === SoftScoreStatus::Error;
+        $retryRnd = $batch->run_rnd_check && $oldRnd === RndStatus::Error;
+
+        $fieldUpdates = array_filter(
+            $attributes,
+            fn (mixed $value): bool => $value !== null,
+        );
+
+        $updates = [
+            ...$fieldUpdates,
+            'import_batch_id' => $batch->id,
+        ];
+
+        if ($retrySoftScore) {
+            $updates['soft_score_status'] = SoftScoreStatus::Pending;
+            $updates['soft_score_last_error'] = null;
+        }
+
+        if ($retryRnd) {
+            $updates['rnd_status'] = RndStatus::Pending;
+            $updates['rnd_last_error'] = null;
+        }
+
+        DB::transaction(function () use ($lead, $updates, $oldBatchId, $retrySoftScore, $retryRnd): void {
+            if ($oldBatchId) {
+                if ($retrySoftScore) {
+                    $this->decrementSoftScoreCounter($oldBatchId, SoftScoreStatus::Error);
+                }
+
+                if ($retryRnd) {
+                    $this->decrementRndCounter($oldBatchId, RndStatus::Error);
+                }
+            }
+
+            $lead->update($updates);
+        });
+
+        return [
+            'soft_score' => $retrySoftScore ? [$lead->id] : [],
+            'rnd' => $retryRnd ? [$lead->id] : [],
+        ];
+    }
+
+    private function decrementSoftScoreCounter(int $batchId, SoftScoreStatus $status): void
+    {
+        $batch = ImportBatch::withoutGlobalScopes()->lockForUpdate()->find($batchId);
+
+        if (! $batch) {
+            return;
+        }
+
+        $updates = match ($status) {
+            SoftScoreStatus::Complete => ['soft_score_qualified' => max(0, $batch->soft_score_qualified - 1)],
+            SoftScoreStatus::Error => ['soft_score_error' => max(0, $batch->soft_score_error - 1)],
+            SoftScoreStatus::Pending => ['soft_score_pending' => max(0, $batch->soft_score_pending - 1)],
+        };
+
+        $batch->update($updates);
+    }
+
+    private function decrementRndCounter(int $batchId, RndStatus $status): void
+    {
+        $batch = ImportBatch::withoutGlobalScopes()->lockForUpdate()->find($batchId);
+
+        if (! $batch) {
+            return;
+        }
+
+        $updates = match ($status) {
+            RndStatus::Clear => ['rnd_clear' => max(0, $batch->rnd_clear - 1)],
+            RndStatus::Reassigned => ['rnd_reassigned' => max(0, $batch->rnd_reassigned - 1)],
+            RndStatus::NoData => ['rnd_no_data' => max(0, $batch->rnd_no_data - 1)],
+            RndStatus::Error => ['rnd_error' => max(0, $batch->rnd_error - 1)],
+            RndStatus::Pending => ['rnd_pending' => max(0, $batch->rnd_pending - 1)],
+        };
+
+        $batch->update($updates);
     }
 
     /**
@@ -273,7 +405,10 @@ class LeadImportService
         return true;
     }
 
-    private function checkDedupe(int $companyId, ?string $externalLeadId, ?string $phone): string
+    /**
+     * @return array{status: 'new'|'duplicate'|'conflict'|'recoverable', lead: ?Lead}
+     */
+    private function resolveDedupe(int $companyId, ?string $externalLeadId, ?string $phone): array
     {
         $byExternalId = null;
         $byPhone = null;
@@ -293,14 +428,30 @@ class LeadImportService
         }
 
         if ($byExternalId && $byPhone && $byExternalId->id !== $byPhone->id) {
-            return 'conflict';
+            return ['status' => 'conflict', 'lead' => null];
         }
 
-        if ($byExternalId || $byPhone) {
-            return 'duplicate';
+        $match = $byExternalId ?? $byPhone;
+
+        if (! $match) {
+            return ['status' => 'new', 'lead' => null];
         }
 
-        return 'new';
+        if ($this->isRecoverableFailure($match)) {
+            return ['status' => 'recoverable', 'lead' => $match];
+        }
+
+        return ['status' => 'duplicate', 'lead' => $match];
+    }
+
+    private function isRecoverableFailure(Lead $lead): bool
+    {
+        if ($lead->status !== LeadStatus::Holding) {
+            return false;
+        }
+
+        return $lead->soft_score_status === SoftScoreStatus::Error
+            || $lead->rnd_status === RndStatus::Error;
     }
 
     public function createBatch(
@@ -308,6 +459,7 @@ class LeadImportService
         string $sourceFilename,
         string $leadType,
         bool $runSoftScore,
+        bool $runRndCheck = false,
     ): ImportBatch {
         return ImportBatch::withoutGlobalScopes()->create([
             'company_id' => $companyId,
@@ -315,6 +467,7 @@ class LeadImportService
             'imported_at' => now(),
             'lead_type' => $leadType,
             'run_soft_score' => $runSoftScore,
+            'run_rnd_check' => $runRndCheck,
             'status' => ImportBatchStatus::Pending,
         ]);
     }

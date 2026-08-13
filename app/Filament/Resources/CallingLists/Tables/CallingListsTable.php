@@ -22,6 +22,16 @@ class CallingListsTable
                 TextColumn::make('lead_type')
                     ->badge()
                     ->searchable(),
+                TextColumn::make('leads_count')
+                    ->label('Total leads')
+                    ->counts('leads')
+                    ->numeric()
+                    ->sortable(),
+                TextColumn::make('available_leads_count')
+                    ->label('Available leads')
+                    ->counts('availableLeads')
+                    ->numeric()
+                    ->sortable(),
                 TextColumn::make('max_attempts_override')
                     ->numeric()
                     ->sortable(),

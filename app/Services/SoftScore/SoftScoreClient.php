@@ -40,15 +40,12 @@ class SoftScoreClient
             }
 
             $code = data_get($response->json(), 'lead.creditScore.0.creditBand.qualificationCode');
+            $qualificationCode = is_string($code) && trim($code) !== '' ? trim($code) : null;
 
-            if (is_string($code) && trim($code) !== '') {
-                return new SoftScoreResult(
-                    status: SoftScoreStatus::Qualified,
-                    qualificationCode: trim($code),
-                );
-            }
-
-            return new SoftScoreResult(status: SoftScoreStatus::NotQualified);
+            return new SoftScoreResult(
+                status: SoftScoreStatus::Complete,
+                qualificationCode: $qualificationCode,
+            );
         } catch (Throwable $exception) {
             return new SoftScoreResult(
                 status: SoftScoreStatus::Error,

@@ -23,14 +23,27 @@ class ImportBatchForm
                 DateTimePicker::make('imported_at'),
                 LeadTypeSelect::make(allowCreate: false, activeOnly: false),
                 Toggle::make('run_soft_score'),
+                Toggle::make('run_rnd_check'),
                 TextInput::make('total_rows')->numeric(),
                 TextInput::make('inserted_count')->numeric(),
+                TextInput::make('updated_count')->numeric(),
+                TextInput::make('valid_leads')
+                    ->label('Valid Leads')
+                    ->numeric()
+                    ->disabled()
+                    ->dehydrated(false),
                 TextInput::make('duplicate_count')->numeric(),
                 TextInput::make('conflict_count')->numeric(),
                 TextInput::make('soft_score_pending')->numeric(),
-                TextInput::make('soft_score_qualified')->numeric(),
-                TextInput::make('soft_score_not_qualified')->numeric(),
+                TextInput::make('soft_score_qualified')
+                    ->label('Soft score done')
+                    ->numeric(),
                 TextInput::make('soft_score_error')->numeric(),
+                TextInput::make('rnd_pending')->numeric(),
+                TextInput::make('rnd_clear')->numeric(),
+                TextInput::make('rnd_reassigned')->numeric(),
+                TextInput::make('rnd_no_data')->numeric(),
+                TextInput::make('rnd_error')->numeric(),
                 Textarea::make('error_message')
                     ->columnSpanFull()
                     ->visible(fn (?string $state): bool => filled($state)),

@@ -7,7 +7,7 @@ require __DIR__.'/../vendor/autoload.php';
 $app = require __DIR__.'/../bootstrap/app.php';
 $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
 
-$user = User::withoutGlobalScopes()->where('email', 'jason.paine@onpointcall.com')->first();
+$user = User::withoutGlobalScopes()->where('email', 'jason.paine@onpointmrg.com')->first();
 
 if (! $user) {
     echo "User not found\n";

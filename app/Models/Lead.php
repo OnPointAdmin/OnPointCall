@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\LeadStatus;
+use App\Enums\RndStatus;
 use App\Enums\SoftScoreStatus;
 use App\Models\Concerns\BelongsToCompany;
 use Illuminate\Database\Eloquent\Model;
@@ -35,6 +36,7 @@ class Lead extends Model
         'venue',
         'event',
         'tour_location',
+        'tour_date_start',
         'tour_date',
         'premiums',
         'tour_result',
@@ -61,6 +63,9 @@ class Lead extends Model
         'soft_score_status',
         'soft_score_checked_at',
         'soft_score_last_error',
+        'rnd_status',
+        'rnd_checked_at',
+        'rnd_last_error',
     ];
 
     protected function casts(): array
@@ -73,6 +78,8 @@ class Lead extends Model
             'extra_fields' => 'array',
             'soft_score_status' => SoftScoreStatus::class,
             'soft_score_checked_at' => 'datetime',
+            'rnd_status' => RndStatus::class,
+            'rnd_checked_at' => 'datetime',
         ];
     }
 

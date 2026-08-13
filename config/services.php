@@ -41,4 +41,10 @@ return [
         'client_secret' => env('SOFT_SCORE_CLIENT_SECRET'),
     ],
 
+    'rnd' => [
+        'base_url' => env('RND_BASE_URL', 'https://api.reassigned.us'),
+        'refresh_token' => env('RND_REFRESH_TOKEN'),
+        'company_id' => env('RND_COMPANY_ID'),
+    ],
+
 ];

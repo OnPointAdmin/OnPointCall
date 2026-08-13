@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\DataTransferObjects\HoldingFilter;
 use App\Enums\LeadStatus;
+use App\Enums\RndStatus;
+use App\Enums\SoftScoreStatus;
 use App\Exceptions\HoldingReleaseException;
 use App\Models\CallingList;
 use App\Models\Company;
@@ -133,7 +135,7 @@ class HoldingReleaseServiceTest extends TestCase
             'phone' => '4045557777',
             'status' => LeadStatus::Holding,
             'lead_type' => 'standard',
-            'partner_list' => 'Alpha, Beta',
+            'partner_list' => '  Alpha , Beta  ',
             'imported_at' => now(),
         ]);
 
@@ -146,12 +148,23 @@ class HoldingReleaseServiceTest extends TestCase
             'imported_at' => now(),
         ]);
 
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045558889',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'partner_list' => 'Acme Partners, LLC, and Delta',
+            'imported_at' => now(),
+        ]);
+
         $service = app(HoldingReleaseService::class);
 
         $this->assertSame(
             [
+                'Acme Partners, LLC' => 'Acme Partners, LLC',
                 'Alpha' => 'Alpha',
                 'Beta' => 'Beta',
+                'Delta' => 'Delta',
                 'Gamma' => 'Gamma',
             ],
             $service->distinctHoldingPartners($company->id, 'standard'),
@@ -188,7 +201,21 @@ class HoldingReleaseServiceTest extends TestCase
             'status' => LeadStatus::Holding,
             'lead_type' => 'tnb',
             'tour_location' => 'Orlando Resort',
+            'tour_date_start' => '2026-09-01',
             'tour_date' => '2026-09-15',
+            'tour_result' => 'Completed',
+            'imported_at' => now(),
+        ]);
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045551212',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'tnb',
+            'tour_location' => 'Miami Beach',
+            'tour_date_start' => '2026-10-01',
+            'tour_date' => '2026-10-15',
+            'tour_result' => 'No Buy',
             'imported_at' => now(),
         ]);
 
@@ -198,8 +225,16 @@ class HoldingReleaseServiceTest extends TestCase
             1,
             $service->countHolding($company->id, new HoldingFilter(
                 leadType: 'standard',
-                ageRange: '35-44',
-                gender: 'F',
+                ageRange: ['35-44'],
+                gender: ['F'],
+            )),
+        );
+
+        $this->assertSame(
+            2,
+            $service->countHolding($company->id, new HoldingFilter(
+                leadType: 'standard',
+                ageRange: ['35-44', '45-54'],
             )),
         );
 
@@ -207,8 +242,18 @@ class HoldingReleaseServiceTest extends TestCase
             1,
             $service->countHolding($company->id, new HoldingFilter(
                 leadType: 'tnb',
-                tourLocation: 'Orlando Resort',
-                tourDate: '2026-09-15',
+                tourLocation: ['Orlando Resort'],
+                tourDateStart: ['2026-09-01'],
+                tourDate: ['2026-09-15'],
+                tourResult: ['Completed'],
+            )),
+        );
+
+        $this->assertSame(
+            2,
+            $service->countHolding($company->id, new HoldingFilter(
+                leadType: 'tnb',
+                tourLocation: ['Orlando Resort', 'Miami Beach'],
             )),
         );
     }
@@ -221,5 +266,145 @@ class HoldingReleaseServiceTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
 
         $service->distinctHoldingColumn($company->id, 'standard', 'not_a_column');
+    }
+
+    public function test_pending_rnd_leads_are_not_assignable(): void
+    {
+        $company = Company::factory()->create();
+
+        $list = CallingList::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'name' => 'Standard List',
+            'lead_type' => 'standard',
+            'cadence' => [],
+            'active' => true,
+        ]);
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045551010',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'rnd_status' => RndStatus::Pending,
+            'imported_at' => now(),
+        ]);
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045552020',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'rnd_status' => RndStatus::Clear,
+            'imported_at' => now(),
+        ]);
+
+        $service = app(HoldingReleaseService::class);
+        $filter = new HoldingFilter(leadType: 'standard');
+
+        $this->assertSame(1, $service->countHolding($company->id, $filter));
+        $this->assertSame(1, $service->releaseAll($company->id, $filter, $list->id));
+    }
+
+    public function test_reassigned_rnd_leads_are_not_assignable(): void
+    {
+        $company = Company::factory()->create();
+
+        $list = CallingList::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'name' => 'Standard List',
+            'lead_type' => 'standard',
+            'cadence' => [],
+            'active' => true,
+        ]);
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045553030',
+            'status' => LeadStatus::Terminal,
+            'lead_type' => 'standard',
+            'rnd_status' => RndStatus::Reassigned,
+            'imported_at' => now(),
+        ]);
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045554040',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'rnd_status' => RndStatus::Clear,
+            'imported_at' => now(),
+        ]);
+
+        $service = app(HoldingReleaseService::class);
+        $filter = new HoldingFilter(leadType: 'standard');
+
+        $this->assertSame(1, $service->countHolding($company->id, $filter));
+        $this->assertSame(1, $service->releaseAll($company->id, $filter, $list->id));
+    }
+
+    public function test_pending_soft_score_leads_are_not_assignable(): void
+    {
+        $company = Company::factory()->create();
+
+        $list = CallingList::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'name' => 'Standard List',
+            'lead_type' => 'standard',
+            'cadence' => [],
+            'active' => true,
+        ]);
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045555050',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'soft_score_status' => SoftScoreStatus::Pending,
+            'imported_at' => now(),
+        ]);
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045556060',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'soft_score_status' => SoftScoreStatus::Complete,
+            'imported_at' => now(),
+        ]);
+
+        $service = app(HoldingReleaseService::class);
+        $filter = new HoldingFilter(leadType: 'standard');
+
+        $this->assertSame(1, $service->countHolding($company->id, $filter));
+        $this->assertSame(1, $service->releaseAll($company->id, $filter, $list->id));
+    }
+
+    public function test_soft_score_error_leads_are_assignable(): void
+    {
+        $company = Company::factory()->create();
+
+        $list = CallingList::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'name' => 'Standard List',
+            'lead_type' => 'standard',
+            'cadence' => [],
+            'active' => true,
+        ]);
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045557070',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'rnd_status' => RndStatus::Clear,
+            'soft_score_status' => SoftScoreStatus::Error,
+            'imported_at' => now(),
+        ]);
+
+        $service = app(HoldingReleaseService::class);
+        $filter = new HoldingFilter(leadType: 'standard');
+
+        $this->assertSame(1, $service->countHolding($company->id, $filter));
+        $this->assertSame(1, $service->releaseAll($company->id, $filter, $list->id));
     }
 }
