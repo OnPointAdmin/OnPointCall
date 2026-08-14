@@ -28,7 +28,7 @@
     <img
         src="{{ asset('images/onpoint-call.webp') }}"
         alt="{{ config('app.name') }}"
-        style="height: {{ $imgHeight }}; width: auto; flex-shrink: 0;"
+        style="height: {{ $imgHeight }}; width: auto; flex-shrink: 0; border-radius: 0.5rem;"
     >
     <span style="font-size: {{ $fontSize }}; font-weight: 600; color: {{ $color }}; white-space: nowrap; line-height: 1.2;">
         {{ config('app.name') }}

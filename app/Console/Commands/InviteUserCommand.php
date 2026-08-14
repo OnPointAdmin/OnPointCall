@@ -18,6 +18,7 @@ class InviteUserCommand extends Command
                             {--name= : Display name}
                             {--role=agent : admin, manager, or agent}
                             {--lists=Standard : Comma-separated calling list names}
+                            {--salesforce-id= : Salesforce user ID}
                             {--company= : Company ID (defaults to first company)}
                             {--no-email : Create the account without sending mail}';
 
@@ -73,6 +74,7 @@ class InviteUserCommand extends Command
                 $role,
                 $listIds,
                 sendEmail: ! $this->option('no-email'),
+                salesforceId: $this->option('salesforce-id') ?: null,
             );
         } catch (InvalidArgumentException $e) {
             $this->error($e->getMessage());

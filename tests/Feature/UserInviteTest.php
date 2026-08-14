@@ -36,12 +36,14 @@ class UserInviteTest extends TestCase
             'jasonpaine1@gmail.com',
             UserRole::Admin,
             [$list->id],
+            salesforceId: '005000000000001AAA',
         );
 
         $user = $result['user'];
 
         $this->assertSame('jasonpaine1@gmail.com', $user->email);
         $this->assertSame(UserRole::Admin, $user->role);
+        $this->assertSame('005000000000001AAA', $user->salesforce_id);
         $this->assertTrue($user->active);
         $this->assertNotEmpty($result['password']);
 

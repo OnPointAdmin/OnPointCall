@@ -41,6 +41,7 @@ class AdminPanelProvider extends PanelProvider
                 );
             })
             ->brandLogoHeight('2.25rem')
+            ->favicon(asset('images/onpoint-call.webp'))
             ->colors([
                 'primary' => Color::Blue,
             ])

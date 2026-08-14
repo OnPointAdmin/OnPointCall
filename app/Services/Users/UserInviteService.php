@@ -26,9 +26,11 @@ class UserInviteService
         UserRole $role,
         array $callingListIds = [],
         bool $sendEmail = true,
+        ?string $salesforceId = null,
     ): array {
         $email = strtolower(trim($email));
         $password = Str::password(12);
+        $salesforceId = filled($salesforceId) ? trim($salesforceId) : null;
 
         $user = User::withoutGlobalScopes()
             ->where('company_id', $company->id)
@@ -42,6 +44,11 @@ class UserInviteService
                 'active' => true,
                 'password' => $password,
             ]);
+
+            if ($salesforceId !== null) {
+                $user->salesforce_id = $salesforceId;
+            }
+
             $user->save();
         } else {
             $user = new User([
@@ -51,6 +58,7 @@ class UserInviteService
                 'role' => $role,
                 'active' => true,
                 'password' => $password,
+                'salesforce_id' => $salesforceId,
                 'email_verified_at' => now(),
             ]);
             $user->save();

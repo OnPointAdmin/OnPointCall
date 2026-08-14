@@ -33,6 +33,10 @@ class ListUsers extends ListRecords
                         ->label('Email address')
                         ->email()
                         ->required(),
+                    TextInput::make('salesforce_id')
+                        ->label('Salesforce ID')
+                        ->maxLength(18)
+                        ->unique(table: 'users', column: 'salesforce_id'),
                     Select::make('role')
                         ->options(UserRole::class)
                         ->default(UserRole::Agent->value)
@@ -70,6 +74,7 @@ class ListUsers extends ListRecords
                         $data['email'],
                         UserRole::coerce($data['role']),
                         $data['calling_list_ids'] ?? [],
+                        salesforceId: $data['salesforce_id'] ?? null,
                     );
 
                     Notification::make()
