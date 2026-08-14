@@ -71,6 +71,7 @@ class ImportLeads extends Page
                     ->maxSize(10240)
                     ->disk('local')
                     ->directory('imports/uploads')
+                    ->storeFileNamesIn('csv_original_filename')
                     ->columnSpanFull(),
                 Select::make('import_mapping_id')
                     ->label('Column mapping')
@@ -156,7 +157,14 @@ class ImportLeads extends Page
             return;
         }
 
-        $sourceFilename = basename($uploaded);
+        $originalFilename = $data['csv_original_filename'] ?? null;
+        if (is_array($originalFilename)) {
+            $originalFilename = $originalFilename[$uploaded] ?? reset($originalFilename) ?: null;
+        }
+
+        $sourceFilename = is_string($originalFilename) && $originalFilename !== ''
+            ? basename($originalFilename)
+            : basename($uploaded);
         $storedPath = Storage::disk('local')->path($uploaded);
 
         if (! is_readable($storedPath)) {
