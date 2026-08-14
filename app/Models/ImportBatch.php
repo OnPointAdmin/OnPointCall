@@ -23,6 +23,7 @@ class ImportBatch extends Model
         'lead_type',
         'run_soft_score',
         'run_rnd_check',
+        'run_qualification',
         'soft_score_pending',
         'soft_score_qualified',
         'soft_score_not_qualified',
@@ -32,6 +33,10 @@ class ImportBatch extends Model
         'rnd_reassigned',
         'rnd_no_data',
         'rnd_error',
+        'qualification_pending',
+        'qualification_qualified',
+        'qualification_not_qualified',
+        'qualification_error',
         'status',
         'error_message',
     ];
@@ -46,6 +51,7 @@ class ImportBatch extends Model
             'imported_at' => 'datetime',
             'run_soft_score' => 'boolean',
             'run_rnd_check' => 'boolean',
+            'run_qualification' => 'boolean',
             'status' => ImportBatchStatus::class,
         ];
     }
@@ -83,11 +89,16 @@ class ImportBatch extends Model
         if (
             ($this->run_soft_score && (int) $this->soft_score_pending > 0)
             || ($this->run_rnd_check && (int) $this->rnd_pending > 0)
+            || ($this->run_qualification && (int) $this->qualification_pending > 0)
         ) {
             return 'pending';
         }
 
-        if ((int) $this->soft_score_error > 0 || (int) $this->rnd_error > 0) {
+        if (
+            (int) $this->soft_score_error > 0
+            || (int) $this->rnd_error > 0
+            || (int) $this->qualification_error > 0
+        ) {
             return 'error';
         }
 

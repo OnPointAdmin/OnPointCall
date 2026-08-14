@@ -166,11 +166,18 @@ class SlimLeadMigrationCommand extends Command
 
     private function mapDispositionToStatus(string $disposition): ?LeadStatus
     {
-        return match ($disposition) {
+        $key = str_replace([' ', '-'], '_', $disposition);
+
+        return match ($key) {
             'booked' => LeadStatus::Booked,
             'callback' => LeadStatus::Callback,
             'dnc' => LeadStatus::Dnc,
-            'not_interested', 'wrong_number', 'bad_lead', 'bad_number', 'terminal' => LeadStatus::Terminal,
+            'not_interested',
+            'not_qualified',
+            'wrong_number',
+            'bad_number',
+            'bad_lead',
+            'terminal' => LeadStatus::Terminal,
             default => null,
         };
     }

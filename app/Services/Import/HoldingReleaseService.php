@@ -5,6 +5,7 @@ namespace App\Services\Import;
 use App\DataTransferObjects\HoldingFilter;
 use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
+use App\Enums\QualificationStatus;
 use App\Enums\RndStatus;
 use App\Enums\SoftScoreStatus;
 use App\Exceptions\HoldingReleaseException;
@@ -85,6 +86,10 @@ class HoldingReleaseService
 
         if ($filter->fileName) {
             $query->where('file_name', 'ilike', '%'.$filter->fileName.'%');
+        }
+
+        if ($filter->qualificationStatus) {
+            $query->where('qualification_status', $filter->qualificationStatus);
         }
 
         $this->applyAssignableScopes($query);
@@ -265,6 +270,7 @@ class HoldingReleaseService
     {
         $this->applyRndAssignableScope($query);
         $this->applySoftScoreAssignableScope($query);
+        $this->applyQualificationAssignableScope($query);
     }
 
     private function applyRndAssignableScope(Builder $query): void
@@ -290,7 +296,9 @@ class HoldingReleaseService
 
     private function isAssignable(Lead $lead): bool
     {
-        return $this->isRndAssignable($lead) && $this->isSoftScoreAssignable($lead);
+        return $this->isRndAssignable($lead)
+            && $this->isSoftScoreAssignable($lead)
+            && $this->isQualificationAssignable($lead);
     }
 
     private function isRndAssignable(Lead $lead): bool
@@ -309,6 +317,24 @@ class HoldingReleaseService
         }
 
         return $lead->soft_score_status->isAssignable();
+    }
+
+    private function applyQualificationAssignableScope(Builder $query): void
+    {
+        $query->where(function (Builder $assignable): void {
+            $assignable
+                ->whereNull('qualification_status')
+                ->orWhere('qualification_status', '!=', QualificationStatus::Pending->value);
+        });
+    }
+
+    private function isQualificationAssignable(Lead $lead): bool
+    {
+        if ($lead->qualification_status === null) {
+            return true;
+        }
+
+        return $lead->qualification_status->isAssignable();
     }
 
     /**

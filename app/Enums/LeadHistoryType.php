@@ -16,6 +16,7 @@ enum LeadHistoryType: string
     case StatusChange = 'status_change';
     case SoftScore = 'soft_score';
     case RndCheck = 'rnd_check';
+    case Qualification = 'qualification';
 
     public function label(): string
     {
@@ -32,6 +33,7 @@ enum LeadHistoryType: string
             self::StatusChange => 'Status Change',
             self::SoftScore => 'Soft Score',
             self::RndCheck => 'RND Check',
+            self::Qualification => 'Qualification',
         };
     }
 }

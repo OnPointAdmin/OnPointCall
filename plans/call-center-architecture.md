@@ -41,7 +41,7 @@ Sources of truth for this plan:
 | Callback scheduling | Must fall inside lead’s legal window; **reject + notify** otherwise |
 | Undo | **Removed** (chatgpt §7 asks for ~10 min undo — **do not implement**) |
 | List membership | Lead in **at most one** calling list at a time |
-| Attempts | No Answer / Voicemail / Callback / Booked increment; Skip does not; terminal outcomes increment and end |
+| Attempts | No Answer / Left VM / Callback / Booked increment; Skip does not; terminal outcomes increment and end |
 | Recycle | Reset attempt count, keep full history, add **Recycle** history row, stay on **same calling list**, make callable again |
 | Lookup | Find any lead; show last disposition; **completed/terminal visually obvious** |
 | State windows | **Admin-only**; seed FL/NY/NJ (and federal default) |
@@ -225,10 +225,12 @@ Single DB transaction:
 |---|---|
 | Booked | `booked`; attempt++; history; clear lease; scoreboard++ |
 | Callback | reject if outside legal window; else `callback`, owner=self, attempt++; clear lease |
-| No Answer / Voicemail | attempt++; advance day-part; stay `callable`; clear owner; clear lease |
-| Not Interested / Wrong / Bad | attempt++; `terminal`; clear lease |
+| No Answer / Left VM | attempt++; advance day-part; stay `callable`; clear owner; clear lease |
+| Not Interested / Not Qualified / Bad Number / Wrong Number | attempt++; `terminal`; clear lease |
 | DNC | attempt++; `dnc`; never selectable; clear lease |
 | Skip | history + reason; **no** attempt++; clear lease; **bump to bottom of list queue** (`queue_rank = max+1`) |
+
+Disposition labels match the spreadsheet: Booked, Callback, No Answer, Left VM, Not Interested, Not Qualified, DNC, Bad Number, Wrong Number (+ Skip as a non-disposition utility).
 
 **No undo.**
 

@@ -64,6 +64,7 @@ class ImportMappingSeeder extends Seeder
                     'venue' => 'Venue',
                     'event' => 'Event',
                     'original_lead_submit_date' => 'original_lead_submit_date',
+                    'soft_score_checked_at' => 'original_lead_submit_date',
                     'partner_list' => 'PartnerList',
                     'file_name' => 'File Name',
                 ],

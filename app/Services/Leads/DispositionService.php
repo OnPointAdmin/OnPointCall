@@ -28,6 +28,7 @@ class DispositionService
         Disposition $disposition,
         ?CarbonInterface $callbackAt = null,
         ?string $skipReason = null,
+        ?string $note = null,
     ): Lead {
         if ($disposition === Disposition::Callback) {
             if (! $callbackAt || ! $this->compliance->validateCallbackTime($lead, $callbackAt)) {
@@ -35,7 +36,7 @@ class DispositionService
             }
         }
 
-        return DB::transaction(function () use ($lead, $user, $disposition, $callbackAt, $skipReason): Lead {
+        return DB::transaction(function () use ($lead, $user, $disposition, $callbackAt, $skipReason, $note): Lead {
             $lead = Lead::withoutGlobalScopes()->lockForUpdate()->findOrFail($lead->id);
 
             $payload = [
@@ -44,6 +45,11 @@ class DispositionService
 
             if ($skipReason) {
                 $payload['skip_reason'] = $skipReason;
+            }
+
+            $trimmedNote = is_string($note) ? trim($note) : '';
+            if ($trimmedNote !== '') {
+                $payload['note'] = $trimmedNote;
             }
 
             if ($callbackAt) {
@@ -64,13 +70,13 @@ class DispositionService
                     'callback_owner_id' => $user->id,
                     'callback_at' => $callbackAt,
                 ],
-                Disposition::NoAnswer, Disposition::Voicemail => $updates += [
+                Disposition::NoAnswer, Disposition::LeftVm => $updates += [
                     'status' => LeadStatus::Callable,
                     'callback_owner_id' => null,
                     'callback_at' => null,
                     'next_day_part' => $this->dayPartResolver->advanceDayPart($lead),
                 ],
-                Disposition::NotInterested, Disposition::WrongNumber, Disposition::BadLead => $updates += [
+                Disposition::NotInterested, Disposition::NotQualified, Disposition::BadNumber, Disposition::WrongNumber => $updates += [
                     'status' => LeadStatus::Terminal,
                     'callback_owner_id' => null,
                     'callback_at' => null,

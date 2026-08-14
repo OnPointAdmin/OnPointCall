@@ -4,8 +4,10 @@ namespace Tests\Feature;
 
 use App\Enums\ImportBatchStatus;
 use App\Enums\LeadStatus;
+use App\Enums\QualificationStatus;
 use App\Enums\RndStatus;
 use App\Enums\SoftScoreStatus;
+use App\Jobs\QualifyLeadJob;
 use App\Jobs\RndLeadJob;
 use App\Jobs\SoftScoreLeadJob;
 use App\Models\Company;
@@ -177,6 +179,48 @@ class FailedLeadRetryTest extends TestCase
 
         Queue::assertPushed(SoftScoreLeadJob::class, 1);
         Queue::assertPushed(RndLeadJob::class, 1);
+    }
+
+    public function test_batch_retry_queues_qualification_error_jobs(): void
+    {
+        Queue::fake();
+
+        $company = Company::factory()->create();
+        $batch = ImportBatch::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'source_filename' => 'qual-errors.csv',
+            'imported_at' => now(),
+            'lead_type' => 'standard',
+            'status' => ImportBatchStatus::Completed,
+            'run_qualification' => true,
+            'qualification_error' => 1,
+        ]);
+
+        $errorLead = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'import_batch_id' => $batch->id,
+            'phone' => '4045558001',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'imported_at' => now(),
+            'qualification_status' => QualificationStatus::Error,
+        ]);
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'import_batch_id' => $batch->id,
+            'phone' => '4045558002',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'imported_at' => now(),
+            'qualification_status' => QualificationStatus::Qualified,
+        ]);
+
+        $queued = app(ImportBatchCheckRetryService::class)->retryQualificationErrors($batch);
+
+        $this->assertSame(1, $queued);
+        Queue::assertPushed(QualifyLeadJob::class, 1);
+        Queue::assertPushed(QualifyLeadJob::class, fn (QualifyLeadJob $job) => $job->leadId === $errorLead->id);
     }
 
     public function test_reimport_updates_holding_leads_with_check_errors(): void

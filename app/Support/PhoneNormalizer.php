@@ -18,4 +18,19 @@ class PhoneNormalizer
 
         return strlen($digits) === 10 ? $digits : null;
     }
+
+    public static function formatForDisplay(?string $phone): ?string
+    {
+        if ($phone === null || trim($phone) === '') {
+            return null;
+        }
+
+        $digits = self::normalize($phone) ?? (preg_replace('/\D/', '', $phone) ?? '');
+
+        if (strlen($digits) === 10) {
+            return sprintf('(%s) %s-%s', substr($digits, 0, 3), substr($digits, 3, 3), substr($digits, 6));
+        }
+
+        return $phone;
+    }
 }

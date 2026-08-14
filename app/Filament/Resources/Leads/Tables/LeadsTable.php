@@ -4,10 +4,14 @@ namespace App\Filament\Resources\Leads\Tables;
 
 use App\Enums\Disposition;
 use App\Enums\LeadStatus;
+use App\Enums\QualificationStatus;
 use App\Enums\SoftScoreStatus;
+use App\Filament\Actions\ViewQualificationResultAction;
+use App\Jobs\QualifyLeadJob;
 use App\Jobs\RndLeadJob;
 use App\Jobs\SoftScoreLeadJob;
 use App\Models\CallingList;
+use App\Models\Lead;
 use App\Models\LeadTypeDefinition;
 use App\Services\Leads\DispositionService;
 use App\Services\Leads\LeadMergeService;
@@ -53,9 +57,30 @@ class LeadsTable
                 TextColumn::make('lead_type')
                     ->badge(),
                 TextColumn::make('soft_score_code')
+                    ->label('Soft Score')
                     ->toggleable(),
                 TextColumn::make('soft_score_status')
+                    ->label('Soft Score status')
                     ->badge()
+                    ->formatStateUsing(fn (?SoftScoreStatus $state): ?string => $state?->label())
+                    ->toggleable(),
+                TextColumn::make('soft_score_checked_at')
+                    ->label('Soft Score last checked')
+                    ->dateTime()
+                    ->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('qualification_status')
+                    ->badge()
+                    ->color(fn (?QualificationStatus $state): string => match ($state) {
+                        QualificationStatus::Qualified => 'success',
+                        QualificationStatus::NotQualified => 'warning',
+                        QualificationStatus::Error => 'danger',
+                        default => 'gray',
+                    })
+                    ->formatStateUsing(fn (?QualificationStatus $state): ?string => $state?->label())
+                    ->tooltip(fn (Lead $record): ?string => $record->qualification_status
+                        ? 'View qualification response'
+                        : null)
+                    ->action(ViewQualificationResultAction::make())
                     ->toggleable(),
                 TextColumn::make('callback_at')
                     ->dateTime()
@@ -76,6 +101,8 @@ class LeadsTable
                     ->options(fn (): array => CallingList::query()->orderBy('name')->pluck('name', 'id')->all()),
                 SelectFilter::make('soft_score_status')
                     ->options(collect(SoftScoreStatus::cases())->mapWithKeys(fn ($s) => [$s->value => $s->label()])),
+                SelectFilter::make('qualification_status')
+                    ->options(collect(QualificationStatus::cases())->mapWithKeys(fn ($s) => [$s->value => $s->label()])),
             ])
             ->recordActions([
                 EditAction::make(),
@@ -206,6 +233,20 @@ class LeadsTable
 
                             Notification::make()
                                 ->title('RND jobs queued')
+                                ->success()
+                                ->send();
+                        }),
+                    BulkAction::make('rerunQualification')
+                        ->label('Re-run Qualification')
+                        ->icon('heroicon-o-check-badge')
+                        ->requiresConfirmation()
+                        ->action(function (Collection $records): void {
+                            foreach ($records as $record) {
+                                QualifyLeadJob::dispatch($record->id, $record->import_batch_id, Auth::id());
+                            }
+
+                            Notification::make()
+                                ->title('Qualification jobs queued')
                                 ->success()
                                 ->send();
                         }),

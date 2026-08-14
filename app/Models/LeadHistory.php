@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\LeadHistoryType;
 use App\Models\Concerns\BelongsToCompany;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -29,6 +30,19 @@ class LeadHistory extends Model
             'occurred_at' => 'datetime',
             'payload' => 'array',
         ];
+    }
+
+    /**
+     * @param  Builder<LeadHistory>  $query
+     * @return Builder<LeadHistory>
+     */
+    public function scopeVisibleInCallHistory(Builder $query): Builder
+    {
+        return $query->whereNotIn('event_type', [
+            LeadHistoryType::Claim->value,
+            LeadHistoryType::ClaimExpire->value,
+            LeadHistoryType::Release->value,
+        ]);
     }
 
     public function lead(): BelongsTo

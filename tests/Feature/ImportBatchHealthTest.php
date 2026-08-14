@@ -11,6 +11,7 @@ use Tests\TestCase;
 class ImportBatchHealthTest extends TestCase
 {
     use RefreshDatabase;
+
     public function test_health_status_is_pending_while_importing(): void
     {
         $batch = $this->batch([
@@ -27,6 +28,17 @@ class ImportBatchHealthTest extends TestCase
             'status' => ImportBatchStatus::Completed,
             'run_soft_score' => true,
             'soft_score_pending' => 2,
+        ]);
+
+        $this->assertSame('pending', $batch->healthStatus());
+    }
+
+    public function test_health_status_is_pending_while_qualification_checks_remain(): void
+    {
+        $batch = $this->batch([
+            'status' => ImportBatchStatus::Completed,
+            'run_qualification' => true,
+            'qualification_pending' => 2,
         ]);
 
         $this->assertSame('pending', $batch->healthStatus());
@@ -76,6 +88,7 @@ class ImportBatchHealthTest extends TestCase
             'status' => ImportBatchStatus::Completed,
             'run_soft_score' => false,
             'run_rnd_check' => false,
+            'run_qualification' => false,
         ], $overrides));
     }
 }

@@ -1,34 +1,52 @@
+{{-- Hero phone block: the one thing an agent needs before dialing. --}}
 @php
-    $isMobile = false; // JS will enhance; server renders copy-first for all
+    use App\Support\PhoneNormalizer;
+
+    $displayPhone = PhoneNormalizer::formatForDisplay($phone) ?? $phone;
+    $displayPhone2 = isset($phone2) && $phone2 ? (PhoneNormalizer::formatForDisplay($phone2) ?? $phone2) : null;
 @endphp
+<div class="border-b border-slate-100 px-5 py-8 text-center dark:border-slate-800">
+    <p class="m-0 mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">Phone number</p>
 
-<div class="text-center">
-    <p class="text-sm text-slate-500">Phone number</p>
-
-    {{-- Desktop: click copies phone only, no tel: --}}
     <button
         type="button"
         id="phone-copy-btn"
         data-phone="{{ $phone }}"
-        class="mt-1 block w-full text-4xl font-bold tracking-wide text-slate-900 hover:text-blue-700 md:text-5xl"
+        class="block w-full border-none bg-transparent p-0 font-extrabold leading-tight tracking-tight text-slate-900 hover:text-blue-700 dark:text-slate-100 dark:hover:text-blue-400"
+        style="font-size: clamp(34px, 8vw, 56px);"
         onclick="copyPhone('{{ $phone }}')"
     >
-        {{ $phone }}
+        {{ $displayPhone }}
     </button>
+    <p class="m-0 mt-2 hidden text-sm text-slate-400 dark:text-slate-500 md:block" id="phone-copy-hint">Click to copy phone number</p>
 
-    {{-- Mobile: tel: only when not manual-dial-only --}}
     @if (! $manualDialOnly)
         <a
             href="tel:{{ $phone }}"
-            class="mt-2 inline-block text-sm text-blue-700 md:hidden"
+            class="mt-2 inline-block text-sm text-blue-700 md:hidden dark:text-blue-400"
         >
             Tap to dial
         </a>
     @else
-        <p class="mt-2 text-xs font-medium text-amber-800 md:hidden">Manual dial only — hand-dial this number</p>
+        <p class="m-0 mt-2 text-xs font-medium text-amber-800 md:hidden dark:text-amber-400">Manual dial only — hand-dial this number</p>
     @endif
 
-    <p class="mt-2 hidden text-xs text-slate-500 md:block" id="phone-copy-hint">Click to copy phone number</p>
+    @if ($name ?? null)
+        <p class="m-0 mt-2.5 select-none text-xl font-semibold text-slate-900 dark:text-slate-100" oncopy="return false">{{ $name }}</p>
+    @endif
+
+    @if ($manualDialOnly)
+        <p class="m-0 mt-1.5 inline-block rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-800 dark:bg-amber-500/15 dark:text-amber-400">
+            Manual dial only — hand-dial this number
+        </p>
+    @endif
+
+    @if ($displayPhone2)
+        <p class="m-0 mt-2.5 text-sm text-slate-500 dark:text-slate-400">
+            Secondary contact:
+            <span class="select-none font-semibold text-slate-700 dark:text-slate-300" oncopy="return false">{{ $displayPhone2 }}</span>
+        </p>
+    @endif
 </div>
 
 <script>

@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\DataTransferObjects\HoldingFilter;
+use App\Enums\QualificationStatus;
 use App\Exceptions\HoldingReleaseException;
 use App\Filament\Support\LeadTypeSelect;
 use App\Models\CallingList;
@@ -53,6 +54,7 @@ class AssignLeads extends Page
     {
         $this->filterForm->fill([
             'lead_type' => 'standard',
+            'qualification_status' => QualificationStatus::Qualified->value,
         ]);
 
         $this->releaseForm->fill([
@@ -111,6 +113,13 @@ class AssignLeads extends Page
                             ->maxLength(10)
                             ->live(debounce: 500),
                         $this->holdingSelect('soft_score_code', 'Soft score code'),
+                        Select::make('qualification_status')
+                            ->label('Qualification Status')
+                            ->options([
+                                QualificationStatus::Qualified->value => QualificationStatus::Qualified->label(),
+                                QualificationStatus::NotQualified->value => QualificationStatus::NotQualified->label(),
+                            ])
+                            ->live(),
                     ])
                     ->columns(3),
                 Section::make('Tour Info')
@@ -297,6 +306,9 @@ class AssignLeads extends Page
             tourDateStart: $this->selectedList($data['tour_date_start'] ?? null),
             tourDate: $this->selectedList($data['tour_date'] ?? null),
             tourResult: $this->selectedList($data['tour_result'] ?? null),
+            qualificationStatus: isset($data['qualification_status']) && $data['qualification_status'] !== ''
+                ? (string) $data['qualification_status']
+                : null,
         );
     }
 

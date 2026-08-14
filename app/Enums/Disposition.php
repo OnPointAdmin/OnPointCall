@@ -7,11 +7,12 @@ enum Disposition: string
     case Booked = 'booked';
     case Callback = 'callback';
     case NoAnswer = 'no_answer';
-    case Voicemail = 'voicemail';
+    case LeftVm = 'left_vm';
     case NotInterested = 'not_interested';
-    case WrongNumber = 'wrong_number';
-    case BadLead = 'bad_lead';
+    case NotQualified = 'not_qualified';
     case Dnc = 'dnc';
+    case BadNumber = 'bad_number';
+    case WrongNumber = 'wrong_number';
     case Skip = 'skip';
 
     public function label(): string
@@ -20,11 +21,12 @@ enum Disposition: string
             self::Booked => 'Booked',
             self::Callback => 'Callback',
             self::NoAnswer => 'No Answer',
-            self::Voicemail => 'Voicemail',
+            self::LeftVm => 'Left VM',
             self::NotInterested => 'Not Interested',
-            self::WrongNumber => 'Wrong Number',
-            self::BadLead => 'Bad Lead',
+            self::NotQualified => 'Not Qualified',
             self::Dnc => 'DNC',
+            self::BadNumber => 'Bad Number',
+            self::WrongNumber => 'Wrong Number',
             self::Skip => 'Skip',
         };
     }
@@ -36,6 +38,11 @@ enum Disposition: string
 
     public function isTerminal(): bool
     {
-        return in_array($this, [self::NotInterested, self::WrongNumber, self::BadLead], true);
+        return in_array($this, [
+            self::NotInterested,
+            self::NotQualified,
+            self::BadNumber,
+            self::WrongNumber,
+        ], true);
     }
 }

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\LeadStatus;
+use App\Enums\QualificationStatus;
 use App\Enums\RndStatus;
 use App\Enums\SoftScoreStatus;
 use App\Models\Concerns\BelongsToCompany;
@@ -66,6 +67,10 @@ class Lead extends Model
         'rnd_status',
         'rnd_checked_at',
         'rnd_last_error',
+        'qualification_status',
+        'qualification_checked_at',
+        'qualification_last_error',
+        'qualification_result',
     ];
 
     protected function casts(): array
@@ -80,6 +85,9 @@ class Lead extends Model
             'soft_score_checked_at' => 'datetime',
             'rnd_status' => RndStatus::class,
             'rnd_checked_at' => 'datetime',
+            'qualification_status' => QualificationStatus::class,
+            'qualification_checked_at' => 'datetime',
+            'qualification_result' => 'array',
         ];
     }
 
@@ -111,5 +119,131 @@ class Lead extends Model
     public function fullName(): string
     {
         return trim("{$this->first_name} {$this->last_name}");
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function qualifiedPartnerNames(): array
+    {
+        $result = $this->qualificationResponse();
+        $names = [];
+
+        foreach (['qualifiedCompaniesLead', 'qualifiedCompaniesBooking'] as $key) {
+            foreach ($result[$key] ?? [] as $company) {
+                $name = is_array($company) ? ($company['companyName'] ?? null) : null;
+
+                if (is_string($name) && trim($name) !== '') {
+                    $names[] = trim($name);
+                }
+            }
+        }
+
+        return array_values(array_unique($names));
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    public function qualificationRequest(): ?array
+    {
+        $request = $this->qualification_result['request'] ?? null;
+
+        return is_array($request) ? $request : null;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function qualificationResponse(): array
+    {
+        $result = $this->qualification_result ?? [];
+
+        if (array_key_exists('request', $result) || array_key_exists('response', $result)) {
+            $response = $result['response'] ?? null;
+
+            return is_array($response) ? $response : [];
+        }
+
+        return $result;
+    }
+
+    /**
+     * @return list<array{name: string, vertical: ?string, priority: ?string, combination: ?string}>
+     */
+    public function qualificationCompanies(string $listKey): array
+    {
+        $result = $this->qualificationResponse();
+        $companies = [];
+
+        foreach ($result[$listKey] ?? [] as $company) {
+            if (! is_array($company)) {
+                continue;
+            }
+
+            $name = trim((string) ($company['companyName'] ?? ''));
+
+            if ($name === '') {
+                continue;
+            }
+
+            $companies[] = [
+                'name' => $name,
+                'vertical' => self::nullableTrimmedString($company['vertical'] ?? null),
+                'priority' => self::nullableTrimmedString($company['priority'] ?? null),
+                'combination' => self::nullableTrimmedString($company['qualificationCombination'] ?? null),
+            ];
+        }
+
+        return $companies;
+    }
+
+    /**
+     * @return list<array{name: string, combination: ?string, failed: list<string>}>
+     */
+    public function qualificationFailedCriteria(): array
+    {
+        $failed = $this->qualificationResponse()['failedCriteria'] ?? [];
+
+        if (! is_array($failed)) {
+            return [];
+        }
+
+        $rows = [];
+
+        foreach ($failed as $companyName => $details) {
+            $combination = null;
+            $criteria = [];
+
+            if (is_array($details)) {
+                $combination = self::nullableTrimmedString($details['combinationName'] ?? null);
+                $list = $details['failedCriteria'] ?? [];
+
+                if (is_array($list)) {
+                    foreach ($list as $item) {
+                        if (is_string($item) && trim($item) !== '') {
+                            $criteria[] = trim($item);
+                        }
+                    }
+                }
+            }
+
+            $rows[] = [
+                'name' => is_string($companyName) ? $companyName : (string) $companyName,
+                'combination' => $combination,
+                'failed' => $criteria,
+            ];
+        }
+
+        return $rows;
+    }
+
+    private static function nullableTrimmedString(mixed $value): ?string
+    {
+        if (! is_string($value) || trim($value) === '') {
+            return null;
+        }
+
+        return trim($value);
     }
 }

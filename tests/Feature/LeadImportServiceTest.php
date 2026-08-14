@@ -4,7 +4,9 @@ namespace Tests\Feature;
 
 use App\Enums\ImportBatchStatus;
 use App\Enums\LeadStatus;
+use App\Enums\QualificationStatus;
 use App\Enums\SoftScoreStatus;
+use App\Jobs\QualifyLeadJob;
 use App\Jobs\SoftScoreLeadJob;
 use App\Models\Company;
 use App\Models\ImportMapping;
@@ -133,6 +135,7 @@ class LeadImportServiceTest extends TestCase
         $this->assertSame('F', $lead->gender);
         $this->assertSame('Yes', $lead->home_owner);
         $this->assertSame('2026-08-01', $lead->original_lead_submit_date);
+        $this->assertTrue($lead->soft_score_checked_at?->isSameDay('2026-08-01'));
         $this->assertNull($lead->extra_fields);
     }
 
@@ -221,5 +224,40 @@ class LeadImportServiceTest extends TestCase
         $this->assertNotNull($lead);
         $this->assertSame(SoftScoreStatus::Pending, $lead->soft_score_status);
         Queue::assertPushed(SoftScoreLeadJob::class, 1);
+    }
+
+    public function test_import_marks_qualification_pending_when_enabled(): void
+    {
+        Queue::fake();
+
+        $company = Company::factory()->create();
+        CompanyContext::set($company->id);
+
+        $csv = implode("\n", [
+            'Phone,First Name',
+            '4045555555,Jane',
+        ]);
+
+        $path = storage_path('app/imports/qualification-import.csv');
+        if (! is_dir(dirname($path))) {
+            mkdir(dirname($path), 0777, true);
+        }
+        file_put_contents($path, $csv);
+
+        $service = app(LeadImportService::class);
+        $batch = $service->createBatch($company->id, 'qualification-import.csv', 'standard', false, false, true);
+
+        $service->process($batch, $path, [
+            'phone' => 'Phone',
+            'first_name' => 'First Name',
+        ], 'standard');
+
+        CompanyContext::clear();
+
+        $lead = Lead::withoutGlobalScopes()->where('phone', '4045555555')->first();
+
+        $this->assertNotNull($lead);
+        $this->assertSame(QualificationStatus::Pending, $lead->qualification_status);
+        Queue::assertPushed(QualifyLeadJob::class, 1);
     }
 }

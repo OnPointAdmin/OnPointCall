@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\DataTransferObjects\HoldingFilter;
 use App\Enums\LeadStatus;
+use App\Enums\QualificationStatus;
 use App\Enums\RndStatus;
 use App\Enums\SoftScoreStatus;
 use App\Exceptions\HoldingReleaseException;
@@ -406,5 +407,183 @@ class HoldingReleaseServiceTest extends TestCase
 
         $this->assertSame(1, $service->countHolding($company->id, $filter));
         $this->assertSame(1, $service->releaseAll($company->id, $filter, $list->id));
+    }
+
+    public function test_pending_qualification_leads_are_not_assignable(): void
+    {
+        $company = Company::factory()->create();
+
+        $list = CallingList::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'name' => 'Standard List',
+            'lead_type' => 'standard',
+            'cadence' => [],
+            'active' => true,
+        ]);
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045558080',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'qualification_status' => QualificationStatus::Pending,
+            'imported_at' => now(),
+        ]);
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045559090',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'qualification_status' => QualificationStatus::Qualified,
+            'imported_at' => now(),
+        ]);
+
+        $service = app(HoldingReleaseService::class);
+        $filter = new HoldingFilter(leadType: 'standard');
+
+        $this->assertSame(1, $service->countHolding($company->id, $filter));
+        $this->assertSame(1, $service->releaseAll($company->id, $filter, $list->id));
+    }
+
+    public function test_qualification_status_filter_counts_only_qualified_leads(): void
+    {
+        $company = Company::factory()->create();
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045551111',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'qualification_status' => QualificationStatus::Qualified,
+            'imported_at' => now(),
+        ]);
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045552222',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'qualification_status' => QualificationStatus::NotQualified,
+            'imported_at' => now(),
+        ]);
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045553333',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'qualification_status' => null,
+            'imported_at' => now(),
+        ]);
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045554444',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'qualification_status' => QualificationStatus::Error,
+            'imported_at' => now(),
+        ]);
+
+        $service = app(HoldingReleaseService::class);
+
+        $this->assertSame(
+            1,
+            $service->countHolding($company->id, new HoldingFilter(
+                leadType: 'standard',
+                qualificationStatus: QualificationStatus::Qualified->value,
+            )),
+        );
+    }
+
+    public function test_qualification_status_filter_counts_only_not_qualified_leads(): void
+    {
+        $company = Company::factory()->create();
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045555555',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'qualification_status' => QualificationStatus::Qualified,
+            'imported_at' => now(),
+        ]);
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045556666',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'qualification_status' => QualificationStatus::NotQualified,
+            'imported_at' => now(),
+        ]);
+
+        $service = app(HoldingReleaseService::class);
+
+        $this->assertSame(
+            1,
+            $service->countHolding($company->id, new HoldingFilter(
+                leadType: 'standard',
+                qualificationStatus: QualificationStatus::NotQualified->value,
+            )),
+        );
+    }
+
+    public function test_blank_qualification_status_filter_includes_all_assignable_statuses(): void
+    {
+        $company = Company::factory()->create();
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045557777',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'qualification_status' => QualificationStatus::Qualified,
+            'imported_at' => now(),
+        ]);
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045558888',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'qualification_status' => QualificationStatus::NotQualified,
+            'imported_at' => now(),
+        ]);
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045559999',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'qualification_status' => null,
+            'imported_at' => now(),
+        ]);
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045550000',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'qualification_status' => QualificationStatus::Error,
+            'imported_at' => now(),
+        ]);
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045550101',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'qualification_status' => QualificationStatus::Pending,
+            'imported_at' => now(),
+        ]);
+
+        $service = app(HoldingReleaseService::class);
+
+        $this->assertSame(
+            4,
+            $service->countHolding($company->id, new HoldingFilter(leadType: 'standard')),
+        );
     }
 }

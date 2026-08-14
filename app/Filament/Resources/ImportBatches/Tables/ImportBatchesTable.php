@@ -74,6 +74,8 @@ class ImportBatchesTable
                     ->boolean(),
                 IconColumn::make('run_rnd_check')
                     ->boolean(),
+                IconColumn::make('run_qualification')
+                    ->boolean(),
                 TextColumn::make('soft_score_pending')
                     ->numeric()
                     ->sortable(),
@@ -98,6 +100,18 @@ class ImportBatchesTable
                     ->numeric()
                     ->sortable(),
                 TextColumn::make('rnd_error')
+                    ->numeric()
+                    ->sortable(),
+                TextColumn::make('qualification_pending')
+                    ->numeric()
+                    ->sortable(),
+                TextColumn::make('qualification_qualified')
+                    ->numeric()
+                    ->sortable(),
+                TextColumn::make('qualification_not_qualified')
+                    ->numeric()
+                    ->sortable(),
+                TextColumn::make('qualification_error')
                     ->numeric()
                     ->sortable(),
                 TextColumn::make('created_at')

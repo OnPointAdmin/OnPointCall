@@ -48,6 +48,7 @@ class ImportLeads extends Page
             'lead_type' => $defaultMapping?->lead_type ?? 'standard',
             'run_soft_score' => false,
             'run_rnd_check' => false,
+            'run_qualification' => false,
             'import_mapping_id' => $defaultMapping?->id,
         ]);
     }
@@ -95,6 +96,9 @@ class ImportLeads extends Page
                 Toggle::make('run_rnd_check')
                     ->label('Run RND check on import')
                     ->helperText('Queues an FCC Reassigned Numbers Database check per lead. Leads stay unassignable until checked; reassigned numbers are rejected.'),
+                Toggle::make('run_qualification')
+                    ->label('Run Qualification on import')
+                    ->helperText('Queues partner qualification per lead (Salesforce). Uses the company Salesforce ID and optional Soft Score code. Leads stay unassignable until checked.'),
             ]);
     }
 
@@ -172,6 +176,7 @@ class ImportLeads extends Page
             leadType: $leadType,
             runSoftScore: (bool) ($data['run_soft_score'] ?? false),
             runRndCheck: (bool) ($data['run_rnd_check'] ?? false),
+            runQualification: (bool) ($data['run_qualification'] ?? false),
         );
 
         ProcessLeadImportJob::dispatch($batch->id, $storedPath, $columnMap);

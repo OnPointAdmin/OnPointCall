@@ -41,5 +41,6 @@ readonly class HoldingFilter
         public ?array $tourDateStart = null,
         public ?array $tourDate = null,
         public ?array $tourResult = null,
+        public ?string $qualificationStatus = null,
     ) {}
 }

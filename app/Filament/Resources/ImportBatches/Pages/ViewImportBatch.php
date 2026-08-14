@@ -83,6 +83,43 @@ class ViewImportBatch extends ViewRecord
                         ->success()
                         ->send();
                 }),
+            Action::make('runQualification')
+                ->label('Run Qualification')
+                ->color('primary')
+                ->requiresConfirmation()
+                ->modalHeading('Run Qualification on this batch?')
+                ->modalDescription('This will queue partner qualification for every lead in this batch that has not been qualified yet.')
+                ->visible(fn (): bool => ! $this->getRecord()->run_qualification
+                    && $this->getRecord()->status === ImportBatchStatus::Completed)
+                ->action(function (ImportBatchCheckRetryService $retryService): void {
+                    /** @var ImportBatch $batch */
+                    $batch = $this->getRecord();
+                    $queued = $retryService->runQualification($batch, Auth::id());
+
+                    $this->refreshRecord();
+
+                    Notification::make()
+                        ->title($queued === 0 ? 'No unchecked leads to qualify' : "Queued {$queued} Qualification job(s)")
+                        ->success()
+                        ->send();
+                }),
+            Action::make('retryQualificationErrors')
+                ->label('Retry Qualification errors')
+                ->color('warning')
+                ->requiresConfirmation()
+                ->visible(fn (): bool => (int) $this->getRecord()->qualification_error > 0)
+                ->action(function (ImportBatchCheckRetryService $retryService): void {
+                    /** @var ImportBatch $batch */
+                    $batch = $this->getRecord();
+                    $queued = $retryService->retryQualificationErrors($batch, Auth::id());
+
+                    $this->refreshRecord();
+
+                    Notification::make()
+                        ->title($queued === 0 ? 'No Qualification errors to retry' : "Queued {$queued} Qualification retry job(s)")
+                        ->success()
+                        ->send();
+                }),
         ];
     }
 

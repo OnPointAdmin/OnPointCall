@@ -46,7 +46,7 @@ class LeadDisplayFields
             }
 
             if ($attribute === 'phone_2') {
-                $value = self::formatPhone((string) $value);
+                $value = PhoneNormalizer::formatForDisplay((string) $value) ?? $value;
             }
 
             $fields[] = [
@@ -67,15 +67,6 @@ class LeadDisplayFields
         }
 
         return $fields;
-    }
-
-    private static function formatPhone(string $phone): string
-    {
-        if (strlen($phone) === 10) {
-            return sprintf('(%s) %s-%s', substr($phone, 0, 3), substr($phone, 3, 3), substr($phone, 6));
-        }
-
-        return $phone;
     }
 
     private static function humanizeKey(string $key): string

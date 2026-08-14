@@ -3,8 +3,10 @@
 namespace App\Filament\Resources\ImportBatches\RelationManagers;
 
 use App\Enums\LeadStatus;
+use App\Enums\QualificationStatus;
 use App\Enums\RndStatus;
 use App\Enums\SoftScoreStatus;
+use App\Filament\Actions\ViewQualificationResultAction;
 use App\Models\Lead;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables\Columns\TextColumn;
@@ -58,6 +60,7 @@ class LeadsRelationManager extends RelationManager
                         SoftScoreStatus::Pending => 'Pending',
                         SoftScoreStatus::Error => 'Error',
                         SoftScoreStatus::Complete => '—',
+                        SoftScoreStatus::Recent => 'Recently checked',
                         default => '—',
                     })
                     ->sortable(),
@@ -65,6 +68,21 @@ class LeadsRelationManager extends RelationManager
                     ->label('RND')
                     ->badge()
                     ->formatStateUsing(fn (?RndStatus $state): ?string => $state?->label())
+                    ->sortable(),
+                TextColumn::make('qualification_status')
+                    ->label('Qualification')
+                    ->badge()
+                    ->color(fn (?QualificationStatus $state): string => match ($state) {
+                        QualificationStatus::Qualified => 'success',
+                        QualificationStatus::NotQualified => 'warning',
+                        QualificationStatus::Error => 'danger',
+                        default => 'gray',
+                    })
+                    ->formatStateUsing(fn (?QualificationStatus $state): ?string => $state?->label())
+                    ->tooltip(fn (Lead $record): ?string => $record->qualification_status
+                        ? 'View qualification response'
+                        : null)
+                    ->action(ViewQualificationResultAction::make())
                     ->sortable(),
                 TextColumn::make('error')
                     ->label('Error')
@@ -75,6 +93,7 @@ class LeadsRelationManager extends RelationManager
                         $parts = array_filter([
                             $record->soft_score_last_error,
                             $record->rnd_last_error,
+                            $record->qualification_last_error,
                         ]);
 
                         return $parts === [] ? null : implode(' | ', $parts);
@@ -94,6 +113,11 @@ class LeadsRelationManager extends RelationManager
                     ->label('RND')
                     ->options(collect(RndStatus::cases())->mapWithKeys(
                         fn (RndStatus $status): array => [$status->value => $status->label()]
+                    )),
+                SelectFilter::make('qualification_status')
+                    ->label('Qualification')
+                    ->options(collect(QualificationStatus::cases())->mapWithKeys(
+                        fn (QualificationStatus $status): array => [$status->value => $status->label()]
                     )),
             ])
             ->headerActions([])

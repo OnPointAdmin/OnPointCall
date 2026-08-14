@@ -118,4 +118,57 @@ class DispositionServiceTest extends TestCase
             callbackAt: Carbon::parse('2026-08-10 22:00:00', 'America/New_York'),
         );
     }
+
+    public function test_disposition_persists_optional_note_on_history_payload(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-10 14:00:00', 'America/New_York'));
+
+        $company = Company::factory()->create();
+        $lead = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045554001',
+            'state' => 'NY',
+            'timezone' => 'America/New_York',
+            'status' => LeadStatus::Callable,
+            'lead_type' => 'standard',
+            'attempt_count' => 0,
+            'imported_at' => now(),
+        ]);
+
+        $user = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Agent,
+        ]);
+
+        LeadClaim::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'lead_id' => $lead->id,
+            'user_id' => $user->id,
+            'claimed_at' => now(),
+            'expires_at' => now()->addMinutes(20),
+        ]);
+
+        app(DispositionService::class)->apply(
+            $lead,
+            $user,
+            Disposition::Booked,
+            note: '  Asked to call after lunch  ',
+        );
+
+        $this->assertDatabaseHas('lead_history', [
+            'lead_id' => $lead->id,
+            'actor_id' => $user->id,
+        ]);
+
+        $history = \App\Models\LeadHistory::withoutGlobalScopes()
+            ->where('lead_id', $lead->id)
+            ->where('event_type', \App\Enums\LeadHistoryType::Disposition)
+            ->orderByDesc('id')
+            ->first();
+
+        $this->assertNotNull($history);
+        $this->assertIsArray($history->payload);
+        $this->assertSame(Disposition::Booked->value, $history->payload['disposition'] ?? null);
+        $this->assertSame('Asked to call after lunch', $history->payload['note'] ?? null);
+    }
 }

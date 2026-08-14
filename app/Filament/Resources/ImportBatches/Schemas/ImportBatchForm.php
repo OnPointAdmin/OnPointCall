@@ -24,6 +24,7 @@ class ImportBatchForm
                 LeadTypeSelect::make(allowCreate: false, activeOnly: false),
                 Toggle::make('run_soft_score'),
                 Toggle::make('run_rnd_check'),
+                Toggle::make('run_qualification'),
                 TextInput::make('total_rows')->numeric(),
                 TextInput::make('inserted_count')->numeric(),
                 TextInput::make('updated_count')->numeric(),
@@ -44,6 +45,10 @@ class ImportBatchForm
                 TextInput::make('rnd_reassigned')->numeric(),
                 TextInput::make('rnd_no_data')->numeric(),
                 TextInput::make('rnd_error')->numeric(),
+                TextInput::make('qualification_pending')->numeric(),
+                TextInput::make('qualification_qualified')->numeric(),
+                TextInput::make('qualification_not_qualified')->numeric(),
+                TextInput::make('qualification_error')->numeric(),
                 Textarea::make('error_message')
                     ->columnSpanFull()
                     ->visible(fn (?string $state): bool => filled($state)),

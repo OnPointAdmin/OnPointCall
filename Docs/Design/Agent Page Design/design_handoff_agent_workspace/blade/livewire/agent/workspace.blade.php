@@ -1,0 +1,247 @@
+@php
+    $secondaryTabs = ['scoreboard' => 'Scoreboard', 'leaderboard' => 'Leaderboard', 'callbacks' => 'Callbacks', 'lookup' => 'Lookup'];
+@endphp
+
+<div class="grid grid-cols-1 items-start gap-5 lg:grid-cols-[1fr_320px]" wire:poll.10s>
+
+    {{-- ACTIVE LEAD WORKSPACE (dominant) --}}
+    <div>
+        @if (! $lead)
+            <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <h2 class="m-0 text-lg font-semibold text-slate-900 dark:text-slate-100">No active lead</h2>
+                    <button
+                        type="button"
+                        wire:click="getNextLead"
+                        class="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                    >
+                        Get First Lead
+                    </button>
+                </div>
+
+                @if ($emptyMessage)
+                    <p class="mt-4 rounded-md border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-4 text-sm text-slate-700 dark:text-slate-300">
+                        {{ $emptyMessage }}
+                    </p>
+                @endif
+            </div>
+        @else
+            @include('livewire.agent.partials.lead-panel', [
+                'lead' => $lead,
+                'bookingUrl' => $this->bookingUrl,
+                'manualDialOnly' => $this->manualDialOnly,
+                'localTime' => $this->localTime,
+                'readOnly' => false,
+            ])
+        @endif
+    </div>
+
+    {{-- RIGHT COLUMN: disposition (primary action) above secondary panels --}}
+    <div class="sticky top-4 flex flex-col gap-3.5" x-data="{ tab: 'scoreboard' }">
+
+        @if ($lead && ! in_array($lead->status->value, ['booked', 'terminal', 'dnc']))
+            <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-4 shadow-sm" x-data="{ selected: null, modalOpen: false, pendingKey: null, pendingLabel: '' }">
+                <h4 class="m-0 mb-3 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400 dark:text-slate-500">Disposition</h4>
+
+                <div class="flex flex-col gap-2">
+                    <button
+                        type="button"
+                        x-on:click="selected = 'booked'; pendingKey = 'booked'; pendingLabel = 'Booked'; modalOpen = true"
+                        class="w-full rounded-lg border border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-500/10 py-3.5 text-[15px] font-bold text-emerald-800 hover:bg-emerald-100 dark:text-emerald-400 dark:hover:bg-emerald-500/20"
+                    >
+                        Booked
+                    </button>
+
+                    <div class="grid grid-cols-2 gap-2">
+                        <button type="button" x-on:click="selected = 'callback'" class="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-500/10 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-100 dark:text-blue-400 dark:hover:bg-blue-500/20">Callback</button>
+                        <button type="button" x-on:click="selected = 'no_answer'; pendingKey = 'no_answer'; pendingLabel = 'No Answer'; modalOpen = true" class="rounded-lg border border-slate-300 dark:border-slate-700 py-2.5 text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:bg-slate-950">No Answer</button>
+                        <button type="button" x-on:click="selected = 'voicemail'; pendingKey = 'voicemail'; pendingLabel = 'Left VM'; modalOpen = true" class="rounded-lg border border-slate-300 dark:border-slate-700 py-2.5 text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:bg-slate-950">Left VM</button>
+                        <button type="button" x-on:click="selected = 'not_available'; pendingKey = 'not_available'; pendingLabel = 'Not Available'; modalOpen = true" class="rounded-lg border border-slate-300 dark:border-slate-700 py-2.5 text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:bg-slate-950">Not Available</button>
+                    </div>
+
+                    {{-- Callback datetime — shown inline, associated directly with the Callback button --}}
+                    <div x-show="selected === 'callback'" x-cloak class="flex flex-col gap-1.5 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-500/10 px-3 py-2.5">
+                        <label class="text-xs font-semibold text-amber-800 dark:text-amber-400">Callback date/time</label>
+                        <input
+                            type="datetime-local"
+                            wire:model="callbackAt"
+                            class="rounded-md border border-amber-300 bg-white dark:bg-slate-900 px-3 py-1.5 text-sm"
+                        >
+                        @error('callbackAt') <p class="m-0 text-xs text-red-600">{{ $message }}</p> @enderror
+                        <button type="button" x-on:click="pendingKey = 'callback'; pendingLabel = 'Callback'; modalOpen = true" class="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-700">Continue</button>
+                    </div>
+
+                    <div class="my-1 h-px bg-slate-200"></div>
+
+                    <div class="grid grid-cols-2 gap-2">
+                        <button type="button" x-on:click="selected = 'not_interested'; pendingKey = 'not_interested'; pendingLabel = 'Not Interested'; modalOpen = true" class="rounded-lg border border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-500/10 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100 dark:text-red-400 dark:hover:bg-red-500/20">Not Interested</button>
+                        <button type="button" x-on:click="selected = 'not_qualified'; pendingKey = 'not_qualified'; pendingLabel = 'Not Qualified'; modalOpen = true" class="rounded-lg border border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-500/10 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100 dark:text-red-400 dark:hover:bg-red-500/20">Not Qualified</button>
+                        <button type="button" x-on:click="selected = 'wrong_number'; pendingKey = 'wrong_number'; pendingLabel = 'Wrong Number'; modalOpen = true" class="rounded-lg border border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-500/10 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100 dark:text-red-400 dark:hover:bg-red-500/20">Wrong Number</button>
+                        <button type="button" x-on:click="selected = 'bad_number'; pendingKey = 'bad_number'; pendingLabel = 'Bad Number'; modalOpen = true" class="rounded-lg border border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-500/10 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100 dark:text-red-400 dark:hover:bg-red-500/20">Bad Number</button>
+                    </div>
+                    <button type="button" x-on:click="selected = 'dnc'; pendingKey = 'dnc'; pendingLabel = 'DNC'; modalOpen = true" class="w-full rounded-lg border border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-500/10 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100 dark:text-red-400 dark:hover:bg-red-500/20">DNC</button>
+
+                    {{-- Skip — separate utility action, requires a reason (its own text field covers the note) --}}
+                    <div class="mt-1 flex flex-col gap-2 border-t border-dashed border-slate-200 dark:border-slate-800 pt-3">
+                        <input
+                            type="text"
+                            wire:model="skipReason"
+                            placeholder="Skip reason (required)"
+                            class="w-full rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm"
+                        >
+                        <button
+                            type="button"
+                            wire:click="applyDisposition('skip')"
+                            class="w-full rounded-lg border border-dashed border-slate-400 dark:border-slate-600 bg-white dark:bg-slate-900 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 dark:text-slate-500 hover:bg-slate-50 dark:bg-slate-950"
+                        >
+                            Skip (bottom of queue)
+                        </button>
+                        @error('skipReason') <span class="text-xs font-semibold text-red-600">{{ $message }}</span> @enderror
+                    </div>
+                </div>
+
+                {{-- Add a note modal — shown before any disposition (except Skip) is applied --}}
+                <div x-show="modalOpen" x-cloak style="position: fixed; inset: 0; z-index: 50;" class="flex items-center justify-center bg-slate-900/45 p-5">
+                    <div class="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 p-6 shadow-2xl" x-on:click.outside="modalOpen = false">
+                        <h3 class="m-0 text-base font-bold text-slate-900 dark:text-slate-100">Add a note</h3>
+                        <p class="m-0 mt-1 text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">Dispositioning as <strong class="text-slate-700 dark:text-slate-300" x-text="pendingLabel"></strong>. Optional &mdash; add context for the next call.</p>
+                        <textarea
+                            wire:model="dispositionNote"
+                            placeholder="e.g. Asked to call back after 5pm, interested in pricing"
+                            rows="4"
+                            class="mt-3 w-full rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2.5 text-sm"
+                        ></textarea>
+                        <div class="mt-4 flex justify-end gap-2">
+                            <button type="button" x-on:click="modalOpen = false" class="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:bg-slate-950">Cancel</button>
+                            <button type="button" x-on:click="$wire.applyDisposition(pendingKey); modalOpen = false" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">Save &amp; Disposition</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        @endif
+
+        <div class="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+            <div class="flex border-b border-slate-100 dark:border-slate-800">
+                @foreach ($secondaryTabs as $key => $label)
+                    <button
+                        type="button"
+                        x-on:click="tab = '{{ $key }}'"
+                        x-bind:class="tab === '{{ $key }}' ? 'text-blue-600 border-blue-600' : 'text-slate-400 dark:text-slate-500 border-transparent'"
+                        class="flex-1 border-b-2 bg-transparent px-1.5 py-2.5 text-xs font-semibold"
+                    >
+                        {{ $label }}
+                    </button>
+                @endforeach
+            </div>
+
+            <div class="p-3.5">
+                {{-- Scoreboard --}}
+                <div x-show="tab === 'scoreboard'">
+                    <p class="m-0 mb-2.5 text-[11px] font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">My Scoreboard &middot; Today</p>
+                    <dl class="m-0 grid grid-cols-2 gap-2.5">
+                        <div class="rounded-lg bg-slate-50 dark:bg-slate-950 p-2.5">
+                            <dt class="m-0 text-[11px] text-slate-400 dark:text-slate-500">Bookings</dt>
+                            <dd class="m-0 mt-0.5 text-2xl font-extrabold text-emerald-700">{{ $this->stats['bookings'] }}</dd>
+                        </div>
+                        <div class="rounded-lg bg-slate-50 dark:bg-slate-950 p-2.5">
+                            <dt class="m-0 text-[11px] text-slate-400 dark:text-slate-500">Calls</dt>
+                            <dd class="m-0 mt-0.5 text-2xl font-extrabold text-slate-900 dark:text-slate-100">{{ $this->stats['calls'] }}</dd>
+                        </div>
+                        <div class="rounded-lg bg-slate-50 dark:bg-slate-950 p-2.5">
+                            <dt class="m-0 text-[11px] text-slate-400 dark:text-slate-500">Skips</dt>
+                            <dd class="m-0 mt-0.5 text-2xl font-extrabold text-slate-600 dark:text-slate-400 dark:text-slate-500">{{ $this->stats['skips'] }}</dd>
+                        </div>
+                        <div class="rounded-lg bg-slate-50 dark:bg-slate-950 p-2.5">
+                            <dt class="m-0 text-[11px] text-slate-400 dark:text-slate-500">Callbacks</dt>
+                            <dd class="m-0 mt-0.5 text-2xl font-extrabold text-amber-600">{{ $this->stats['callbacks_pending'] }}</dd>
+                        </div>
+                    </dl>
+                </div>
+
+                {{-- Leaderboard --}}
+                <div x-show="tab === 'leaderboard'" x-cloak>
+                    <p class="m-0 mb-2.5 text-[11px] font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Leaderboard &middot; Today</p>
+                    <ul class="m-0 flex list-none flex-col gap-1.5 p-0">
+                        @forelse ($this->leaderboard as $row)
+                            <li class="flex items-center justify-between rounded-md bg-slate-50 dark:bg-slate-950 px-3 py-2 text-sm">
+                                <span class="font-medium text-slate-700 dark:text-slate-300">{{ $row['name'] }}</span>
+                                <span class="font-bold text-emerald-700">{{ $row['bookings'] }}</span>
+                            </li>
+                        @empty
+                            <li class="text-sm text-slate-400 dark:text-slate-500">No activity yet today.</li>
+                        @endforelse
+                    </ul>
+                </div>
+
+                {{-- Callbacks --}}
+                <div x-show="tab === 'callbacks'" x-cloak>
+                    <p class="m-0 mb-2.5 text-[11px] font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">My Callbacks</p>
+                    <ul class="m-0 flex list-none flex-col gap-1.5 p-0">
+                        @forelse ($this->callbacks as $callback)
+                            <li @class([
+                                'rounded-md px-3 py-2 text-sm border',
+                                'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-500/10' => $callback->callback_at?->isPast(),
+                                'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950' => ! $callback->callback_at?->isPast(),
+                            ])>
+                                <div class="flex items-center justify-between gap-2">
+                                    <span class="font-medium text-slate-700 dark:text-slate-300">{{ $callback->fullName() ?: $callback->phone }}</span>
+                                    <span class="text-[11px] text-slate-400 dark:text-slate-500">{{ $callback->callback_at?->format('M j, g:i A') }}</span>
+                                </div>
+                                @if ($callback->callback_at?->isPast())
+                                    <p class="m-0 mt-1 text-xs font-bold text-red-700">Overdue</p>
+                                @endif
+                            </li>
+                        @empty
+                            <li class="text-sm text-slate-400 dark:text-slate-500">No scheduled callbacks.</li>
+                        @endforelse
+                    </ul>
+                </div>
+
+                {{-- Lookup --}}
+                <div x-show="tab === 'lookup'" x-cloak>
+                    <p class="m-0 mb-1 text-[11px] font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Lead Lookup</p>
+                    <p class="m-0 mb-2.5 text-[11px] text-slate-400 dark:text-slate-500">Min {{ \App\Services\Leads\LeadLookupService::MIN_QUERY_LENGTH }} characters. Searches are not logged.</p>
+                    <div class="flex gap-1.5">
+                        <input
+                            type="text"
+                            wire:model="lookupQuery"
+                            placeholder="Phone, name, or email"
+                            class="block w-full rounded-md border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        >
+                        <button
+                            type="button"
+                            wire:click="searchLeads"
+                            class="rounded-md border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:bg-slate-950"
+                        >
+                            Search
+                        </button>
+                    </div>
+
+                    @if ($lookupResults->isNotEmpty())
+                        <ul class="m-0 mt-2.5 flex list-none flex-col gap-1.5 p-0">
+                            @foreach ($lookupResults as $result)
+                                <li>
+                                    <button
+                                        type="button"
+                                        wire:click="selectLookupLead({{ $result->id }})"
+                                        class="w-full rounded-md border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-3 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800"
+                                    >
+                                        <span class="font-semibold text-slate-700 dark:text-slate-300">{{ $result->fullName() ?: 'Unknown' }}</span>
+                                        <span class="text-slate-500 dark:text-slate-400 dark:text-slate-500"> — {{ $result->phone }}</span>
+                                        <span class="ml-1.5 text-[11px] text-slate-400 dark:text-slate-500">{{ $result->status->label() }}</span>
+                                    </button>
+                                </li>
+                            @endforeach
+                        </ul>
+                    @endif
+
+                    @if ($this->lookupLead && $lookupReadOnly)
+                        <div class="mt-3 border-t border-slate-100 dark:border-slate-800 pt-3">
+                            @include('livewire.agent.partials.lead-readonly', ['lead' => $this->lookupLead])
+                        </div>
+                    @endif
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

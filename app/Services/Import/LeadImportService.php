@@ -4,18 +4,22 @@ namespace App\Services\Import;
 
 use App\Enums\ImportBatchStatus;
 use App\Enums\LeadStatus;
+use App\Enums\QualificationStatus;
 use App\Enums\RndStatus;
 use App\Enums\SoftScoreStatus;
+use App\Jobs\QualifyLeadJob;
 use App\Jobs\RndLeadJob;
 use App\Jobs\SoftScoreLeadJob;
 use App\Models\ImportBatch;
 use App\Models\Lead;
+use App\Services\SoftScore\SoftScoreService;
 use App\Support\PhoneNormalizer;
 use App\Support\TimezoneResolver;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 use SplFileObject;
+use Throwable;
 
 class LeadImportService
 {
@@ -43,6 +47,8 @@ class LeadImportService
         'gender' => 'Gender',
         'home_owner' => 'Homeowner',
         'original_lead_submit_date' => 'Original submit date',
+        'soft_score_checked_at' => 'Soft Score last checked',
+        'soft_score_code' => 'Soft Score code',
         'booking_id' => 'Booking ID',
         'phone_2' => 'Phone 2',
         'address_2' => 'Address 2',
@@ -80,10 +86,13 @@ class LeadImportService
         $insertedLeadIds = [];
         $updatedLeadIds = [];
         $softScoreJobLeadIds = [];
+        $softScoreRecentCount = 0;
         $rndJobLeadIds = [];
+        $qualificationJobLeadIds = [];
         $duplicateCount = 0;
         $conflictCount = 0;
         $importedAt = now();
+        $softScoreService = app(SoftScoreService::class);
 
         foreach ($rows as $row) {
             if ($this->isBlankRow($row)) {
@@ -118,7 +127,9 @@ class LeadImportService
 
                 $updatedLeadIds[] = $lead->id;
                 $softScoreJobLeadIds = [...$softScoreJobLeadIds, ...$queued['soft_score']];
+                $softScoreRecentCount += $queued['soft_score_recent'];
                 $rndJobLeadIds = [...$rndJobLeadIds, ...$queued['rnd']];
+                $qualificationJobLeadIds = [...$qualificationJobLeadIds, ...$queued['qualification']];
 
                 continue;
             }
@@ -134,20 +145,41 @@ class LeadImportService
                 $leadAttributes['rnd_status'] = RndStatus::Pending;
             }
 
+            $queueSoftScore = false;
+            $markSoftScoreRecent = false;
             if ($batch->run_soft_score) {
-                $leadAttributes['soft_score_status'] = SoftScoreStatus::Pending;
+                if ($softScoreService->shouldRunFor(
+                    $attributes['soft_score_code'] ?? null,
+                    $attributes['soft_score_checked_at'] ?? null,
+                )) {
+                    $leadAttributes['soft_score_status'] = SoftScoreStatus::Pending;
+                    $queueSoftScore = true;
+                } else {
+                    $markSoftScoreRecent = true;
+                    $softScoreRecentCount++;
+                }
+            }
+
+            if ($batch->run_qualification) {
+                $leadAttributes['qualification_status'] = QualificationStatus::Pending;
             }
 
             $lead = Lead::withoutGlobalScopes()->create($leadAttributes);
 
             $insertedLeadIds[] = $lead->id;
 
-            if ($batch->run_soft_score) {
+            if ($queueSoftScore) {
                 $softScoreJobLeadIds[] = $lead->id;
+            } elseif ($markSoftScoreRecent) {
+                $softScoreService->markRecent($lead);
             }
 
             if ($batch->run_rnd_check) {
                 $rndJobLeadIds[] = $lead->id;
+            }
+
+            if ($batch->run_qualification) {
+                $qualificationJobLeadIds[] = $lead->id;
             }
         }
 
@@ -164,7 +196,9 @@ class LeadImportService
             'duplicate_count' => $duplicateCount,
             'conflict_count' => $conflictCount,
             'soft_score_pending' => count($softScoreJobLeadIds),
+            'soft_score_qualified' => $softScoreRecentCount,
             'rnd_pending' => count($rndJobLeadIds),
+            'qualification_pending' => count($qualificationJobLeadIds),
         ]);
 
         foreach ($softScoreJobLeadIds as $leadId) {
@@ -173,6 +207,10 @@ class LeadImportService
 
         foreach ($rndJobLeadIds as $leadId) {
             RndLeadJob::dispatch($leadId, $batch->id);
+        }
+
+        foreach ($qualificationJobLeadIds as $leadId) {
+            QualifyLeadJob::dispatch($leadId, $batch->id);
         }
 
         return [
@@ -187,16 +225,21 @@ class LeadImportService
 
     /**
      * @param  array<string, mixed>  $attributes
-     * @return array{soft_score: list<int>, rnd: list<int>}
+     * @return array{soft_score: list<int>, soft_score_recent: int, rnd: list<int>, qualification: list<int>}
      */
-    private function updateRecoverableLead(Lead $lead, ImportBatch $batch, array $attributes): array
-    {
+    private function updateRecoverableLead(
+        Lead $lead,
+        ImportBatch $batch,
+        array $attributes,
+    ): array {
         $oldBatchId = $lead->import_batch_id;
         $oldSoftScore = $lead->soft_score_status;
         $oldRnd = $lead->rnd_status;
+        $oldQualification = $lead->qualification_status;
 
         $retrySoftScore = $batch->run_soft_score && $oldSoftScore === SoftScoreStatus::Error;
         $retryRnd = $batch->run_rnd_check && $oldRnd === RndStatus::Error;
+        $retryQualification = $batch->run_qualification && $oldQualification === QualificationStatus::Error;
 
         $fieldUpdates = array_filter(
             $attributes,
@@ -218,7 +261,12 @@ class LeadImportService
             $updates['rnd_last_error'] = null;
         }
 
-        DB::transaction(function () use ($lead, $updates, $oldBatchId, $retrySoftScore, $retryRnd): void {
+        if ($retryQualification) {
+            $updates['qualification_status'] = QualificationStatus::Pending;
+            $updates['qualification_last_error'] = null;
+        }
+
+        DB::transaction(function () use ($lead, $updates, $oldBatchId, $retrySoftScore, $retryRnd, $retryQualification): void {
             if ($oldBatchId) {
                 if ($retrySoftScore) {
                     $this->decrementSoftScoreCounter($oldBatchId, SoftScoreStatus::Error);
@@ -227,6 +275,10 @@ class LeadImportService
                 if ($retryRnd) {
                     $this->decrementRndCounter($oldBatchId, RndStatus::Error);
                 }
+
+                if ($retryQualification) {
+                    $this->decrementQualificationCounter($oldBatchId, QualificationStatus::Error);
+                }
             }
 
             $lead->update($updates);
@@ -234,7 +286,9 @@ class LeadImportService
 
         return [
             'soft_score' => $retrySoftScore ? [$lead->id] : [],
+            'soft_score_recent' => 0,
             'rnd' => $retryRnd ? [$lead->id] : [],
+            'qualification' => $retryQualification ? [$lead->id] : [],
         ];
     }
 
@@ -247,7 +301,7 @@ class LeadImportService
         }
 
         $updates = match ($status) {
-            SoftScoreStatus::Complete => ['soft_score_qualified' => max(0, $batch->soft_score_qualified - 1)],
+            SoftScoreStatus::Complete, SoftScoreStatus::Recent => ['soft_score_qualified' => max(0, $batch->soft_score_qualified - 1)],
             SoftScoreStatus::Error => ['soft_score_error' => max(0, $batch->soft_score_error - 1)],
             SoftScoreStatus::Pending => ['soft_score_pending' => max(0, $batch->soft_score_pending - 1)],
         };
@@ -269,6 +323,24 @@ class LeadImportService
             RndStatus::NoData => ['rnd_no_data' => max(0, $batch->rnd_no_data - 1)],
             RndStatus::Error => ['rnd_error' => max(0, $batch->rnd_error - 1)],
             RndStatus::Pending => ['rnd_pending' => max(0, $batch->rnd_pending - 1)],
+        };
+
+        $batch->update($updates);
+    }
+
+    private function decrementQualificationCounter(int $batchId, QualificationStatus $status): void
+    {
+        $batch = ImportBatch::withoutGlobalScopes()->lockForUpdate()->find($batchId);
+
+        if (! $batch) {
+            return;
+        }
+
+        $updates = match ($status) {
+            QualificationStatus::Qualified => ['qualification_qualified' => max(0, $batch->qualification_qualified - 1)],
+            QualificationStatus::NotQualified => ['qualification_not_qualified' => max(0, $batch->qualification_not_qualified - 1)],
+            QualificationStatus::Error => ['qualification_error' => max(0, $batch->qualification_error - 1)],
+            QualificationStatus::Pending => ['qualification_pending' => max(0, $batch->qualification_pending - 1)],
         };
 
         $batch->update($updates);
@@ -368,12 +440,26 @@ class LeadImportService
             $attributes['zip'],
             $attributes['city'],
         );
+        $attributes['soft_score_checked_at'] = $this->parseDateTime($attributes['soft_score_checked_at'] ?? null);
 
         if ($attributes['extra_fields'] === []) {
             $attributes['extra_fields'] = null;
         }
 
         return $attributes;
+    }
+
+    private function parseDateTime(mixed $value): ?Carbon
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        try {
+            return Carbon::parse((string) $value);
+        } catch (Throwable) {
+            return null;
+        }
     }
 
     /**
@@ -451,7 +537,8 @@ class LeadImportService
         }
 
         return $lead->soft_score_status === SoftScoreStatus::Error
-            || $lead->rnd_status === RndStatus::Error;
+            || $lead->rnd_status === RndStatus::Error
+            || $lead->qualification_status === QualificationStatus::Error;
     }
 
     public function createBatch(
@@ -460,6 +547,7 @@ class LeadImportService
         string $leadType,
         bool $runSoftScore,
         bool $runRndCheck = false,
+        bool $runQualification = false,
     ): ImportBatch {
         return ImportBatch::withoutGlobalScopes()->create([
             'company_id' => $companyId,
@@ -468,6 +556,7 @@ class LeadImportService
             'lead_type' => $leadType,
             'run_soft_score' => $runSoftScore,
             'run_rnd_check' => $runRndCheck,
+            'run_qualification' => $runQualification,
             'status' => ImportBatchStatus::Pending,
         ]);
     }

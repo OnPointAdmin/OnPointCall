@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Leads\Schemas;
 
 use App\Enums\LeadStatus;
+use App\Enums\QualificationStatus;
 use App\Enums\SoftScoreStatus;
 use App\Filament\Support\LeadTypeSelect;
 use Filament\Forms\Components\DateTimePicker;
@@ -80,11 +81,20 @@ class LeadForm
                     ->default(0),
                 LeadTypeSelect::make(allowCreate: true),
                 TextInput::make('extra_fields'),
-                TextInput::make('soft_score_code'),
+                TextInput::make('soft_score_code')
+                    ->label('Soft Score code'),
                 Select::make('soft_score_status')
+                    ->label('Soft Score status')
                     ->options(SoftScoreStatus::class),
-                DateTimePicker::make('soft_score_checked_at'),
+                DateTimePicker::make('soft_score_checked_at')
+                    ->label('Soft Score last checked'),
                 Textarea::make('soft_score_last_error')
+                    ->label('Soft Score last error')
+                    ->columnSpanFull(),
+                Select::make('qualification_status')
+                    ->options(QualificationStatus::class),
+                DateTimePicker::make('qualification_checked_at'),
+                Textarea::make('qualification_last_error')
                     ->columnSpanFull(),
             ]);
     }
