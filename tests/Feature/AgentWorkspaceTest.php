@@ -105,7 +105,7 @@ class AgentWorkspaceTest extends TestCase
         $this->assertSame('Homeowner (3+ years)', $lead->home_owner);
     }
 
-    public function test_edit_dropdown_includes_imported_age_range_not_in_canonical_list(): void
+    public function test_edit_dropdowns_include_imported_demographic_values_not_in_canonical_lists(): void
     {
         $company = Company::factory()->create();
         $user = User::factory()->create([
@@ -135,6 +135,10 @@ class AgentWorkspaceTest extends TestCase
             'lead_type' => 'standard',
             'calling_list_id' => $list->id,
             'age_range' => '30 - 59',
+            'annual_income' => '$80,000 - $90,000',
+            'marital_status' => 'Widowed',
+            'gender' => 'Non-binary',
+            'home_owner' => 'Renter',
             'imported_at' => now(),
         ]);
 
@@ -150,6 +154,10 @@ class AgentWorkspaceTest extends TestCase
 
         Livewire::test(Workspace::class)
             ->call('startEdit')
-            ->assertSeeHtml('value="30 - 59"');
+            ->assertSeeHtml('value="30 - 59"')
+            ->assertSeeHtml('value="$80,000 - $90,000"')
+            ->assertSeeHtml('value="Widowed"')
+            ->assertSeeHtml('value="Non-binary"')
+            ->assertSeeHtml('value="Renter"');
     }
 }

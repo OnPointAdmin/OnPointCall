@@ -40,4 +40,35 @@ class LeadDemographicOptionsTest extends TestCase
 
         $this->assertContains('30 - 59', $options);
     }
+
+    public function test_includes_imported_income_marital_gender_and_homeowner_values(): void
+    {
+        $company = Company::factory()->create();
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045556002',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'annual_income' => '$80,000 - $90,000',
+            'marital_status' => 'Widowed',
+            'gender' => 'Non-binary',
+            'home_owner' => 'Renter',
+            'imported_at' => now(),
+        ]);
+
+        $this->assertContains('$80,000 - $90,000', LeadDemographicOptions::for('annual_income', $company->id));
+        $this->assertContains('Widowed', LeadDemographicOptions::for('marital_status', $company->id));
+        $this->assertContains('Non-binary', LeadDemographicOptions::for('gender', $company->id));
+        $this->assertContains('Renter', LeadDemographicOptions::for('home_owner', $company->id));
+
+        $this->assertSame(
+            LeadDemographicOptions::INCOMES,
+            array_slice(
+                LeadDemographicOptions::for('annual_income', $company->id),
+                0,
+                count(LeadDemographicOptions::INCOMES),
+            ),
+        );
+    }
 }

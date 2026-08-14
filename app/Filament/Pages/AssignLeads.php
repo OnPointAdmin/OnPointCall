@@ -9,6 +9,7 @@ use App\Filament\Support\LeadTypeSelect;
 use App\Models\CallingList;
 use App\Models\ImportBatch;
 use App\Services\Import\HoldingReleaseService;
+use App\Support\LeadDemographicOptions;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
@@ -102,11 +103,11 @@ class AssignLeads extends Page
                     ->columns(3),
                 Section::make('Lead profile')
                     ->schema([
-                        $this->holdingSelect('age_range', 'Age range'),
-                        $this->holdingSelect('annual_income', 'Income range'),
-                        $this->holdingSelect('marital_status', 'Marital status'),
-                        $this->holdingSelect('gender', 'Gender'),
-                        $this->holdingSelect('home_owner', 'Home owner'),
+                        $this->demographicSelect('age_range', 'Age range'),
+                        $this->demographicSelect('annual_income', 'Income range'),
+                        $this->demographicSelect('marital_status', 'Marital status'),
+                        $this->demographicSelect('gender', 'Gender'),
+                        $this->demographicSelect('home_owner', 'Home owner'),
                         $this->holdingSelect('state', 'State'),
                         TextInput::make('zip')
                             ->label('Zip')
@@ -259,6 +260,20 @@ class AssignLeads extends Page
                 $this->selectedLeadType(),
                 $column,
             ))
+            ->multiple()
+            ->searchable()
+            ->live();
+    }
+
+    private function demographicSelect(string $column, string $label): Select
+    {
+        return Select::make($column)
+            ->label($label)
+            ->options(function () use ($column): array {
+                $values = LeadDemographicOptions::for($column, auth()->user()->company_id);
+
+                return $values === [] ? [] : array_combine($values, $values);
+            })
             ->multiple()
             ->searchable()
             ->live();
