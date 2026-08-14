@@ -260,4 +260,46 @@ class LeadImportServiceTest extends TestCase
         $this->assertSame(QualificationStatus::Pending, $lead->qualification_status);
         Queue::assertPushed(QualifyLeadJob::class, 1);
     }
+
+    public function test_import_defers_qualification_until_after_soft_score_when_both_enabled(): void
+    {
+        Queue::fake();
+
+        $company = Company::factory()->create();
+        CompanyContext::set($company->id);
+
+        $csv = implode("\n", [
+            'Phone,First Name',
+            '4045556666,Jane',
+        ]);
+
+        $path = storage_path('app/imports/soft-score-then-qualification.csv');
+        if (! is_dir(dirname($path))) {
+            mkdir(dirname($path), 0777, true);
+        }
+        file_put_contents($path, $csv);
+
+        $service = app(LeadImportService::class);
+        $batch = $service->createBatch($company->id, 'soft-score-then-qualification.csv', 'standard', true, false, true);
+
+        $service->process($batch, $path, [
+            'phone' => 'Phone',
+            'first_name' => 'First Name',
+        ], 'standard');
+
+        CompanyContext::clear();
+
+        $lead = Lead::withoutGlobalScopes()->where('phone', '4045556666')->first();
+
+        $this->assertNotNull($lead);
+        $this->assertSame(SoftScoreStatus::Pending, $lead->soft_score_status);
+        $this->assertSame(QualificationStatus::Pending, $lead->qualification_status);
+
+        Queue::assertPushed(SoftScoreLeadJob::class, 1);
+        Queue::assertPushed(
+            SoftScoreLeadJob::class,
+            fn (SoftScoreLeadJob $job): bool => $job->leadId === $lead->id && $job->dispatchQualificationAfter === true,
+        );
+        Queue::assertNotPushed(QualifyLeadJob::class);
+    }
 }

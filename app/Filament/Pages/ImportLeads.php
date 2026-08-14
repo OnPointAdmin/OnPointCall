@@ -98,7 +98,7 @@ class ImportLeads extends Page
                     ->helperText('Queues an FCC Reassigned Numbers Database check per lead. Leads stay unassignable until checked; reassigned numbers are rejected.'),
                 Toggle::make('run_qualification')
                     ->label('Run Qualification on import')
-                    ->helperText('Queues partner qualification per lead (Salesforce). Uses the company Salesforce ID and optional Soft Score code. Leads stay unassignable until checked.'),
+                    ->helperText('Queues partner qualification per lead (Salesforce). If Soft Score is also enabled, Soft Score runs first and its code is sent to Qualification. Leads stay unassignable until checked.'),
             ]);
     }
 

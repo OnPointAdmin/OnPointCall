@@ -201,17 +201,12 @@ class LeadImportService
             'qualification_pending' => count($qualificationJobLeadIds),
         ]);
 
-        foreach ($softScoreJobLeadIds as $leadId) {
-            SoftScoreLeadJob::dispatch($leadId, $batch->id);
-        }
-
-        foreach ($rndJobLeadIds as $leadId) {
-            RndLeadJob::dispatch($leadId, $batch->id);
-        }
-
-        foreach ($qualificationJobLeadIds as $leadId) {
-            QualifyLeadJob::dispatch($leadId, $batch->id);
-        }
+        $this->dispatchImportCheckJobs(
+            $batch->id,
+            $softScoreJobLeadIds,
+            $rndJobLeadIds,
+            $qualificationJobLeadIds,
+        );
 
         return [
             'inserted' => $insertedLeadIds,
@@ -221,6 +216,47 @@ class LeadImportService
             'conflict_count' => $conflictCount,
             'total_rows' => $totalRows,
         ];
+    }
+
+    /**
+     * Soft Score must run (and update the lead) before Qualification when both are queued
+     * for the same lead, so qualificationCode is available for the Salesforce payload.
+     * SoftScoreLeadJob dispatches QualifyLeadJob after scoring when qualification is pending.
+     *
+     * @param  list<int>  $softScoreJobLeadIds
+     * @param  list<int>  $rndJobLeadIds
+     * @param  list<int>  $qualificationJobLeadIds
+     */
+    private function dispatchImportCheckJobs(
+        int $batchId,
+        array $softScoreJobLeadIds,
+        array $rndJobLeadIds,
+        array $qualificationJobLeadIds,
+    ): void {
+        $softScoreSet = array_fill_keys($softScoreJobLeadIds, true);
+        $qualificationSet = array_fill_keys($qualificationJobLeadIds, true);
+
+        foreach ($softScoreJobLeadIds as $leadId) {
+            SoftScoreLeadJob::dispatch(
+                $leadId,
+                $batchId,
+                null,
+                isset($qualificationSet[$leadId]),
+            );
+        }
+
+        foreach ($rndJobLeadIds as $leadId) {
+            RndLeadJob::dispatch($leadId, $batchId);
+        }
+
+        foreach ($qualificationJobLeadIds as $leadId) {
+            // SoftScoreLeadJob will queue qualification after soft_score_code is saved.
+            if (isset($softScoreSet[$leadId])) {
+                continue;
+            }
+
+            QualifyLeadJob::dispatch($leadId, $batchId);
+        }
     }
 
     /**

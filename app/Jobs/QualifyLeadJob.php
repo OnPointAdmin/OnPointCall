@@ -25,6 +25,8 @@ class QualifyLeadJob implements ShouldQueue
     {
         $lead = Lead::withoutGlobalScopes()->findOrFail($this->leadId);
 
+        // Soft Score must finish (and persist soft_score_code) before qualification
+        // when both were selected on import or Soft Score is still in flight.
         if ($lead->soft_score_status === SoftScoreStatus::Pending && $this->attempts() < 10) {
             $this->release(15);
 
@@ -34,6 +36,7 @@ class QualifyLeadJob implements ShouldQueue
         CompanyContext::set($lead->company_id);
 
         try {
+            $lead->refresh();
             $qualificationService->qualifyLead($lead, $this->actorId);
         } finally {
             CompanyContext::clear();

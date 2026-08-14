@@ -31,6 +31,9 @@ class QualificationService
             ]);
         });
 
+        // Soft Score may have just finished; reload soft_score_code for the API payload.
+        $lead->refresh();
+
         $result = $this->client->qualifyLead($lead);
 
         DB::transaction(function () use ($lead, $result, $actorId): void {

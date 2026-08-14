@@ -131,6 +131,10 @@ class FailedLeadRetryTest extends TestCase
 
         Queue::assertPushed(SoftScoreLeadJob::class, 1);
         Queue::assertPushed(SoftScoreLeadJob::class, fn (SoftScoreLeadJob $job) => $job->leadId === $unscored->id);
+        Queue::assertPushed(
+            SoftScoreLeadJob::class,
+            fn (SoftScoreLeadJob $job): bool => $job->leadId === $unscored->id && $job->dispatchQualificationAfter === false,
+        );
     }
 
     public function test_batch_retry_queues_soft_score_and_rnd_error_jobs(): void

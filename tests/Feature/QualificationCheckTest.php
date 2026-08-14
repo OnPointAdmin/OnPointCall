@@ -5,11 +5,14 @@ namespace Tests\Feature;
 use App\Enums\ImportBatchStatus;
 use App\Enums\LeadHistoryType;
 use App\Enums\QualificationStatus;
+use App\Enums\SoftScoreStatus;
 use App\Jobs\QualifyLeadJob;
+use App\Jobs\SoftScoreLeadJob;
 use App\Models\Company;
 use App\Models\Lead;
 use App\Services\Import\LeadImportService;
 use App\Services\Qualification\QualificationService;
+use App\Services\SoftScore\SoftScoreService;
 use App\Support\CompanyContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
@@ -209,5 +212,99 @@ class QualificationCheckTest extends TestCase
         $this->assertSame(QualificationStatus::Error, $lead->qualification_status);
         $this->assertStringContainsString('Salesforce ID', (string) $lead->qualification_last_error);
         Http::assertNothingSent();
+    }
+
+    public function test_soft_score_job_dispatches_qualification_after_score_when_flagged(): void
+    {
+        Queue::fake();
+
+        config([
+            'services.soft_score.client_id' => 'ss-client',
+            'services.soft_score.client_secret' => 'ss-secret',
+            'services.soft_score.base_url' => 'https://softscore.test',
+        ]);
+
+        Http::fake([
+            '*/oauth/v2/accesstoken*' => Http::response(['access_token' => 'ss-token', 'expires_in' => 3600]),
+            '*/marketing/v1/leads/softscore' => Http::response([
+                'lead' => [
+                    'creditScore' => [
+                        ['creditBand' => ['qualificationCode' => 'B2']],
+                    ],
+                ],
+            ]),
+        ]);
+
+        $company = Company::factory()->create(['salesforce_id' => '001000000000001AAA']);
+
+        $lead = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045554444',
+            'first_name' => 'Jane',
+            'last_name' => 'Doe',
+            'status' => 'holding',
+            'lead_type' => 'standard',
+            'imported_at' => now(),
+            'soft_score_status' => SoftScoreStatus::Pending,
+            'qualification_status' => QualificationStatus::Pending,
+        ]);
+
+        (new SoftScoreLeadJob($lead->id, null, null, true))->handle(app(SoftScoreService::class));
+
+        $lead->refresh();
+        $this->assertSame(SoftScoreStatus::Complete, $lead->soft_score_status);
+        $this->assertSame('B2', $lead->soft_score_code);
+
+        Queue::assertPushed(QualifyLeadJob::class, 1);
+        Queue::assertPushed(
+            QualifyLeadJob::class,
+            fn (QualifyLeadJob $job): bool => $job->leadId === $lead->id,
+        );
+    }
+
+    public function test_qualification_uses_refreshed_soft_score_code(): void
+    {
+        config([
+            'services.qualification.client_id' => 'sf-client',
+            'services.qualification.client_secret' => 'sf-secret',
+            'services.qualification.instance_url' => 'https://onpointmrg.my.salesforce.com',
+        ]);
+
+        Http::fake([
+            '*/services/oauth2/token' => Http::response(['access_token' => 'sf-token']),
+            '*/services/apexrest/CustomerQualification' => Http::response([
+                'qualifiedCompaniesLead' => [],
+                'qualifiedCompaniesBooking' => [],
+                'errorMessage' => null,
+            ]),
+        ]);
+
+        $company = Company::factory()->create(['salesforce_id' => '001000000000001AAA']);
+
+        $lead = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045555555',
+            'last_name' => 'Doe',
+            'status' => 'holding',
+            'lead_type' => 'standard',
+            'imported_at' => now(),
+            'soft_score_code' => null,
+        ]);
+
+        // Soft Score finished after the in-memory model was loaded.
+        Lead::withoutGlobalScopes()->whereKey($lead->id)->update([
+            'soft_score_code' => 'C3',
+            'soft_score_status' => SoftScoreStatus::Complete,
+        ]);
+
+        app(QualificationService::class)->qualifyLead($lead);
+
+        Http::assertSent(function ($request): bool {
+            if (! str_contains($request->url(), 'CustomerQualification')) {
+                return false;
+            }
+
+            return ($request->data()['customerData']['qualificationCode'] ?? null) === 'C3';
+        });
     }
 }

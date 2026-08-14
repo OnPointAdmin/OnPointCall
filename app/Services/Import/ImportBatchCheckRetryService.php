@@ -43,7 +43,12 @@ class ImportBatchCheckRetryService
         });
 
         foreach ($leads as $lead) {
-            SoftScoreLeadJob::dispatch($lead->id, $batch->id, $actorId);
+            SoftScoreLeadJob::dispatch(
+                $lead->id,
+                $batch->id,
+                $actorId,
+                $lead->qualification_status === QualificationStatus::Pending,
+            );
         }
 
         return $leads->count();
@@ -78,6 +83,7 @@ class ImportBatchCheckRetryService
         });
 
         foreach ($leads as $lead) {
+            // If Soft Score is still Pending, QualifyLeadJob releases until soft_score_code is saved.
             QualifyLeadJob::dispatch($lead->id, $batch->id, $actorId);
         }
 
@@ -92,7 +98,12 @@ class ImportBatchCheckRetryService
             ->get();
 
         foreach ($leads as $lead) {
-            SoftScoreLeadJob::dispatch($lead->id, $batch->id, $actorId);
+            SoftScoreLeadJob::dispatch(
+                $lead->id,
+                $batch->id,
+                $actorId,
+                $lead->qualification_status === QualificationStatus::Pending,
+            );
         }
 
         return $leads->count();
