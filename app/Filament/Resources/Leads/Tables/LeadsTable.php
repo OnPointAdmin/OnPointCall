@@ -18,12 +18,13 @@ use App\Services\Leads\LeadMergeService;
 use App\Services\Leads\LeadRecycleService;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
-use Filament\Actions\EditAction;
+use Filament\Actions\ViewAction;
 use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Auth;
 
@@ -32,6 +33,7 @@ class LeadsTable
     public static function configure(Table $table): Table
     {
         return $table
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with('latestDisposition'))
             ->columns([
                 TextColumn::make('phone')
                     ->searchable(),
@@ -44,6 +46,24 @@ class LeadsTable
                 TextColumn::make('status')
                     ->badge()
                     ->searchable(),
+                TextColumn::make('last_disposition')
+                    ->label('Last Disp')
+                    ->badge()
+                    ->placeholder('—')
+                    ->getStateUsing(function (Lead $record): ?string {
+                        $value = $record->latestDisposition?->payload['disposition'] ?? null;
+
+                        if (! is_string($value) || $value === '') {
+                            return null;
+                        }
+
+                        return Disposition::tryFrom($value)?->label() ?? $value;
+                    }),
+                TextColumn::make('last_attempt_at')
+                    ->label('Last Call Date')
+                    ->dateTime()
+                    ->sortable()
+                    ->placeholder('—'),
                 TextColumn::make('attempt_count')
                     ->numeric()
                     ->sortable(),
@@ -105,7 +125,7 @@ class LeadsTable
                     ->options(collect(QualificationStatus::cases())->mapWithKeys(fn ($s) => [$s->value => $s->label()])),
             ])
             ->recordActions([
-                EditAction::make(),
+                ViewAction::make(),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([

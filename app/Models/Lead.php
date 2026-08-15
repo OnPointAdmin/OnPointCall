@@ -2,11 +2,13 @@
 
 namespace App\Models;
 
+use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
 use App\Enums\QualificationStatus;
 use App\Enums\RndStatus;
 use App\Enums\SoftScoreStatus;
 use App\Models\Concerns\BelongsToCompany;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -114,6 +116,19 @@ class Lead extends Model
     public function history(): HasMany
     {
         return $this->hasMany(LeadHistory::class);
+    }
+
+    /**
+     * @return HasOne<LeadHistory, $this>
+     */
+    public function latestDisposition(): HasOne
+    {
+        return $this->hasOne(LeadHistory::class)->ofMany(
+            ['occurred_at' => 'max', 'id' => 'max'],
+            function (Builder $query): void {
+                $query->where('event_type', LeadHistoryType::Disposition->value);
+            },
+        );
     }
 
     public function fullName(): string
