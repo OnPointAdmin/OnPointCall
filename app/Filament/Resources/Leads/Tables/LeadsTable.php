@@ -3,10 +3,13 @@
 namespace App\Filament\Resources\Leads\Tables;
 
 use App\Enums\Disposition;
+use App\Enums\DncStatus;
 use App\Enums\LeadStatus;
 use App\Enums\QualificationStatus;
 use App\Enums\SoftScoreStatus;
+use App\Filament\Actions\ViewDncResultAction;
 use App\Filament\Actions\ViewQualificationResultAction;
+use App\Jobs\DncScrubJob;
 use App\Jobs\QualifyLeadJob;
 use App\Jobs\RndLeadJob;
 use App\Jobs\SoftScoreLeadJob;
@@ -102,6 +105,21 @@ class LeadsTable
                         : null)
                     ->action(ViewQualificationResultAction::make())
                     ->toggleable(),
+                TextColumn::make('dnc_status')
+                    ->label('DNC')
+                    ->badge()
+                    ->color(fn (?DncStatus $state): string => match ($state) {
+                        DncStatus::Clear => 'success',
+                        DncStatus::Hit, DncStatus::Invalid => 'danger',
+                        DncStatus::Error => 'danger',
+                        default => 'gray',
+                    })
+                    ->formatStateUsing(fn (?DncStatus $state): ?string => $state?->label())
+                    ->tooltip(fn (Lead $record): ?string => $record->dnc_status
+                        ? 'View DNC scrub result'
+                        : null)
+                    ->action(ViewDncResultAction::make())
+                    ->toggleable(),
                 TextColumn::make('callback_at')
                     ->dateTime()
                     ->sortable()
@@ -123,6 +141,9 @@ class LeadsTable
                     ->options(collect(SoftScoreStatus::cases())->mapWithKeys(fn ($s) => [$s->value => $s->label()])),
                 SelectFilter::make('qualification_status')
                     ->options(collect(QualificationStatus::cases())->mapWithKeys(fn ($s) => [$s->value => $s->label()])),
+                SelectFilter::make('dnc_status')
+                    ->label('DNC')
+                    ->options(collect(DncStatus::cases())->mapWithKeys(fn ($s) => [$s->value => $s->label()])),
             ])
             ->recordActions([
                 ViewAction::make(),
@@ -267,6 +288,22 @@ class LeadsTable
 
                             Notification::make()
                                 ->title('Qualification jobs queued')
+                                ->success()
+                                ->send();
+                        }),
+                    BulkAction::make('rerunDnc')
+                        ->label('Re-run DNC')
+                        ->icon('heroicon-o-no-symbol')
+                        ->requiresConfirmation()
+                        ->action(function (Collection $records): void {
+                            DncScrubJob::dispatchForLeadIds(
+                                $records->pluck('id')->all(),
+                                null,
+                                Auth::id(),
+                            );
+
+                            Notification::make()
+                                ->title('DNC jobs queued')
                                 ->success()
                                 ->send();
                         }),

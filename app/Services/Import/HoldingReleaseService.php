@@ -3,6 +3,7 @@
 namespace App\Services\Import;
 
 use App\DataTransferObjects\HoldingFilter;
+use App\Enums\DncStatus;
 use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
 use App\Enums\QualificationStatus;
@@ -271,6 +272,7 @@ class HoldingReleaseService
         $this->applyRndAssignableScope($query);
         $this->applySoftScoreAssignableScope($query);
         $this->applyQualificationAssignableScope($query);
+        $this->applyDncAssignableScope($query);
     }
 
     private function applyRndAssignableScope(Builder $query): void
@@ -298,7 +300,8 @@ class HoldingReleaseService
     {
         return $this->isRndAssignable($lead)
             && $this->isSoftScoreAssignable($lead)
-            && $this->isQualificationAssignable($lead);
+            && $this->isQualificationAssignable($lead)
+            && $this->isDncAssignable($lead);
     }
 
     private function isRndAssignable(Lead $lead): bool
@@ -335,6 +338,24 @@ class HoldingReleaseService
         }
 
         return $lead->qualification_status->isAssignable();
+    }
+
+    private function applyDncAssignableScope(Builder $query): void
+    {
+        $query->where(function (Builder $assignable): void {
+            $assignable
+                ->whereNull('dnc_status')
+                ->orWhere('dnc_status', DncStatus::Clear->value);
+        });
+    }
+
+    private function isDncAssignable(Lead $lead): bool
+    {
+        if ($lead->dnc_status === null) {
+            return true;
+        }
+
+        return $lead->dnc_status->isAssignable();
     }
 
     /**

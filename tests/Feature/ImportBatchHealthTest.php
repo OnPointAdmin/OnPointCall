@@ -44,6 +44,17 @@ class ImportBatchHealthTest extends TestCase
         $this->assertSame('pending', $batch->healthStatus());
     }
 
+    public function test_health_status_is_pending_while_dnc_checks_remain(): void
+    {
+        $batch = $this->batch([
+            'status' => ImportBatchStatus::Completed,
+            'run_dnc_check' => true,
+            'dnc_pending' => 2,
+        ]);
+
+        $this->assertSame('pending', $batch->healthStatus());
+    }
+
     public function test_health_status_is_error_when_soft_score_errors_exist(): void
     {
         $batch = $this->batch([
@@ -89,6 +100,7 @@ class ImportBatchHealthTest extends TestCase
             'run_soft_score' => false,
             'run_rnd_check' => false,
             'run_qualification' => false,
+            'run_dnc_check' => false,
         ], $overrides));
     }
 }

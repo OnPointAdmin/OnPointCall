@@ -6,6 +6,7 @@ use App\Enums\ImportBatchStatus;
 use App\Filament\Resources\ImportBatches\ImportBatchResource;
 use App\Models\ImportBatch;
 use App\Services\Import\ImportBatchCheckRetryService;
+use App\Services\Import\LeadImportService;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
@@ -120,11 +121,56 @@ class ViewImportBatch extends ViewRecord
                         ->success()
                         ->send();
                 }),
+            Action::make('runDncCheck')
+                ->label('Run DNC check')
+                ->color('primary')
+                ->requiresConfirmation()
+                ->modalHeading('Run DNC.com check on this batch?')
+                ->modalDescription('This will queue a DNC.com scrub for every lead in this batch that has not been checked yet.')
+                ->visible(fn (): bool => ! $this->getRecord()->run_dnc_check
+                    && $this->getRecord()->status === ImportBatchStatus::Completed)
+                ->action(function (ImportBatchCheckRetryService $retryService): void {
+                    /** @var ImportBatch $batch */
+                    $batch = $this->getRecord();
+                    $queued = $retryService->runDncCheck($batch, Auth::id());
+
+                    $this->refreshRecord();
+
+                    Notification::make()
+                        ->title($queued === 0 ? 'No unchecked leads to scrub' : "Queued {$queued} lead(s) for DNC check")
+                        ->success()
+                        ->send();
+                }),
+            Action::make('retryDncErrors')
+                ->label('Retry DNC errors')
+                ->color('warning')
+                ->requiresConfirmation()
+                ->visible(fn (): bool => (int) $this->getRecord()->dnc_error > 0)
+                ->action(function (ImportBatchCheckRetryService $retryService): void {
+                    /** @var ImportBatch $batch */
+                    $batch = $this->getRecord();
+                    $queued = $retryService->retryDncErrors($batch, Auth::id());
+
+                    $this->refreshRecord();
+
+                    Notification::make()
+                        ->title($queued === 0 ? 'No DNC errors to retry' : "Queued {$queued} lead(s) for DNC retry")
+                        ->success()
+                        ->send();
+                }),
         ];
+    }
+
+    public function mount(int|string $record): void
+    {
+        parent::mount($record);
+
+        $this->ensureSkippedRows();
     }
 
     public function refreshRecord(): void
     {
+        $this->ensureSkippedRows();
         $this->record = $this->getRecord()->refresh();
         $this->fillForm();
     }
@@ -132,5 +178,20 @@ class ViewImportBatch extends ViewRecord
     public function isProcessing(): bool
     {
         return $this->getRecord()->healthStatus() === 'pending';
+    }
+
+    private function ensureSkippedRows(): void
+    {
+        $batch = $this->getRecord();
+
+        if ((int) $batch->duplicate_count + (int) $batch->conflict_count === 0) {
+            return;
+        }
+
+        if ($batch->skippedRows()->exists()) {
+            return;
+        }
+
+        app(LeadImportService::class)->backfillSkippedRows($batch);
     }
 }

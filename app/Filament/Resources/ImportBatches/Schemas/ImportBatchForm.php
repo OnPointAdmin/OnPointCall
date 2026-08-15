@@ -25,6 +25,7 @@ class ImportBatchForm
                 Toggle::make('run_soft_score'),
                 Toggle::make('run_rnd_check'),
                 Toggle::make('run_qualification'),
+                Toggle::make('run_dnc_check'),
                 TextInput::make('total_rows')->numeric(),
                 TextInput::make('inserted_count')->numeric(),
                 TextInput::make('updated_count')->numeric(),
@@ -49,6 +50,11 @@ class ImportBatchForm
                 TextInput::make('qualification_qualified')->numeric(),
                 TextInput::make('qualification_not_qualified')->numeric(),
                 TextInput::make('qualification_error')->numeric(),
+                TextInput::make('dnc_pending')->numeric(),
+                TextInput::make('dnc_clear')->numeric(),
+                TextInput::make('dnc_hit')->label('DNC hits')->numeric(),
+                TextInput::make('dnc_invalid')->numeric(),
+                TextInput::make('dnc_error')->numeric(),
                 Textarea::make('error_message')
                     ->columnSpanFull()
                     ->visible(fn (?string $state): bool => filled($state)),

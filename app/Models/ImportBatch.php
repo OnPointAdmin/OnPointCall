@@ -14,6 +14,8 @@ class ImportBatch extends Model
     protected $fillable = [
         'company_id',
         'source_filename',
+        'source_storage_path',
+        'column_map',
         'imported_at',
         'total_rows',
         'inserted_count',
@@ -24,6 +26,7 @@ class ImportBatch extends Model
         'run_soft_score',
         'run_rnd_check',
         'run_qualification',
+        'run_dnc_check',
         'soft_score_pending',
         'soft_score_qualified',
         'soft_score_not_qualified',
@@ -37,6 +40,11 @@ class ImportBatch extends Model
         'qualification_qualified',
         'qualification_not_qualified',
         'qualification_error',
+        'dnc_pending',
+        'dnc_clear',
+        'dnc_hit',
+        'dnc_invalid',
+        'dnc_error',
         'status',
         'error_message',
     ];
@@ -49,9 +57,11 @@ class ImportBatch extends Model
     {
         return [
             'imported_at' => 'datetime',
+            'column_map' => 'array',
             'run_soft_score' => 'boolean',
             'run_rnd_check' => 'boolean',
             'run_qualification' => 'boolean',
+            'run_dnc_check' => 'boolean',
             'status' => ImportBatchStatus::class,
         ];
     }
@@ -61,13 +71,22 @@ class ImportBatch extends Model
         return $this->hasMany(Lead::class);
     }
 
+    public function skippedRows(): HasMany
+    {
+        return $this->hasMany(ImportBatchSkippedRow::class);
+    }
+
     /**
-     * Inserted leads that remain usable after excluding RND reassignments.
+     * Inserted leads that remain usable after excluding RND reassignments
+     * and DNC.com hits / invalid numbers.
      * Dupes/conflicts are already excluded from inserted_count.
      */
     public function getValidLeadsAttribute(): int
     {
-        return max(0, (int) $this->inserted_count - (int) $this->rnd_reassigned);
+        return max(0, (int) $this->inserted_count
+            - (int) $this->rnd_reassigned
+            - (int) $this->dnc_hit
+            - (int) $this->dnc_invalid);
     }
 
     /**
@@ -90,6 +109,7 @@ class ImportBatch extends Model
             ($this->run_soft_score && (int) $this->soft_score_pending > 0)
             || ($this->run_rnd_check && (int) $this->rnd_pending > 0)
             || ($this->run_qualification && (int) $this->qualification_pending > 0)
+            || ($this->run_dnc_check && (int) $this->dnc_pending > 0)
         ) {
             return 'pending';
         }
@@ -98,6 +118,7 @@ class ImportBatch extends Model
             (int) $this->soft_score_error > 0
             || (int) $this->rnd_error > 0
             || (int) $this->qualification_error > 0
+            || (int) $this->dnc_error > 0
         ) {
             return 'error';
         }

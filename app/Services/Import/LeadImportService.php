@@ -2,21 +2,27 @@
 
 namespace App\Services\Import;
 
+use App\Enums\DncStatus;
 use App\Enums\ImportBatchStatus;
+use App\Enums\ImportSkipReason;
 use App\Enums\LeadStatus;
 use App\Enums\QualificationStatus;
 use App\Enums\RndStatus;
 use App\Enums\SoftScoreStatus;
+use App\Jobs\DncScrubJob;
 use App\Jobs\QualifyLeadJob;
 use App\Jobs\RndLeadJob;
 use App\Jobs\SoftScoreLeadJob;
 use App\Models\ImportBatch;
+use App\Models\ImportBatchSkippedRow;
+use App\Models\ImportMapping;
 use App\Models\Lead;
 use App\Services\SoftScore\SoftScoreService;
 use App\Support\PhoneNormalizer;
 use App\Support\TimezoneResolver;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 use SplFileObject;
 use Throwable;
@@ -73,6 +79,8 @@ class LeadImportService
         $batch->update([
             'status' => ImportBatchStatus::Processing,
             'lead_type' => $leadType,
+            'source_storage_path' => $batch->source_storage_path ?: $filePath,
+            'column_map' => $batch->column_map ?: $columnMap,
         ]);
 
         $rows = $this->readCsv($filePath);
@@ -89,6 +97,7 @@ class LeadImportService
         $softScoreRecentCount = 0;
         $rndJobLeadIds = [];
         $qualificationJobLeadIds = [];
+        $dncJobLeadIds = [];
         $duplicateCount = 0;
         $conflictCount = 0;
         $importedAt = now();
@@ -103,6 +112,7 @@ class LeadImportService
 
             if ($attributes['phone'] === null) {
                 $duplicateCount++;
+                $this->recordSkippedRow($batch, $attributes, ImportSkipReason::InvalidPhone);
 
                 continue;
             }
@@ -111,12 +121,14 @@ class LeadImportService
 
             if ($dedupe['status'] === 'conflict') {
                 $conflictCount++;
+                $this->recordSkippedRow($batch, $attributes, ImportSkipReason::Conflict, $dedupe['lead'] ?? null);
 
                 continue;
             }
 
             if ($dedupe['status'] === 'duplicate') {
                 $duplicateCount++;
+                $this->recordSkippedRow($batch, $attributes, ImportSkipReason::Duplicate, $dedupe['lead']);
 
                 continue;
             }
@@ -130,6 +142,7 @@ class LeadImportService
                 $softScoreRecentCount += $queued['soft_score_recent'];
                 $rndJobLeadIds = [...$rndJobLeadIds, ...$queued['rnd']];
                 $qualificationJobLeadIds = [...$qualificationJobLeadIds, ...$queued['qualification']];
+                $dncJobLeadIds = [...$dncJobLeadIds, ...$queued['dnc']];
 
                 continue;
             }
@@ -164,6 +177,10 @@ class LeadImportService
                 $leadAttributes['qualification_status'] = QualificationStatus::Pending;
             }
 
+            if ($batch->run_dnc_check) {
+                $leadAttributes['dnc_status'] = DncStatus::Pending;
+            }
+
             $lead = Lead::withoutGlobalScopes()->create($leadAttributes);
 
             $insertedLeadIds[] = $lead->id;
@@ -180,6 +197,10 @@ class LeadImportService
 
             if ($batch->run_qualification) {
                 $qualificationJobLeadIds[] = $lead->id;
+            }
+
+            if ($batch->run_dnc_check) {
+                $dncJobLeadIds[] = $lead->id;
             }
         }
 
@@ -199,6 +220,7 @@ class LeadImportService
             'soft_score_qualified' => $softScoreRecentCount,
             'rnd_pending' => count($rndJobLeadIds),
             'qualification_pending' => count($qualificationJobLeadIds),
+            'dnc_pending' => count($dncJobLeadIds),
         ]);
 
         $this->dispatchImportCheckJobs(
@@ -206,6 +228,7 @@ class LeadImportService
             $softScoreJobLeadIds,
             $rndJobLeadIds,
             $qualificationJobLeadIds,
+            $dncJobLeadIds,
         );
 
         return [
@@ -226,12 +249,14 @@ class LeadImportService
      * @param  list<int>  $softScoreJobLeadIds
      * @param  list<int>  $rndJobLeadIds
      * @param  list<int>  $qualificationJobLeadIds
+     * @param  list<int>  $dncJobLeadIds
      */
     private function dispatchImportCheckJobs(
         int $batchId,
         array $softScoreJobLeadIds,
         array $rndJobLeadIds,
         array $qualificationJobLeadIds,
+        array $dncJobLeadIds,
     ): void {
         $softScoreSet = array_fill_keys($softScoreJobLeadIds, true);
         $qualificationSet = array_fill_keys($qualificationJobLeadIds, true);
@@ -257,11 +282,13 @@ class LeadImportService
 
             QualifyLeadJob::dispatch($leadId, $batchId);
         }
+
+        DncScrubJob::dispatchForLeadIds($dncJobLeadIds, $batchId);
     }
 
     /**
      * @param  array<string, mixed>  $attributes
-     * @return array{soft_score: list<int>, soft_score_recent: int, rnd: list<int>, qualification: list<int>}
+     * @return array{soft_score: list<int>, soft_score_recent: int, rnd: list<int>, qualification: list<int>, dnc: list<int>}
      */
     private function updateRecoverableLead(
         Lead $lead,
@@ -272,10 +299,12 @@ class LeadImportService
         $oldSoftScore = $lead->soft_score_status;
         $oldRnd = $lead->rnd_status;
         $oldQualification = $lead->qualification_status;
+        $oldDnc = $lead->dnc_status;
 
         $retrySoftScore = $batch->run_soft_score && $oldSoftScore === SoftScoreStatus::Error;
         $retryRnd = $batch->run_rnd_check && $oldRnd === RndStatus::Error;
         $retryQualification = $batch->run_qualification && $oldQualification === QualificationStatus::Error;
+        $retryDnc = $batch->run_dnc_check && $oldDnc === DncStatus::Error;
 
         $fieldUpdates = array_filter(
             $attributes,
@@ -302,7 +331,12 @@ class LeadImportService
             $updates['qualification_last_error'] = null;
         }
 
-        DB::transaction(function () use ($lead, $updates, $oldBatchId, $retrySoftScore, $retryRnd, $retryQualification): void {
+        if ($retryDnc) {
+            $updates['dnc_status'] = DncStatus::Pending;
+            $updates['dnc_last_error'] = null;
+        }
+
+        DB::transaction(function () use ($lead, $updates, $oldBatchId, $retrySoftScore, $retryRnd, $retryQualification, $retryDnc): void {
             if ($oldBatchId) {
                 if ($retrySoftScore) {
                     $this->decrementSoftScoreCounter($oldBatchId, SoftScoreStatus::Error);
@@ -315,6 +349,10 @@ class LeadImportService
                 if ($retryQualification) {
                     $this->decrementQualificationCounter($oldBatchId, QualificationStatus::Error);
                 }
+
+                if ($retryDnc) {
+                    $this->decrementDncCounter($oldBatchId, DncStatus::Error);
+                }
             }
 
             $lead->update($updates);
@@ -325,6 +363,7 @@ class LeadImportService
             'soft_score_recent' => 0,
             'rnd' => $retryRnd ? [$lead->id] : [],
             'qualification' => $retryQualification ? [$lead->id] : [],
+            'dnc' => $retryDnc ? [$lead->id] : [],
         ];
     }
 
@@ -377,6 +416,25 @@ class LeadImportService
             QualificationStatus::NotQualified => ['qualification_not_qualified' => max(0, $batch->qualification_not_qualified - 1)],
             QualificationStatus::Error => ['qualification_error' => max(0, $batch->qualification_error - 1)],
             QualificationStatus::Pending => ['qualification_pending' => max(0, $batch->qualification_pending - 1)],
+        };
+
+        $batch->update($updates);
+    }
+
+    private function decrementDncCounter(int $batchId, DncStatus $status): void
+    {
+        $batch = ImportBatch::withoutGlobalScopes()->lockForUpdate()->find($batchId);
+
+        if (! $batch) {
+            return;
+        }
+
+        $updates = match ($status) {
+            DncStatus::Clear => ['dnc_clear' => max(0, $batch->dnc_clear - 1)],
+            DncStatus::Hit => ['dnc_hit' => max(0, $batch->dnc_hit - 1)],
+            DncStatus::Invalid => ['dnc_invalid' => max(0, $batch->dnc_invalid - 1)],
+            DncStatus::Error => ['dnc_error' => max(0, $batch->dnc_error - 1)],
+            DncStatus::Pending => ['dnc_pending' => max(0, $batch->dnc_pending - 1)],
         };
 
         $batch->update($updates);
@@ -528,6 +586,58 @@ class LeadImportService
     }
 
     /**
+     * @param  array<string, mixed>  $attributes
+     */
+    private function recordSkippedRow(
+        ImportBatch $batch,
+        array $attributes,
+        ImportSkipReason $reason,
+        ?Lead $existingLead = null,
+    ): void {
+        ImportBatchSkippedRow::query()->create([
+            'import_batch_id' => $batch->id,
+            'existing_lead_id' => $existingLead?->id,
+            'reason' => $reason,
+            'matched_on' => $this->matchedOn($existingLead, $attributes),
+            'phone' => $attributes['phone'] ?? null,
+            'first_name' => $attributes['first_name'] ?? null,
+            'last_name' => $attributes['last_name'] ?? null,
+            'external_lead_id' => $attributes['external_lead_id'] ?? null,
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     */
+    private function matchedOn(?Lead $existingLead, array $attributes): ?string
+    {
+        if (! $existingLead) {
+            return null;
+        }
+
+        $phoneMatch = $existingLead->phone !== null
+            && $attributes['phone'] !== null
+            && $existingLead->phone === $attributes['phone'];
+        $idMatch = $existingLead->external_lead_id !== null
+            && ($attributes['external_lead_id'] ?? null) !== null
+            && $existingLead->external_lead_id === $attributes['external_lead_id'];
+
+        if ($phoneMatch && $idMatch) {
+            return 'phone_and_id';
+        }
+
+        if ($idMatch) {
+            return 'external_lead_id';
+        }
+
+        if ($phoneMatch) {
+            return 'phone';
+        }
+
+        return null;
+    }
+
+    /**
      * @return array{status: 'new'|'duplicate'|'conflict'|'recoverable', lead: ?Lead}
      */
     private function resolveDedupe(int $companyId, ?string $externalLeadId, ?string $phone): array
@@ -574,7 +684,142 @@ class LeadImportService
 
         return $lead->soft_score_status === SoftScoreStatus::Error
             || $lead->rnd_status === RndStatus::Error
-            || $lead->qualification_status === QualificationStatus::Error;
+            || $lead->qualification_status === QualificationStatus::Error
+            || $lead->dnc_status === DncStatus::Error;
+    }
+
+    /**
+     * Rebuild skipped-row records for a completed batch that has a duplicate
+     * count but no Duplicates tab rows (e.g. imported before skipped rows were stored).
+     */
+    public function backfillSkippedRows(ImportBatch $batch): int
+    {
+        if ($batch->skippedRows()->exists()) {
+            return $batch->skippedRows()->count();
+        }
+
+        $filePath = $this->resolveImportPath($batch);
+        $columnMap = $this->resolveColumnMap($batch);
+
+        if ($filePath === null || $columnMap === []) {
+            return 0;
+        }
+
+        $rows = $this->readCsv($filePath);
+        $headers = array_shift($rows) ?? [];
+
+        if ($headers === []) {
+            return 0;
+        }
+
+        $headerIndex = $this->buildHeaderIndex($headers);
+        $importedAt = $batch->imported_at ?? now();
+        $created = 0;
+
+        foreach ($rows as $row) {
+            if ($this->isBlankRow($row)) {
+                continue;
+            }
+
+            $attributes = $this->mapRow($row, $headerIndex, $columnMap, $batch->lead_type, $importedAt);
+
+            if ($attributes['phone'] === null) {
+                $this->recordSkippedRow($batch, $attributes, ImportSkipReason::InvalidPhone);
+                $created++;
+
+                continue;
+            }
+
+            $dedupe = $this->resolveDedupe($batch->company_id, $attributes['external_lead_id'], $attributes['phone']);
+
+            if ($dedupe['status'] === 'conflict') {
+                $this->recordSkippedRow($batch, $attributes, ImportSkipReason::Conflict, $dedupe['lead'] ?? null);
+                $created++;
+
+                continue;
+            }
+
+            if ($dedupe['status'] !== 'duplicate') {
+                continue;
+            }
+
+            $existing = $dedupe['lead'];
+
+            if ($existing && $existing->import_batch_id === $batch->id) {
+                continue;
+            }
+
+            $this->recordSkippedRow($batch, $attributes, ImportSkipReason::Duplicate, $existing);
+            $created++;
+        }
+
+        return $created;
+    }
+
+    private function resolveImportPath(ImportBatch $batch): ?string
+    {
+        $candidates = array_filter([
+            $batch->source_storage_path,
+            $this->guessUploadPath($batch),
+        ]);
+
+        foreach ($candidates as $path) {
+            if (is_string($path) && is_readable($path)) {
+                return $path;
+            }
+
+            if (is_string($path) && $path !== '' && Storage::disk('local')->exists($path)) {
+                return Storage::disk('local')->path($path);
+            }
+        }
+
+        return null;
+    }
+
+    private function guessUploadPath(ImportBatch $batch): ?string
+    {
+        $files = Storage::disk('local')->files('imports/uploads');
+        $createdAt = $batch->created_at?->getTimestamp();
+
+        if ($createdAt === null || $files === []) {
+            return null;
+        }
+
+        $closest = null;
+        $closestDelta = null;
+
+        foreach ($files as $file) {
+            $mtime = Storage::disk('local')->lastModified($file);
+            $delta = abs($mtime - $createdAt);
+
+            if ($delta > 120) {
+                continue;
+            }
+
+            if ($closestDelta === null || $delta < $closestDelta) {
+                $closest = $file;
+                $closestDelta = $delta;
+            }
+        }
+
+        return $closest;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function resolveColumnMap(ImportBatch $batch): array
+    {
+        if (is_array($batch->column_map) && $batch->column_map !== []) {
+            return $batch->column_map;
+        }
+
+        $mapping = ImportMapping::withoutGlobalScopes()
+            ->where('company_id', $batch->company_id)
+            ->where('is_default', true)
+            ->first();
+
+        return is_array($mapping?->column_map) ? $mapping->column_map : [];
     }
 
     public function createBatch(
@@ -584,6 +829,7 @@ class LeadImportService
         bool $runSoftScore,
         bool $runRndCheck = false,
         bool $runQualification = false,
+        bool $runDncCheck = false,
     ): ImportBatch {
         return ImportBatch::withoutGlobalScopes()->create([
             'company_id' => $companyId,
@@ -593,6 +839,7 @@ class LeadImportService
             'run_soft_score' => $runSoftScore,
             'run_rnd_check' => $runRndCheck,
             'run_qualification' => $runQualification,
+            'run_dnc_check' => $runDncCheck,
             'status' => ImportBatchStatus::Pending,
         ]);
     }

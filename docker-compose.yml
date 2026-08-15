@@ -48,7 +48,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile
     restart: unless-stopped
-    command: php artisan queue:work --sleep=3 --tries=3 --max-time=3600
+    command: php artisan queue:listen --sleep=3 --tries=3 --timeout=300
     volumes:
       - .:/var/www/html
       - vendor:/var/www/html/vendor

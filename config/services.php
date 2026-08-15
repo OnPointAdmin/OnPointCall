@@ -54,4 +54,10 @@ return [
         'client_secret' => env('SALESFORCE_CLIENT_SECRET'),
     ],
 
+    'dnc' => [
+        'base_url' => env('DNC_BASE_URL', 'https://www.dncscrub.com'),
+        'login_id' => env('DNC_LOGIN_ID'),
+        'project_id' => env('DNC_PROJECT_ID', 'ONPNT'),
+    ],
+
 ];

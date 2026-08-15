@@ -59,7 +59,7 @@ class ImportBatchesTable
                     ->sortable(query: function (Builder $query, string $direction): Builder {
                         $direction = strtolower($direction) === 'desc' ? 'desc' : 'asc';
 
-                        return $query->orderByRaw('(inserted_count - COALESCE(rnd_reassigned, 0)) '.$direction);
+                        return $query->orderByRaw('(inserted_count - COALESCE(rnd_reassigned, 0) - COALESCE(dnc_hit, 0) - COALESCE(dnc_invalid, 0)) '.$direction);
                     }),
                 TextColumn::make('duplicate_count')
                     ->numeric()
@@ -75,6 +75,8 @@ class ImportBatchesTable
                 IconColumn::make('run_rnd_check')
                     ->boolean(),
                 IconColumn::make('run_qualification')
+                    ->boolean(),
+                IconColumn::make('run_dnc_check')
                     ->boolean(),
                 TextColumn::make('soft_score_pending')
                     ->numeric()
@@ -112,6 +114,22 @@ class ImportBatchesTable
                     ->numeric()
                     ->sortable(),
                 TextColumn::make('qualification_error')
+                    ->numeric()
+                    ->sortable(),
+                TextColumn::make('dnc_pending')
+                    ->numeric()
+                    ->sortable(),
+                TextColumn::make('dnc_clear')
+                    ->numeric()
+                    ->sortable(),
+                TextColumn::make('dnc_hit')
+                    ->label('DNC hits')
+                    ->numeric()
+                    ->sortable(),
+                TextColumn::make('dnc_invalid')
+                    ->numeric()
+                    ->sortable(),
+                TextColumn::make('dnc_error')
                     ->numeric()
                     ->sortable(),
                 TextColumn::make('created_at')

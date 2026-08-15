@@ -2,11 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Enums\DncStatus;
 use App\Enums\ImportBatchStatus;
 use App\Enums\LeadStatus;
 use App\Enums\QualificationStatus;
 use App\Enums\RndStatus;
 use App\Enums\SoftScoreStatus;
+use App\Jobs\DncScrubJob;
 use App\Jobs\QualifyLeadJob;
 use App\Jobs\RndLeadJob;
 use App\Jobs\SoftScoreLeadJob;
@@ -227,6 +229,51 @@ class FailedLeadRetryTest extends TestCase
         Queue::assertPushed(QualifyLeadJob::class, fn (QualifyLeadJob $job) => $job->leadId === $errorLead->id);
     }
 
+    public function test_batch_retry_queues_dnc_error_jobs(): void
+    {
+        Queue::fake();
+
+        $company = Company::factory()->create();
+        $batch = ImportBatch::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'source_filename' => 'dnc-errors.csv',
+            'imported_at' => now(),
+            'lead_type' => 'standard',
+            'status' => ImportBatchStatus::Completed,
+            'run_dnc_check' => true,
+            'dnc_error' => 1,
+        ]);
+
+        $errorLead = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'import_batch_id' => $batch->id,
+            'phone' => '4045559001',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'imported_at' => now(),
+            'dnc_status' => DncStatus::Error,
+        ]);
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'import_batch_id' => $batch->id,
+            'phone' => '4045559002',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'imported_at' => now(),
+            'dnc_status' => DncStatus::Clear,
+        ]);
+
+        $queued = app(ImportBatchCheckRetryService::class)->retryDncErrors($batch);
+
+        $this->assertSame(1, $queued);
+        Queue::assertPushed(DncScrubJob::class, 1);
+        Queue::assertPushed(
+            DncScrubJob::class,
+            fn (DncScrubJob $job): bool => in_array($errorLead->id, $job->leadIds, true),
+        );
+    }
+
     public function test_reimport_updates_holding_leads_with_check_errors(): void
     {
         Queue::fake();
@@ -337,6 +384,8 @@ class FailedLeadRetryTest extends TestCase
 
         $lead = Lead::withoutGlobalScopes()->where('phone', '4045557005')->first();
         $this->assertSame('Healthy', $lead->first_name);
+        $this->assertSame(1, $batch->skippedRows()->count());
+        $this->assertSame($lead->id, $batch->skippedRows()->first()->existing_lead_id);
         Queue::assertNothingPushed();
     }
 

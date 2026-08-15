@@ -1,0 +1,284 @@
+{
+	"info": {
+		"_postman_id": "89731349-ee13-4fc6-9735-d748e3872199",
+		"name": "DNCScrub Scrub APIs Samples for Clients",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Wirelesss Sample 1: Phone number scrub of wireless number. loginId specified in HTTP Header",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "loginId",
+						"value": "{{loginId}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "https://www.dncscrub.com/app/main/rpc/scrub?phoneList=5039367187,7075276405&version=5&output=json",
+					"protocol": "https",
+					"host": [
+						"www",
+						"dncscrub",
+						"com"
+					],
+					"path": [
+						"app",
+						"main",
+						"rpc",
+						"scrub"
+					],
+					"query": [
+						{
+							"key": "phoneList",
+							"value": "5039367187,7075276405"
+						},
+						{
+							"key": "version",
+							"value": "5"
+						},
+						{
+							"key": "output",
+							"value": "json"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Wireless Sample 2: Phone number scrub of wireless number",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "loginId",
+						"type": "text",
+						"value": "{{loginId}}"
+					}
+				],
+				"url": {
+					"raw": "https://www.dncscrub.com/app/main/rpc/scrub?phoneList=7322000244&version=5&output=json",
+					"protocol": "https",
+					"host": [
+						"www",
+						"dncscrub",
+						"com"
+					],
+					"path": [
+						"app",
+						"main",
+						"rpc",
+						"scrub"
+					],
+					"query": [
+						{
+							"key": "phoneList",
+							"value": "7322000244"
+						},
+						{
+							"key": "version",
+							"value": "5"
+						},
+						{
+							"key": "output",
+							"value": "json"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Phone number scrub of invalid number",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "loginId",
+						"type": "text",
+						"value": "{{loginId}}"
+					}
+				],
+				"url": {
+					"raw": "https://www.dncscrub.com/app/main/rpc/scrub?phoneList=7071231234&version=5&output=json",
+					"protocol": "https",
+					"host": [
+						"www",
+						"dncscrub",
+						"com"
+					],
+					"path": [
+						"app",
+						"main",
+						"rpc",
+						"scrub"
+					],
+					"query": [
+						{
+							"key": "phoneList",
+							"value": "7071231234"
+						},
+						{
+							"key": "version",
+							"value": "5"
+						},
+						{
+							"key": "output",
+							"value": "json"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Phone number scrub of Federal DNC Number",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "loginId",
+						"type": "text",
+						"value": "{{loginId}}"
+					}
+				],
+				"url": {
+					"raw": "https://www.dncscrub.com/app/main/rpc/scrub?phoneList=7071231234&version=5&output=json",
+					"protocol": "https",
+					"host": [
+						"www",
+						"dncscrub",
+						"com"
+					],
+					"path": [
+						"app",
+						"main",
+						"rpc",
+						"scrub"
+					],
+					"query": [
+						{
+							"key": "phoneList",
+							"value": "7071231234"
+						},
+						{
+							"key": "version",
+							"value": "5"
+						},
+						{
+							"key": "output",
+							"value": "json"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Add to IDNC on DNCScrub",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "loginId",
+						"type": "text",
+						"value": "{{loginId}}"
+					}
+				],
+				"url": {
+					"raw": "https://www.dncscrub.com/app/main/rpc/pdnc?phoneList=5039367187&actionType=add",
+					"protocol": "https",
+					"host": [
+						"www",
+						"dncscrub",
+						"com"
+					],
+					"path": [
+						"app",
+						"main",
+						"rpc",
+						"pdnc"
+					],
+					"query": [
+						{
+							"key": "phoneList",
+							"value": "5039367187"
+						},
+						{
+							"key": "actionType",
+							"value": "add"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "High Performance Litigator Identification Only API",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "loginId",
+						"type": "text",
+						"value": "{{loginId}}"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "phoneList=2675466417,5039367187&loginId=02074D97E1536478D396B810207661030E33F79709F5"
+				},
+				"url": {
+					"raw": "https://api.dncscrub.com/v1.3/scrub/litigator?phoneList=5039367187,7075276405",
+					"protocol": "https",
+					"host": [
+						"api",
+						"dncscrub",
+						"com"
+					],
+					"path": [
+						"v1.3",
+						"scrub",
+						"litigator"
+					],
+					"query": [
+						{
+							"key": "phoneList",
+							"value": "5039367187,7075276405"
+						}
+					]
+				}
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"id": "e3b29b4d-2ec6-4b3a-8123-5590db02c3d9",
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"id": "33bc2500-3734-4920-9f87-de4deb093d00",
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"protocolProfileBehavior": {}
+}

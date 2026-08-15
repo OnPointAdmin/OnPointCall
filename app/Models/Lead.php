@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\DncStatus;
 use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
 use App\Enums\QualificationStatus;
@@ -73,6 +74,10 @@ class Lead extends Model
         'qualification_checked_at',
         'qualification_last_error',
         'qualification_result',
+        'dnc_status',
+        'dnc_checked_at',
+        'dnc_last_error',
+        'dnc_result',
     ];
 
     protected function casts(): array
@@ -90,6 +95,9 @@ class Lead extends Model
             'qualification_status' => QualificationStatus::class,
             'qualification_checked_at' => 'datetime',
             'qualification_result' => 'array',
+            'dnc_status' => DncStatus::class,
+            'dnc_checked_at' => 'datetime',
+            'dnc_result' => 'array',
         ];
     }
 
@@ -251,6 +259,16 @@ class Lead extends Model
         }
 
         return $rows;
+    }
+
+    /**
+     * @return array<string, array<string, mixed>>
+     */
+    public function dncPhones(): array
+    {
+        $phones = $this->dnc_result['phones'] ?? [];
+
+        return is_array($phones) ? $phones : [];
     }
 
     private static function nullableTrimmedString(mixed $value): ?string

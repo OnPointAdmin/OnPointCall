@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Leads\Schemas;
 
+use App\Enums\DncStatus;
 use App\Enums\LeadStatus;
 use App\Enums\QualificationStatus;
 use App\Enums\SoftScoreStatus;
@@ -95,6 +96,14 @@ class LeadForm
                     ->options(QualificationStatus::class),
                 DateTimePicker::make('qualification_checked_at'),
                 Textarea::make('qualification_last_error')
+                    ->columnSpanFull(),
+                Select::make('dnc_status')
+                    ->label('DNC status')
+                    ->options(DncStatus::class),
+                DateTimePicker::make('dnc_checked_at')
+                    ->label('DNC last checked'),
+                Textarea::make('dnc_last_error')
+                    ->label('DNC last error')
                     ->columnSpanFull(),
             ]);
     }

@@ -2,9 +2,11 @@
 
 namespace App\Services\Import;
 
+use App\Enums\DncStatus;
 use App\Enums\QualificationStatus;
 use App\Enums\RndStatus;
 use App\Enums\SoftScoreStatus;
+use App\Jobs\DncScrubJob;
 use App\Jobs\QualifyLeadJob;
 use App\Jobs\RndLeadJob;
 use App\Jobs\SoftScoreLeadJob;
@@ -90,6 +92,39 @@ class ImportBatchCheckRetryService
         return $leads->count();
     }
 
+    public function runDncCheck(ImportBatch $batch, ?int $actorId = null): int
+    {
+        $leads = Lead::withoutGlobalScopes()
+            ->where('import_batch_id', $batch->id)
+            ->whereNull('dnc_status')
+            ->get();
+
+        if ($leads->isEmpty()) {
+            if (! $batch->run_dnc_check) {
+                $batch->update(['run_dnc_check' => true]);
+            }
+
+            return 0;
+        }
+
+        DB::transaction(function () use ($batch, $leads): void {
+            $locked = ImportBatch::withoutGlobalScopes()->lockForUpdate()->findOrFail($batch->id);
+
+            $locked->update([
+                'run_dnc_check' => true,
+                'dnc_pending' => $locked->dnc_pending + $leads->count(),
+            ]);
+
+            Lead::withoutGlobalScopes()
+                ->whereIn('id', $leads->pluck('id'))
+                ->update(['dnc_status' => DncStatus::Pending]);
+        });
+
+        DncScrubJob::dispatchForLeadIds($leads->pluck('id')->all(), $batch->id, $actorId);
+
+        return $leads->count();
+    }
+
     public function retrySoftScoreErrors(ImportBatch $batch, ?int $actorId = null): int
     {
         $leads = Lead::withoutGlobalScopes()
@@ -133,6 +168,18 @@ class ImportBatchCheckRetryService
         foreach ($leads as $lead) {
             QualifyLeadJob::dispatch($lead->id, $batch->id, $actorId);
         }
+
+        return $leads->count();
+    }
+
+    public function retryDncErrors(ImportBatch $batch, ?int $actorId = null): int
+    {
+        $leads = Lead::withoutGlobalScopes()
+            ->where('import_batch_id', $batch->id)
+            ->where('dnc_status', DncStatus::Error)
+            ->get();
+
+        DncScrubJob::dispatchForLeadIds($leads->pluck('id')->all(), $batch->id, $actorId);
 
         return $leads->count();
     }

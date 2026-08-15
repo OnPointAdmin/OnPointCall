@@ -17,6 +17,8 @@ enum LeadHistoryType: string
     case SoftScore = 'soft_score';
     case RndCheck = 'rnd_check';
     case Qualification = 'qualification';
+    case DncCheck = 'dnc_check';
+    case DncPush = 'dnc_push';
 
     public function label(): string
     {
@@ -34,6 +36,8 @@ enum LeadHistoryType: string
             self::SoftScore => 'Soft Score',
             self::RndCheck => 'RND Check',
             self::Qualification => 'Qualification',
+            self::DncCheck => 'DNC Check',
+            self::DncPush => 'DNC Push',
         };
     }
 }

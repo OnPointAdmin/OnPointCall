@@ -40,17 +40,36 @@ class ImportLeads extends Page
      */
     public ?array $data = [];
 
+    public ?string $pendingDisableImportCheck = null;
+
     public function mount(): void
     {
         $defaultMapping = ImportMapping::query()->where('is_default', true)->first();
 
         $this->form->fill([
             'lead_type' => $defaultMapping?->lead_type ?? 'standard',
-            'run_soft_score' => false,
-            'run_rnd_check' => false,
-            'run_qualification' => false,
+            'run_soft_score' => true,
+            'run_rnd_check' => true,
+            'run_qualification' => true,
+            'run_dnc_check' => true,
             'import_mapping_id' => $defaultMapping?->id,
         ]);
+    }
+
+    public function confirmDisableImportCheck(): void
+    {
+        if (filled($this->pendingDisableImportCheck)) {
+            data_set($this->data, $this->pendingDisableImportCheck, false);
+        }
+
+        $this->pendingDisableImportCheck = null;
+        $this->dispatch('close-modal', id: 'import-check-disable-confirm');
+    }
+
+    public function cancelDisableImportCheck(): void
+    {
+        $this->pendingDisableImportCheck = null;
+        $this->dispatch('close-modal', id: 'import-check-disable-confirm');
     }
 
     public function defaultForm(Schema $schema): Schema
@@ -91,15 +110,37 @@ class ImportLeads extends Page
                     }),
                 LeadTypeSelect::make()
                     ->helperText('Creates a type for filtering Assign Leads. Assign to a calling list with the same lead type.'),
-                Toggle::make('run_soft_score')
-                    ->label('Run Soft Score on import')
-                    ->helperText('Queues a soft-score check per lead. Leads stay unassignable until scored.'),
-                Toggle::make('run_rnd_check')
-                    ->label('Run RND check on import')
-                    ->helperText('Queues an FCC Reassigned Numbers Database check per lead. Leads stay unassignable until checked; reassigned numbers are rejected.'),
-                Toggle::make('run_qualification')
-                    ->label('Run Qualification on import')
-                    ->helperText('Queues partner qualification per lead (Salesforce). If Soft Score is also enabled, Soft Score runs first and its code is sent to Qualification. Leads stay unassignable until checked.'),
+                $this->importCheckToggle(
+                    field: 'run_soft_score',
+                    label: 'Run Soft Score on import',
+                    helperText: 'Queues a soft-score check per lead. Leads stay unassignable until scored.',
+                ),
+                $this->importCheckToggle(
+                    field: 'run_rnd_check',
+                    label: 'Run RND check on import',
+                    helperText: 'Queues an FCC Reassigned Numbers Database check per lead. Leads stay unassignable until checked; reassigned numbers are rejected.',
+                ),
+                $this->importCheckToggle(
+                    field: 'run_qualification',
+                    label: 'Run Qualification on import',
+                    helperText: 'Queues partner qualification per lead (Salesforce). If Soft Score is also enabled, Soft Score runs first and its code is sent to Qualification. Leads stay unassignable until checked.',
+                ),
+                $this->importCheckToggle(
+                    field: 'run_dnc_check',
+                    label: 'Run DNC check on import',
+                    helperText: 'Queues a DNC.com scrub (national DNC, internal DNC, and litigators) for phone and phone 2. Hits are marked DNC; invalid area codes are marked Bad Number. Leads stay unassignable until checked.',
+                ),
+            ]);
+    }
+
+    private function importCheckToggle(string $field, string $label, string $helperText): Toggle
+    {
+        return Toggle::make($field)
+            ->label($label)
+            ->helperText($helperText)
+            ->default(true)
+            ->extraAlpineAttributes([
+                '@click.capture' => "if (state) { \$event.stopPropagation(); \$event.preventDefault(); \$wire.set('pendingDisableImportCheck', '{$field}'); \$dispatch('open-modal', { id: 'import-check-disable-confirm' }); }",
             ]);
     }
 
@@ -182,10 +223,16 @@ class ImportLeads extends Page
             companyId: auth()->user()->company_id,
             sourceFilename: $sourceFilename,
             leadType: $leadType,
-            runSoftScore: (bool) ($data['run_soft_score'] ?? false),
-            runRndCheck: (bool) ($data['run_rnd_check'] ?? false),
-            runQualification: (bool) ($data['run_qualification'] ?? false),
+            runSoftScore: (bool) ($data['run_soft_score'] ?? true),
+            runRndCheck: (bool) ($data['run_rnd_check'] ?? true),
+            runQualification: (bool) ($data['run_qualification'] ?? true),
+            runDncCheck: (bool) ($data['run_dnc_check'] ?? true),
         );
+
+        $batch->update([
+            'source_storage_path' => $uploaded,
+            'column_map' => $columnMap,
+        ]);
 
         ProcessLeadImportJob::dispatch($batch->id, $storedPath, $columnMap);
 

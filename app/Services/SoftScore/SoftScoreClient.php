@@ -67,7 +67,8 @@ class SoftScoreClient
 
         return Cache::remember($cacheKey, 3500, function () use ($baseUrl, $clientId, $clientSecret): string {
             $response = Http::asForm()
-                ->timeout(15)
+                ->connectTimeout(10)
+                ->timeout(20)
                 ->post("{$baseUrl}/oauth/v2/accesstoken?grant_type=client_credentials", [
                     'client_id' => $clientId,
                     'client_secret' => $clientSecret,
@@ -127,7 +128,8 @@ class SoftScoreClient
     private function http(string $baseUrl, string $token): PendingRequest
     {
         return Http::baseUrl($baseUrl)
-            ->timeout(15)
+            ->connectTimeout(10)
+            ->timeout(60)
             ->withToken($token)
             ->acceptJson()
             ->asJson();

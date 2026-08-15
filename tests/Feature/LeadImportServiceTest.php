@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\ImportBatchStatus;
+use App\Enums\ImportSkipReason;
 use App\Enums\LeadStatus;
 use App\Enums\QualificationStatus;
 use App\Enums\SoftScoreStatus;
@@ -83,6 +84,69 @@ class LeadImportServiceTest extends TestCase
             'external_lead_id' => 'NEW-1',
             'status' => LeadStatus::Holding->value,
         ]);
+
+        $skipped = $batch->skippedRows()->orderBy('id')->get();
+        $this->assertCount(3, $skipped);
+        $this->assertSame(2, $skipped->where('reason', ImportSkipReason::Duplicate)->count());
+        $this->assertSame(1, $skipped->where('reason', ImportSkipReason::Conflict)->count());
+        $this->assertTrue($skipped->contains(
+            fn ($row) => $row->phone === '4045550001' && $row->reason === ImportSkipReason::Duplicate,
+        ));
+        $this->assertTrue($skipped->contains(
+            fn ($row) => $row->external_lead_id === 'EXISTING-A' && $row->phone === '4045559999',
+        ));
+    }
+
+    public function test_backfill_rebuilds_skipped_rows_for_an_existing_batch(): void
+    {
+        $company = Company::factory()->create();
+
+        $existing = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045550001',
+            'external_lead_id' => 'EXISTING-A',
+            'first_name' => 'Old',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'imported_at' => now()->subDay(),
+        ]);
+
+        $csv = implode("\n", [
+            'Phone,Lead ID,First Name',
+            '4045551111,NEW-1,Jane',
+            '4045550001,NEW-2,Duplicate Phone',
+        ]);
+
+        $path = storage_path('app/imports/backfill-skipped.csv');
+        if (! is_dir(dirname($path))) {
+            mkdir(dirname($path), 0777, true);
+        }
+        file_put_contents($path, $csv);
+
+        CompanyContext::set($company->id);
+
+        $service = app(LeadImportService::class);
+        $batch = $service->createBatch($company->id, 'backfill-skipped.csv', 'standard', false);
+        $service->process($batch, $path, [
+            'phone' => 'Phone',
+            'external_lead_id' => 'Lead ID',
+            'first_name' => 'First Name',
+        ], 'standard');
+
+        $batch->skippedRows()->delete();
+        $this->assertSame(0, $batch->skippedRows()->count());
+        $this->assertSame(1, $batch->fresh()->duplicate_count);
+
+        $created = $service->backfillSkippedRows($batch->fresh());
+
+        CompanyContext::clear();
+
+        $this->assertSame(1, $created);
+        $skipped = $batch->skippedRows()->first();
+        $this->assertNotNull($skipped);
+        $this->assertSame(ImportSkipReason::Duplicate, $skipped->reason);
+        $this->assertSame('4045550001', $skipped->phone);
+        $this->assertSame($existing->id, $skipped->existing_lead_id);
     }
 
     public function test_ssis_mapping_imports_standard_demographic_columns(): void

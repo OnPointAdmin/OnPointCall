@@ -4,6 +4,7 @@ namespace App\Filament\Resources\ImportBatches;
 
 use App\Filament\Resources\ImportBatches\Pages\ListImportBatches;
 use App\Filament\Resources\ImportBatches\Pages\ViewImportBatch;
+use App\Filament\Resources\ImportBatches\RelationManagers\DuplicatesRelationManager;
 use App\Filament\Resources\ImportBatches\RelationManagers\LeadsRelationManager;
 use App\Filament\Resources\ImportBatches\Schemas\ImportBatchForm;
 use App\Filament\Resources\ImportBatches\Tables\ImportBatchesTable;
@@ -41,6 +42,7 @@ class ImportBatchResource extends Resource
     {
         return [
             LeadsRelationManager::class,
+            DuplicatesRelationManager::class,
         ];
     }
 

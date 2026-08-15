@@ -2,10 +2,12 @@
 
 namespace App\Filament\Resources\ImportBatches\RelationManagers;
 
+use App\Enums\DncStatus;
 use App\Enums\LeadStatus;
 use App\Enums\QualificationStatus;
 use App\Enums\RndStatus;
 use App\Enums\SoftScoreStatus;
+use App\Filament\Actions\ViewDncResultAction;
 use App\Filament\Actions\ViewQualificationResultAction;
 use App\Models\Lead;
 use Filament\Resources\RelationManagers\RelationManager;
@@ -84,6 +86,20 @@ class LeadsRelationManager extends RelationManager
                         : null)
                     ->action(ViewQualificationResultAction::make())
                     ->sortable(),
+                TextColumn::make('dnc_status')
+                    ->label('DNC')
+                    ->badge()
+                    ->color(fn (?DncStatus $state): string => match ($state) {
+                        DncStatus::Clear => 'success',
+                        DncStatus::Hit, DncStatus::Invalid, DncStatus::Error => 'danger',
+                        default => 'gray',
+                    })
+                    ->formatStateUsing(fn (?DncStatus $state): ?string => $state?->label())
+                    ->tooltip(fn (Lead $record): ?string => $record->dnc_status
+                        ? 'View DNC scrub result'
+                        : null)
+                    ->action(ViewDncResultAction::make())
+                    ->sortable(),
                 TextColumn::make('error')
                     ->label('Error')
                     ->wrap()
@@ -94,6 +110,7 @@ class LeadsRelationManager extends RelationManager
                             $record->soft_score_last_error,
                             $record->rnd_last_error,
                             $record->qualification_last_error,
+                            $record->dnc_last_error,
                         ]);
 
                         return $parts === [] ? null : implode(' | ', $parts);
@@ -118,6 +135,11 @@ class LeadsRelationManager extends RelationManager
                     ->label('Qualification')
                     ->options(collect(QualificationStatus::cases())->mapWithKeys(
                         fn (QualificationStatus $status): array => [$status->value => $status->label()]
+                    )),
+                SelectFilter::make('dnc_status')
+                    ->label('DNC')
+                    ->options(collect(DncStatus::cases())->mapWithKeys(
+                        fn (DncStatus $status): array => [$status->value => $status->label()]
                     )),
             ])
             ->headerActions([])

@@ -6,6 +6,7 @@ use App\Enums\Disposition;
 use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
 use App\Exceptions\CallbackOutsideWindowException;
+use App\Jobs\DncPushJob;
 use App\Models\Lead;
 use App\Models\LeadHistory;
 use App\Models\User;
@@ -36,7 +37,7 @@ class DispositionService
             }
         }
 
-        return DB::transaction(function () use ($lead, $user, $disposition, $callbackAt, $skipReason, $note): Lead {
+        $updated = DB::transaction(function () use ($lead, $user, $disposition, $callbackAt, $skipReason, $note): Lead {
             $lead = Lead::withoutGlobalScopes()->lockForUpdate()->findOrFail($lead->id);
 
             $payload = [
@@ -111,6 +112,12 @@ class DispositionService
 
             return $lead->fresh(['callingList', 'claim']);
         });
+
+        if ($disposition === Disposition::Dnc) {
+            DncPushJob::dispatch($updated->id);
+        }
+
+        return $updated;
     }
 
     private function nextQueueRank(Lead $lead): int
