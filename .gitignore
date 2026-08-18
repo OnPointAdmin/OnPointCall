@@ -19,6 +19,7 @@ npm-debug.log
 yarn-error.log
 .DS_Store
 Thumbs.db
+NUL
 .idea/
 .vscode/
 *.swp
