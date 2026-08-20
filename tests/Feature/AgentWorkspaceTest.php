@@ -2,17 +2,25 @@
 
 namespace Tests\Feature;
 
+use App\Enums\Disposition;
+use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
+use App\Enums\QualificationStatus;
+use App\Enums\SoftScoreStatus;
 use App\Enums\UserRole;
+use App\Jobs\QualifyLeadJob;
+use App\Jobs\SoftScoreLeadJob;
 use App\Livewire\Agent\Workspace;
 use App\Models\CallingList;
 use App\Models\Company;
 use App\Models\Lead;
 use App\Models\LeadClaim;
+use App\Models\LeadHistory;
 use App\Models\ListAssignment;
 use App\Models\User;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -25,6 +33,7 @@ class AgentWorkspaceTest extends TestCase
         parent::setUp();
 
         $this->withoutMiddleware(PreventRequestForgery::class);
+        Queue::fake();
     }
 
     public function test_save_lead_edits_updates_allowed_fields_without_clearing_lead(): void
@@ -103,6 +112,20 @@ class AgentWorkspaceTest extends TestCase
         $this->assertSame('Married', $lead->marital_status);
         $this->assertSame('Female', $lead->gender);
         $this->assertSame('Homeowner (3+ years)', $lead->home_owner);
+
+        $edits = LeadHistory::withoutGlobalScopes()
+            ->where('lead_id', $lead->id)
+            ->where('event_type', LeadHistoryType::FieldEdit)
+            ->get();
+
+        $this->assertCount(1, $edits);
+        $this->assertSame($user->id, $edits->first()->actor_id);
+        $this->assertArrayHasKey('email', $edits->first()->payload['changes']);
+        $this->assertArrayHasKey('zip', $edits->first()->payload['changes']);
+        $this->assertArrayHasKey('age_range', $edits->first()->payload['changes']);
+        $this->assertStringContainsString('Email:', $edits->first()->detailLabel());
+        $this->assertStringContainsString('Zip:', $edits->first()->detailLabel());
+        $this->assertStringContainsString('Age range:', $edits->first()->detailLabel());
     }
 
     public function test_edit_dropdowns_include_imported_demographic_values_not_in_canonical_lists(): void
@@ -159,5 +182,339 @@ class AgentWorkspaceTest extends TestCase
             ->assertSeeHtml('value="Widowed"')
             ->assertSeeHtml('value="Non-binary"')
             ->assertSeeHtml('value="Renter"');
+    }
+
+    public function test_save_lead_edits_writes_one_field_edit_history_row(): void
+    {
+        [$user, $lead] = $this->makeWorkableLead();
+        $this->actingAs($user, 'agent');
+
+        Livewire::test(Workspace::class)
+            ->call('startEdit')
+            ->set('editable.email', 'new@example.com')
+            ->set('editable.zip', '31401')
+            ->call('saveLeadEdits');
+
+        $history = LeadHistory::withoutGlobalScopes()
+            ->where('lead_id', $lead->id)
+            ->where('event_type', LeadHistoryType::FieldEdit)
+            ->get();
+
+        $this->assertCount(1, $history);
+        $label = $history->first()->detailLabel();
+        $this->assertStringContainsString('Email:', $label);
+        $this->assertStringContainsString('Zip:', $label);
+        $this->assertStringContainsString(';', $label);
+    }
+
+    public function test_agent_call_history_only_includes_own_rows(): void
+    {
+        [$user, $lead] = $this->makeWorkableLead();
+        $other = User::factory()->create([
+            'company_id' => $user->company_id,
+            'name' => 'Other Agent History',
+            'role' => UserRole::Agent,
+        ]);
+
+        LeadHistory::withoutGlobalScopes()->create([
+            'company_id' => $lead->company_id,
+            'lead_id' => $lead->id,
+            'actor_id' => $other->id,
+            'event_type' => LeadHistoryType::Disposition,
+            'occurred_at' => now()->subHour(),
+            'payload' => [
+                'disposition' => Disposition::NoAnswer->value,
+                'note' => 'other-agent-only-note',
+            ],
+        ]);
+        LeadHistory::withoutGlobalScopes()->create([
+            'company_id' => $lead->company_id,
+            'lead_id' => $lead->id,
+            'actor_id' => $user->id,
+            'event_type' => LeadHistoryType::Disposition,
+            'occurred_at' => now(),
+            'payload' => [
+                'disposition' => Disposition::LeftVm->value,
+                'note' => 'own-agent-only-note',
+            ],
+        ]);
+
+        $this->actingAs($user, 'agent');
+
+        Livewire::test(Workspace::class)
+            ->assertSee('Left VM')
+            ->assertSee('own-agent-only-note')
+            ->assertSee('1 events')
+            ->assertDontSee('other-agent-only-note');
+    }
+
+    public function test_manager_call_history_includes_all_rows(): void
+    {
+        [$agent, $lead] = $this->makeWorkableLead();
+        $manager = User::factory()->create([
+            'company_id' => $agent->company_id,
+            'role' => UserRole::Manager,
+        ]);
+        ListAssignment::withoutGlobalScopes()->create([
+            'company_id' => $manager->company_id,
+            'user_id' => $manager->id,
+            'calling_list_id' => $lead->calling_list_id,
+        ]);
+        LeadClaim::withoutGlobalScopes()->where('lead_id', $lead->id)->update(['user_id' => $manager->id]);
+
+        LeadHistory::withoutGlobalScopes()->create([
+            'company_id' => $lead->company_id,
+            'lead_id' => $lead->id,
+            'actor_id' => $agent->id,
+            'event_type' => LeadHistoryType::Disposition,
+            'occurred_at' => now()->subHour(),
+            'payload' => [
+                'disposition' => Disposition::NoAnswer->value,
+                'note' => 'agent-history-visible-to-manager',
+            ],
+        ]);
+        LeadHistory::withoutGlobalScopes()->create([
+            'company_id' => $lead->company_id,
+            'lead_id' => $lead->id,
+            'actor_id' => $manager->id,
+            'event_type' => LeadHistoryType::Disposition,
+            'occurred_at' => now(),
+            'payload' => [
+                'disposition' => Disposition::LeftVm->value,
+                'note' => 'manager-own-history-note',
+            ],
+        ]);
+
+        $this->actingAs($manager, 'agent');
+
+        Livewire::test(Workspace::class)
+            ->assertSee('Left VM')
+            ->assertSee('No Answer')
+            ->assertSee('agent-history-visible-to-manager')
+            ->assertSee('manager-own-history-note')
+            ->assertSee('2 events');
+    }
+
+    public function test_load_lead_queues_blank_soft_score_and_qualification(): void
+    {
+        [$user, $lead] = $this->makeWorkableLead();
+        $this->actingAs($user, 'agent');
+
+        Livewire::test(Workspace::class);
+
+        Queue::assertPushed(SoftScoreLeadJob::class, function (SoftScoreLeadJob $job) use ($lead): bool {
+            return $job->leadId === $lead->id && $job->dispatchQualificationAfter === true;
+        });
+    }
+
+    public function test_open_callback_loads_owned_callback(): void
+    {
+        [$user, $lead] = $this->makeWorkableLead([
+            'status' => LeadStatus::Callback,
+            'callback_owner_id' => null,
+            'callback_at' => now()->subHour(),
+            'timezone' => 'America/New_York',
+            'state' => 'GA',
+            'soft_score_status' => SoftScoreStatus::Complete,
+            'soft_score_code' => 'A',
+            'soft_score_checked_at' => now(),
+            'qualification_status' => QualificationStatus::Qualified,
+            'qualification_checked_at' => now(),
+        ]);
+        $lead->update([
+            'callback_owner_id' => $user->id,
+        ]);
+
+        $this->actingAs($user, 'agent');
+
+        Livewire::test(Workspace::class)
+            ->call('openCallback', $lead->id)
+            ->assertSet('leadId', $lead->id);
+    }
+
+    public function test_not_interested_requires_reason(): void
+    {
+        [$user, $lead] = $this->makeWorkableLead([
+            'soft_score_status' => SoftScoreStatus::Complete,
+            'soft_score_code' => 'A',
+            'soft_score_checked_at' => now(),
+            'qualification_status' => QualificationStatus::Qualified,
+            'qualification_checked_at' => now(),
+        ]);
+        $this->actingAs($user, 'agent');
+
+        Livewire::test(Workspace::class)
+            ->call('applyDisposition', 'not_interested')
+            ->assertHasErrors(['dispositionReasonId'])
+            ->assertSet('leadId', $lead->id);
+    }
+
+    public function test_skip_requires_reason(): void
+    {
+        [$user, $lead] = $this->makeWorkableLead([
+            'soft_score_status' => SoftScoreStatus::Complete,
+            'soft_score_code' => 'A',
+            'soft_score_checked_at' => now(),
+            'qualification_status' => QualificationStatus::Qualified,
+            'qualification_checked_at' => now(),
+        ]);
+        $this->actingAs($user, 'agent');
+
+        Livewire::test(Workspace::class)
+            ->call('applyDisposition', 'skip')
+            ->assertHasErrors(['dispositionReasonId'])
+            ->assertSet('leadId', $lead->id);
+    }
+
+    public function test_lead_panel_shows_tnb_fields_and_hides_partners(): void
+    {
+        [$user] = $this->makeWorkableLead([
+            'lead_type' => 'tnb',
+            'soft_score_status' => SoftScoreStatus::Complete,
+            'soft_score_code' => 'A',
+            'soft_score_checked_at' => now(),
+            'qualification_status' => QualificationStatus::Qualified,
+            'qualification_checked_at' => now(),
+        ]);
+        $this->actingAs($user, 'agent');
+
+        Livewire::test(Workspace::class)
+            ->assertSee('Qualified to Tour At')
+            ->assertSee('Source Information')
+            ->assertSee('Lead type')
+            ->assertSee('Tour location')
+            ->assertSee('Tour date start')
+            ->assertSee('Booking ID')
+            ->assertDontSeeHtml('>Partners</p>');
+    }
+
+    public function test_refresh_does_not_requeue_blank_soft_score(): void
+    {
+        [$user] = $this->makeWorkableLead();
+        $this->actingAs($user, 'agent');
+
+        $component = Livewire::test(Workspace::class);
+
+        Queue::assertPushed(SoftScoreLeadJob::class, 1);
+
+        $component->call('$refresh');
+
+        Queue::assertPushed(SoftScoreLeadJob::class, 1);
+    }
+
+    public function test_saving_name_forces_soft_score_and_qualification(): void
+    {
+        [$user] = $this->makeWorkableLead([
+            'first_name' => 'Pat',
+            'soft_score_status' => SoftScoreStatus::Complete,
+            'soft_score_code' => 'A',
+            'soft_score_checked_at' => now()->subDay(),
+            'qualification_status' => QualificationStatus::Qualified,
+            'qualification_checked_at' => now()->subDay(),
+        ]);
+        $this->actingAs($user, 'agent');
+
+        Livewire::test(Workspace::class)
+            ->call('startEdit')
+            ->set('editable.first_name', 'Patricia')
+            ->call('saveLeadEdits');
+
+        Queue::assertPushed(SoftScoreLeadJob::class, 1);
+        Queue::assertPushed(
+            SoftScoreLeadJob::class,
+            fn (SoftScoreLeadJob $job): bool => $job->force === true && $job->dispatchQualificationAfter === true,
+        );
+    }
+
+    public function test_saving_demographics_forces_qualification_only(): void
+    {
+        [$user] = $this->makeWorkableLead([
+            'age_range' => '45-54',
+            'soft_score_status' => SoftScoreStatus::Complete,
+            'soft_score_code' => 'A',
+            'soft_score_checked_at' => now()->subDay(),
+            'qualification_status' => QualificationStatus::Qualified,
+            'qualification_checked_at' => now()->subDay(),
+        ]);
+        $this->actingAs($user, 'agent');
+
+        Livewire::test(Workspace::class)
+            ->call('startEdit')
+            ->set('editable.age_range', '55-64')
+            ->call('saveLeadEdits');
+
+        Queue::assertNotPushed(SoftScoreLeadJob::class);
+        Queue::assertPushed(
+            QualifyLeadJob::class,
+            fn (QualifyLeadJob $job): bool => $job->force === true,
+        );
+    }
+
+    public function test_run_buttons_hidden_when_checked_within_fifteen_days(): void
+    {
+        [$user] = $this->makeWorkableLead([
+            'soft_score_status' => SoftScoreStatus::Complete,
+            'soft_score_code' => 'B',
+            'soft_score_checked_at' => now()->subDays(1),
+            'qualification_status' => QualificationStatus::Qualified,
+            'qualification_checked_at' => now()->subDays(1),
+        ]);
+        $this->actingAs($user, 'agent');
+
+        Livewire::test(Workspace::class)
+            ->assertDontSee('Run Soft Score')
+            ->assertDontSee('Run Qualification');
+    }
+
+    /**
+     * @param  array<string, mixed>  $overrides
+     * @return array{0: User, 1: Lead}
+     */
+    private function makeWorkableLead(array $overrides = []): array
+    {
+        $company = Company::factory()->create();
+        $user = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Agent,
+        ]);
+
+        $list = CallingList::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'name' => 'Standard',
+            'lead_type' => 'standard',
+            'active' => true,
+        ]);
+
+        ListAssignment::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'user_id' => $user->id,
+            'calling_list_id' => $list->id,
+        ]);
+
+        $lead = Lead::withoutGlobalScopes()->create(array_merge([
+            'company_id' => $company->id,
+            'phone' => '4045555100',
+            'first_name' => 'Pat',
+            'last_name' => 'Lee',
+            'email' => 'old@example.com',
+            'city' => 'Atlanta',
+            'state' => 'GA',
+            'zip' => '30301',
+            'address' => '1 Main St',
+            'status' => LeadStatus::Callable,
+            'lead_type' => 'standard',
+            'calling_list_id' => $list->id,
+            'imported_at' => now(),
+        ], $overrides));
+
+        LeadClaim::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'lead_id' => $lead->id,
+            'user_id' => $user->id,
+            'claimed_at' => now(),
+            'expires_at' => now()->addMinutes(20),
+        ]);
+
+        return [$user, $lead];
     }
 }

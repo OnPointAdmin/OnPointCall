@@ -68,4 +68,15 @@ class LeadTypeDefinition extends Model
             ],
         );
     }
+
+    public static function nameForSlug(?string $slug): ?string
+    {
+        if ($slug === null || trim($slug) === '') {
+            return null;
+        }
+
+        $name = static::query()->where('slug', $slug)->value('name');
+
+        return is_string($name) && $name !== '' ? $name : $slug;
+    }
 }

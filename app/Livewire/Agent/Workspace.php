@@ -9,6 +9,10 @@ use App\Enums\LeadStatus;
 use App\Enums\QualificationStatus;
 use App\Enums\SoftScoreStatus;
 use App\Exceptions\CallbackOutsideWindowException;
+use App\Exceptions\MissingDispositionReasonException;
+use App\Jobs\QualifyLeadJob;
+use App\Jobs\SoftScoreLeadJob;
+use App\Models\DispositionReason;
 use App\Models\Lead;
 use App\Models\LeadHistory;
 use App\Services\Compliance\ComplianceService;
@@ -20,7 +24,9 @@ use App\Services\Leads\LeadLookupService;
 use App\Services\Leads\NextLeadService;
 use App\Services\Qualification\QualificationService;
 use App\Services\SoftScore\SoftScoreService;
+use App\Support\PhoneNormalizer;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Layout;
@@ -29,15 +35,56 @@ use Livewire\Component;
 #[Layout('layouts.agent')]
 class Workspace extends Component
 {
+    private const EDITABLE_FIELDS = [
+        'first_name',
+        'last_name',
+        'phone',
+        'email',
+        'address',
+        'address_2',
+        'city',
+        'state',
+        'zip',
+        'age_range',
+        'annual_income',
+        'marital_status',
+        'gender',
+        'home_owner',
+    ];
+
+    private const SOFT_SCORE_TRIGGER_FIELDS = [
+        'first_name',
+        'last_name',
+        'phone',
+        'address',
+        'address_2',
+        'city',
+        'state',
+        'zip',
+    ];
+
+    private const QUALIFICATION_TRIGGER_FIELDS = [
+        'address',
+        'address_2',
+        'city',
+        'state',
+        'zip',
+        'age_range',
+        'annual_income',
+        'marital_status',
+        'gender',
+        'home_owner',
+    ];
+
     public ?int $leadId = null;
 
     public ?string $emptyMessage = null;
 
     public string $callbackAt = '';
 
-    public string $skipReason = '';
-
     public string $dispositionNote = '';
+
+    public ?string $dispositionReasonId = null;
 
     /** @var array<string, mixed> */
     public array $editable = [];
@@ -50,6 +97,10 @@ class Workspace extends Component
     public ?int $lookupLeadId = null;
 
     public bool $lookupReadOnly = false;
+
+    public bool $leadReadOnly = false;
+
+    public string $leadReadOnlyMessage = '';
 
     public string $softScoreMessage = '';
 
@@ -64,6 +115,8 @@ class Workspace extends Component
         $claim = app(LeadClaimService::class)->activeClaimForUser(Auth::guard('agent')->user());
 
         if ($claim?->lead) {
+            $this->leadReadOnly = false;
+            $this->leadReadOnlyMessage = '';
             $this->loadLead($claim->lead);
         }
     }
@@ -74,6 +127,8 @@ class Workspace extends Component
         $this->editable = [];
         $this->lookupLeadId = null;
         $this->lookupReadOnly = false;
+        $this->leadReadOnly = false;
+        $this->leadReadOnlyMessage = '';
         $this->softScoreMessage = '';
         $this->qualificationMessage = '';
         $this->showSoftScoreRecentModal = false;
@@ -99,6 +154,9 @@ class Workspace extends Component
         }
 
         $this->editable = [
+            'first_name' => $lead->first_name ?? '',
+            'last_name' => $lead->last_name ?? '',
+            'phone' => $lead->phone ?? '',
             'email' => $lead->email ?? '',
             'city' => $lead->city ?? '',
             'state' => $lead->state ?? '',
@@ -122,30 +180,70 @@ class Workspace extends Component
     {
         $lead = $this->currentLead();
 
-        if (! $lead || $this->editable === []) {
+        if (! $lead || $this->editable === [] || $this->leadReadOnly) {
             return;
         }
 
-        $lead->update([
-            'email' => $this->nullableString($this->editable['email'] ?? null),
-            'city' => $this->nullableString($this->editable['city'] ?? null),
-            'state' => $this->nullableString($this->editable['state'] ?? null),
-            'zip' => $this->nullableString($this->editable['zip'] ?? null),
-            'address' => $this->nullableString($this->editable['address'] ?? null),
-            'address_2' => $this->nullableString($this->editable['address_2'] ?? null),
-            'age_range' => $this->nullableString($this->editable['age_range'] ?? null),
-            'annual_income' => $this->nullableString($this->editable['annual_income'] ?? null),
-            'marital_status' => $this->nullableString($this->editable['marital_status'] ?? null),
-            'gender' => $this->nullableString($this->editable['gender'] ?? null),
-            'home_owner' => $this->nullableString($this->editable['home_owner'] ?? null),
+        $updates = [];
+        $changes = [];
+
+        foreach (self::EDITABLE_FIELDS as $field) {
+            $new = $field === 'phone'
+                ? $this->normalizedPhone($this->editable['phone'] ?? null)
+                : $this->nullableString($this->editable[$field] ?? null);
+
+            if ($field === 'phone') {
+                $rawPhone = $this->nullableString($this->editable['phone'] ?? null);
+
+                if ($rawPhone !== null && $new === null) {
+                    $this->addError('editable.phone', 'Enter a valid 10-digit phone number.');
+
+                    return;
+                }
+            }
+
+            $old = $lead->{$field};
+            $oldValue = is_string($old) ? $old : null;
+
+            if ((string) ($oldValue ?? '') !== (string) ($new ?? '')) {
+                $updates[$field] = $new;
+                $changes[$field] = [
+                    'from' => $oldValue,
+                    'to' => $new,
+                ];
+            }
+        }
+
+        if ($changes === []) {
+            $this->editable = [];
+
+            return;
+        }
+
+        $lead->update($updates);
+
+        LeadHistory::withoutGlobalScopes()->create([
+            'company_id' => $lead->company_id,
+            'lead_id' => $lead->id,
+            'actor_id' => Auth::guard('agent')->id(),
+            'event_type' => LeadHistoryType::FieldEdit,
+            'occurred_at' => now(),
+            'payload' => ['changes' => $changes],
         ]);
+
+        $changedFields = array_keys($changes);
+        $forceSoftScore = array_intersect($changedFields, self::SOFT_SCORE_TRIGGER_FIELDS) !== [];
+        $forceQualification = $forceSoftScore
+            || array_intersect($changedFields, self::QUALIFICATION_TRIGGER_FIELDS) !== [];
+
+        $this->queueScoreAndQualification($lead, $forceSoftScore, $forceQualification, force: true);
 
         $this->editable = [];
     }
 
     public function applyDisposition(string $dispositionValue): void
     {
-        if (! $this->leadId) {
+        if (! $this->leadId || $this->leadReadOnly) {
             return;
         }
 
@@ -164,10 +262,16 @@ class Workspace extends Component
                 $callbackAt = Carbon::parse($this->callbackAt);
             }
 
-            if ($disposition === Disposition::Skip && trim($this->skipReason) === '') {
-                $this->addError('skipReason', 'A skip reason is required.');
+            $reason = null;
 
-                return;
+            if (in_array($disposition, [Disposition::NotInterested, Disposition::NotQualified, Disposition::Skip], true)) {
+                $reason = trim((string) $this->dispositionReasonId);
+
+                if ($reason === '') {
+                    $this->addError('dispositionReasonId', 'A reason is required.');
+
+                    return;
+                }
             }
 
             $note = trim($this->dispositionNote);
@@ -177,19 +281,23 @@ class Workspace extends Component
                 Auth::guard('agent')->user(),
                 $disposition,
                 $callbackAt,
-                $disposition === Disposition::Skip ? trim($this->skipReason) : null,
-                $disposition === Disposition::Skip || $note === '' ? null : $note,
+                $note === '' ? null : $note,
+                $reason,
             );
 
             $this->resetDispositionFields();
             $this->editable = [];
             $this->leadId = null;
+            $this->leadReadOnly = false;
+            $this->leadReadOnlyMessage = '';
             $this->softScoreMessage = '';
             $this->qualificationMessage = '';
             $this->showSoftScoreRecentModal = false;
             $this->dispatch('stats-updated');
         } catch (CallbackOutsideWindowException) {
             $this->addError('callbackAt', 'Callback must fall within legal calling hours for this lead.');
+        } catch (MissingDispositionReasonException) {
+            $this->addError('dispositionReasonId', 'Select a valid reason for this disposition.');
         }
     }
 
@@ -197,14 +305,14 @@ class Workspace extends Component
     {
         $lead = $this->currentLead();
 
-        if (! $lead) {
+        if (! $lead || $this->leadReadOnly) {
             return;
         }
 
         $softScore = app(SoftScoreService::class);
 
-        if (! $softScore->shouldRun($lead)) {
-            $this->showSoftScoreRecentModal = true;
+        if (! $softScore->shouldShowRunButton($lead)) {
+            $this->showSoftScoreRecentModal = false;
             $this->softScoreMessage = '';
 
             return;
@@ -232,11 +340,17 @@ class Workspace extends Component
     {
         $lead = $this->currentLead();
 
-        if (! $lead) {
+        if (! $lead || $this->leadReadOnly) {
             return;
         }
 
-        app(QualificationService::class)->qualifyLead($lead, Auth::guard('agent')->id());
+        $qualification = app(QualificationService::class);
+
+        if (! $qualification->shouldShowRunButton($lead)) {
+            return;
+        }
+
+        $qualification->qualifyLead($lead, Auth::guard('agent')->id());
 
         $lead->refresh();
 
@@ -289,6 +403,8 @@ class Workspace extends Component
                 'payload' => ['source' => 'lookup'],
             ]);
 
+            $this->leadReadOnly = false;
+            $this->leadReadOnlyMessage = '';
             $this->loadLead($lead->fresh([
                 'callingList',
                 'claim',
@@ -299,6 +415,58 @@ class Workspace extends Component
         } else {
             $this->lookupLeadId = $leadId;
         }
+    }
+
+    public function openCallback(int $leadId): void
+    {
+        $user = Auth::guard('agent')->user();
+
+        $lead = Lead::withoutGlobalScopes()
+            ->with([
+                'callingList',
+                'claim',
+                'history' => fn ($q) => $this->callHistoryQuery($q),
+            ])
+            ->where('company_id', $user->company_id)
+            ->where('status', LeadStatus::Callback)
+            ->where('callback_owner_id', $user->id)
+            ->find($leadId);
+
+        if (! $lead) {
+            return;
+        }
+
+        $this->resetDispositionFields();
+        $this->editable = [];
+        $this->lookupLeadId = null;
+        $this->lookupReadOnly = false;
+        $this->softScoreMessage = '';
+        $this->qualificationMessage = '';
+        $this->showSoftScoreRecentModal = false;
+
+        $lookup = app(LeadLookupService::class);
+
+        if ($lookup->canWorkImmediately($lead, $user)) {
+            app(LeadClaimService::class)->claimForLookup($lead, $user);
+
+            $this->leadReadOnly = false;
+            $this->leadReadOnlyMessage = '';
+            $this->loadLead($lead->fresh([
+                'callingList',
+                'claim',
+                'history' => fn ($q) => $this->callHistoryQuery($q),
+            ]));
+            $this->emptyMessage = null;
+
+            return;
+        }
+
+        $this->leadReadOnly = true;
+        $this->leadReadOnlyMessage = app(ComplianceService::class)->isWithinLegalWindow($lead)
+            ? 'This callback cannot be worked right now — read only'
+            : 'Outside legal calling hours — read only';
+        $this->loadLead($lead);
+        $this->emptyMessage = null;
     }
 
     public function getStatsProperty(): array
@@ -379,12 +547,20 @@ class Workspace extends Component
     }
 
     /**
-     * @param  \Illuminate\Database\Eloquent\Relations\HasMany<\App\Models\LeadHistory, \App\Models\Lead>  $query
-     * @return \Illuminate\Database\Eloquent\Relations\HasMany<\App\Models\LeadHistory, \App\Models\Lead>
+     * @param  HasMany<LeadHistory, Lead>  $query
+     * @return HasMany<LeadHistory, Lead>
      */
     private function callHistoryQuery($query)
     {
-        return $query->visibleInCallHistory()->with('actor')->orderByDesc('occurred_at')->limit(20);
+        $user = Auth::guard('agent')->user();
+
+        $query->visibleInCallHistory()->with('actor')->orderByDesc('occurred_at')->limit(20);
+
+        if (! $user->role->canAccessAdmin()) {
+            $query->where('actor_id', $user->id);
+        }
+
+        return $query;
     }
 
     private function loadLead(Lead $lead): void
@@ -394,13 +570,64 @@ class Workspace extends Component
         $this->softScoreMessage = '';
         $this->qualificationMessage = '';
         $this->showSoftScoreRecentModal = false;
+
+        $needSoftScore = app(SoftScoreService::class)->isBlank($lead);
+        $needQualification = app(QualificationService::class)->isBlank($lead);
+
+        $this->queueScoreAndQualification($lead, $needSoftScore, $needQualification, force: false);
+    }
+
+    private function queueScoreAndQualification(Lead $lead, bool $runSoftScore, bool $runQualification, bool $force): void
+    {
+        if (! $runSoftScore && ! $runQualification) {
+            return;
+        }
+
+        $actorId = Auth::guard('agent')->id();
+
+        if ($runSoftScore && $runQualification) {
+            $lead->update(['qualification_status' => QualificationStatus::Pending]);
+        }
+
+        if ($runSoftScore) {
+            if (! $force) {
+                $lead->update(['soft_score_status' => SoftScoreStatus::Pending]);
+            }
+
+            SoftScoreLeadJob::dispatch(
+                $lead->id,
+                $lead->import_batch_id,
+                $actorId,
+                $runQualification,
+                $force,
+            );
+
+            return;
+        }
+
+        if (! $force) {
+            $lead->update(['qualification_status' => QualificationStatus::Pending]);
+        }
+
+        QualifyLeadJob::dispatch($lead->id, $lead->import_batch_id, $actorId, $force);
+    }
+
+    /**
+     * @return Collection<int, DispositionReason>
+     */
+    private function reasonsFor(Disposition $disposition): Collection
+    {
+        return DispositionReason::withoutGlobalScopes()
+            ->where('company_id', Auth::guard('agent')->user()->company_id)
+            ->activeFor($disposition)
+            ->get();
     }
 
     private function resetDispositionFields(): void
     {
         $this->callbackAt = '';
-        $this->skipReason = '';
         $this->dispositionNote = '';
+        $this->dispositionReasonId = null;
         $this->resetErrorBag();
     }
 
@@ -415,10 +642,31 @@ class Workspace extends Component
         return $trimmed === '' ? null : $trimmed;
     }
 
+    private function normalizedPhone(mixed $value): ?string
+    {
+        if (! is_string($value)) {
+            return null;
+        }
+
+        return PhoneNormalizer::normalize($value);
+    }
+
     public function render()
     {
+        $lead = $this->currentLead();
+        $overdueCallbackCount = $this->callbacks
+            ->filter(fn (Lead $callback) => $callback->callback_at?->isPast())
+            ->count();
+
         return view('livewire.agent.workspace', [
-            'lead' => $this->currentLead(),
+            'lead' => $lead,
+            'canRunSoftScore' => $lead ? app(SoftScoreService::class)->shouldShowRunButton($lead) : false,
+            'canRunQualification' => $lead ? app(QualificationService::class)->shouldShowRunButton($lead) : false,
+            'overdueCallbackCount' => $overdueCallbackCount,
+            'defaultSecondaryTab' => $overdueCallbackCount > 0 ? 'callbacks' : 'scoreboard',
+            'notInterestedReasons' => $this->reasonsFor(Disposition::NotInterested),
+            'notQualifiedReasons' => $this->reasonsFor(Disposition::NotQualified),
+            'skipReasons' => $this->reasonsFor(Disposition::Skip),
         ]);
     }
 }

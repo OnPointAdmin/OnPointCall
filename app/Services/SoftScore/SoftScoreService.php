@@ -47,14 +47,28 @@ class SoftScoreService
             ? $checkedAt
             : Carbon::parse($checkedAt);
 
-        $days = max(0, (int) config('services.soft_score.freshness_days', 30));
+        $days = max(0, (int) config('services.soft_score.freshness_days', 15));
 
         return $checked->lte(now()->subDays($days));
     }
 
-    public function scoreLead(Lead $lead, ?int $actorId = null): void
+    public function isBlank(Lead $lead): bool
     {
-        if (! $this->shouldRun($lead)) {
+        return $lead->soft_score_status === null;
+    }
+
+    public function shouldShowRunButton(Lead $lead): bool
+    {
+        if ($lead->soft_score_status === SoftScoreStatus::Pending) {
+            return false;
+        }
+
+        return $this->shouldRun($lead);
+    }
+
+    public function scoreLead(Lead $lead, ?int $actorId = null, bool $force = false): void
+    {
+        if (! $force && ! $this->shouldRun($lead)) {
             return;
         }
 

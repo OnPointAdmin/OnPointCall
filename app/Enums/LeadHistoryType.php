@@ -19,6 +19,7 @@ enum LeadHistoryType: string
     case Qualification = 'qualification';
     case DncCheck = 'dnc_check';
     case DncPush = 'dnc_push';
+    case FieldEdit = 'field_edit';
 
     public function label(): string
     {
@@ -38,6 +39,7 @@ enum LeadHistoryType: string
             self::Qualification => 'Qualification',
             self::DncCheck => 'DNC Check',
             self::DncPush => 'DNC Push',
+            self::FieldEdit => 'Field Edit',
         };
     }
 }

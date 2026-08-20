@@ -6,13 +6,15 @@ use App\DataTransferObjects\QualificationResult;
 use App\Enums\QualificationStatus;
 use App\Models\Company;
 use App\Models\Lead;
-use Illuminate\Http\Client\PendingRequest;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Http;
+use App\Services\Salesforce\SalesforceClient;
 use Throwable;
 
 class QualificationClient
 {
+    public function __construct(
+        private readonly SalesforceClient $salesforce,
+    ) {}
+
     public function qualifyLead(Lead $lead): QualificationResult
     {
         $request = $this->buildRequest($lead);
@@ -26,9 +28,7 @@ class QualificationClient
         }
 
         try {
-            $token = $this->getAccessToken();
-
-            $response = $this->http($token)->post('/services/apexrest/CustomerQualification', $request);
+            $response = $this->salesforce->http()->post('/services/apexrest/CustomerQualification', $request);
 
             if (! $response->successful()) {
                 return new QualificationResult(
@@ -205,54 +205,5 @@ class QualificationClient
     private function looksLikeSalesforceId(string $value): bool
     {
         return (bool) preg_match('/^[a-zA-Z0-9]{15}([a-zA-Z0-9]{3})?$/', trim($value));
-    }
-
-    private function getAccessToken(): string
-    {
-        $clientId = config('services.qualification.client_id');
-        $clientSecret = config('services.qualification.client_secret');
-
-        if (! $clientId || ! $clientSecret) {
-            throw new \RuntimeException('Salesforce qualification credentials are not configured.');
-        }
-
-        $instanceUrl = $this->instanceUrl();
-        $cacheKey = 'qualification_sf_token:'.md5($instanceUrl.':'.$clientId);
-
-        return Cache::remember($cacheKey, 3500, function () use ($instanceUrl, $clientId, $clientSecret): string {
-            $response = Http::asForm()
-                ->timeout(15)
-                ->post($instanceUrl.'/services/oauth2/token', [
-                    'grant_type' => 'client_credentials',
-                    'client_id' => $clientId,
-                    'client_secret' => $clientSecret,
-                ]);
-
-            if (! $response->successful()) {
-                throw new \RuntimeException('Salesforce token request failed: '.$response->body());
-            }
-
-            $token = $response->json('access_token');
-
-            if (! is_string($token) || $token === '') {
-                throw new \RuntimeException('Salesforce token response missing access_token.');
-            }
-
-            return $token;
-        });
-    }
-
-    private function http(string $token): PendingRequest
-    {
-        return Http::baseUrl($this->instanceUrl())
-            ->timeout(20)
-            ->withToken($token)
-            ->acceptJson()
-            ->asJson();
-    }
-
-    private function instanceUrl(): string
-    {
-        return rtrim((string) config('services.qualification.instance_url', 'https://onpointmrg--staging.sandbox.my.salesforce.com'), '/');
     }
 }

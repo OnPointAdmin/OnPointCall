@@ -25,6 +25,8 @@ class Lead extends Model
         'phone_2',
         'first_name',
         'last_name',
+        'first_name_2',
+        'last_name_2',
         'address',
         'address_2',
         'city',
@@ -142,6 +144,22 @@ class Lead extends Model
     public function fullName(): string
     {
         return trim("{$this->first_name} {$this->last_name}");
+    }
+
+    public function leadTypeName(): string
+    {
+        $slug = trim((string) $this->lead_type);
+
+        if ($slug === '') {
+            return '—';
+        }
+
+        $name = LeadTypeDefinition::withoutGlobalScopes()
+            ->where('company_id', $this->company_id)
+            ->where('slug', $slug)
+            ->value('name');
+
+        return is_string($name) && $name !== '' ? $name : $slug;
     }
 
     /**

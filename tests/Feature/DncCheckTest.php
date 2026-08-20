@@ -11,6 +11,7 @@ use App\Enums\LeadStatus;
 use App\Enums\UserRole;
 use App\Jobs\DncPushJob;
 use App\Jobs\DncScrubJob;
+use App\Jobs\SalesforceDncPushJob;
 use App\Models\CallingList;
 use App\Models\Company;
 use App\Models\Lead;
@@ -331,6 +332,10 @@ class DncCheckTest extends TestCase
         app(DispositionService::class)->apply($lead, $user, Disposition::Dnc);
 
         Queue::assertPushed(DncPushJob::class, fn (DncPushJob $job): bool => $job->leadId === $lead->id);
+        Queue::assertPushed(
+            SalesforceDncPushJob::class,
+            fn (SalesforceDncPushJob $job): bool => $job->leadId === $lead->id && $job->actorId === $user->id,
+        );
 
         Http::fake([
             'www.dncscrub.com/app/main/rpc/pdnc' => Http::response('', 200),

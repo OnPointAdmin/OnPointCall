@@ -3,13 +3,17 @@
 namespace Tests\Feature;
 
 use App\Enums\Disposition;
+use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
 use App\Enums\UserRole;
 use App\Exceptions\CallbackOutsideWindowException;
+use App\Exceptions\MissingDispositionReasonException;
 use App\Models\CallingList;
 use App\Models\Company;
+use App\Models\DispositionReason;
 use App\Models\Lead;
 use App\Models\LeadClaim;
+use App\Models\LeadHistory;
 use App\Models\StateRule;
 use App\Models\User;
 use App\Services\Leads\DispositionService;
@@ -64,6 +68,14 @@ class DispositionServiceTest extends TestCase
             'role' => UserRole::Agent,
         ]);
 
+        $reason = DispositionReason::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'disposition' => Disposition::Skip,
+            'label' => 'Busy signal',
+            'sort_order' => 1,
+            'active' => true,
+        ]);
+
         LeadClaim::withoutGlobalScopes()->create([
             'company_id' => $company->id,
             'lead_id' => $lead->id,
@@ -76,12 +88,46 @@ class DispositionServiceTest extends TestCase
             $lead,
             $user,
             Disposition::Skip,
-            skipReason: 'Busy signal',
+            reason: (string) $reason->id,
         );
 
         $this->assertSame(2, $updated->attempt_count);
         $this->assertSame(6, $updated->queue_rank);
         $this->assertDatabaseMissing('lead_claims', ['lead_id' => $lead->id]);
+
+        $history = LeadHistory::withoutGlobalScopes()
+            ->where('lead_id', $lead->id)
+            ->where('event_type', LeadHistoryType::Skip)
+            ->orderByDesc('id')
+            ->first();
+
+        $this->assertNotNull($history);
+        $this->assertSame('Busy signal', $history->payload['reason'] ?? null);
+        $this->assertSame(LeadStatus::Callable, $updated->status);
+    }
+
+    public function test_skip_requires_configured_reason(): void
+    {
+        $company = Company::factory()->create();
+        $user = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Agent,
+        ]);
+        $lead = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045552003',
+            'status' => LeadStatus::Callable,
+            'lead_type' => 'standard',
+            'imported_at' => now(),
+        ]);
+
+        $this->expectException(MissingDispositionReasonException::class);
+
+        app(DispositionService::class)->apply(
+            $lead,
+            $user,
+            Disposition::Skip,
+        );
     }
 
     public function test_callback_rejects_time_outside_legal_window(): void
@@ -160,9 +206,9 @@ class DispositionServiceTest extends TestCase
             'actor_id' => $user->id,
         ]);
 
-        $history = \App\Models\LeadHistory::withoutGlobalScopes()
+        $history = LeadHistory::withoutGlobalScopes()
             ->where('lead_id', $lead->id)
-            ->where('event_type', \App\Enums\LeadHistoryType::Disposition)
+            ->where('event_type', LeadHistoryType::Disposition)
             ->orderByDesc('id')
             ->first();
 
@@ -170,5 +216,69 @@ class DispositionServiceTest extends TestCase
         $this->assertIsArray($history->payload);
         $this->assertSame(Disposition::Booked->value, $history->payload['disposition'] ?? null);
         $this->assertSame('Asked to call after lunch', $history->payload['note'] ?? null);
+    }
+
+    public function test_not_interested_requires_configured_reason(): void
+    {
+        $company = Company::factory()->create();
+        $user = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Agent,
+        ]);
+        $lead = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045554100',
+            'status' => LeadStatus::Callable,
+            'lead_type' => 'standard',
+            'imported_at' => now(),
+        ]);
+
+        $this->expectException(MissingDispositionReasonException::class);
+
+        app(DispositionService::class)->apply(
+            $lead,
+            $user,
+            Disposition::NotInterested,
+        );
+    }
+
+    public function test_not_qualified_stores_reason_on_history(): void
+    {
+        $company = Company::factory()->create();
+        $user = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Agent,
+        ]);
+        $reason = DispositionReason::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'disposition' => Disposition::NotQualified,
+            'label' => 'Income too low',
+            'sort_order' => 1,
+            'active' => true,
+        ]);
+        $lead = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045554101',
+            'status' => LeadStatus::Callable,
+            'lead_type' => 'standard',
+            'imported_at' => now(),
+        ]);
+
+        app(DispositionService::class)->apply(
+            $lead,
+            $user,
+            Disposition::NotQualified,
+            reason: (string) $reason->id,
+        );
+
+        $history = LeadHistory::withoutGlobalScopes()
+            ->where('lead_id', $lead->id)
+            ->where('event_type', LeadHistoryType::Disposition)
+            ->orderByDesc('id')
+            ->first();
+
+        $this->assertNotNull($history);
+        $this->assertSame('Income too low', $history->payload['reason'] ?? null);
+        $this->assertSame(LeadStatus::Terminal, $lead->fresh()->status);
     }
 }

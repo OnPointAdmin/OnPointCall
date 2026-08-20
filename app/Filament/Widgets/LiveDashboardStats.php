@@ -9,6 +9,8 @@ use Illuminate\Support\Facades\Auth;
 
 class LiveDashboardStats extends StatsOverviewWidget
 {
+    protected static bool $isDiscovered = false;
+
     protected ?string $pollingInterval = '10s';
 
     protected static ?int $sort = 1;

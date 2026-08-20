@@ -284,6 +284,8 @@ class SoftScoreFreshnessTest extends TestCase
             'soft_score_code' => 'B',
             'soft_score_status' => SoftScoreStatus::Complete,
             'soft_score_checked_at' => now()->subDays(1),
+            'qualification_status' => \App\Enums\QualificationStatus::Qualified,
+            'qualification_checked_at' => now()->subDays(1),
         ]);
 
         LeadClaim::withoutGlobalScopes()->create([
@@ -301,8 +303,9 @@ class SoftScoreFreshnessTest extends TestCase
         $this->actingAs($user, 'agent');
 
         Livewire::test(Workspace::class)
+            ->assertDontSee('Run Soft Score')
             ->call('runSoftScore')
-            ->assertSet('showSoftScoreRecentModal', true)
+            ->assertSet('showSoftScoreRecentModal', false)
             ->assertSet('softScoreMessage', '');
 
         $lead->refresh();

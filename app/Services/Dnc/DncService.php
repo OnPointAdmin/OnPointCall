@@ -144,16 +144,9 @@ class DncService
 
         $this->client->addToInternalDnc($phones);
 
-        LeadHistory::withoutGlobalScopes()->create([
-            'company_id' => $lead->company_id,
-            'lead_id' => $lead->id,
-            'actor_id' => null,
-            'event_type' => LeadHistoryType::DncPush,
-            'occurred_at' => now(),
-            'payload' => [
-                'phones' => $phones,
-                'project_id' => config('services.dnc.project_id'),
-            ],
+        LeadHistory::mergeDncPushPayload($lead, [
+            'phones' => $phones,
+            'project_id' => config('services.dnc.project_id'),
         ]);
     }
 

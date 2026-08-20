@@ -18,8 +18,8 @@ flock vendor/.composer.lock.flock sh -c '
   fi
 '
 
-# php-fpm workers run as www-data; the volume was created as root
-chown -R www-data:www-data storage/framework
-chmod -R ug+rwX storage/framework
+# php-fpm workers run as www-data; artisan exec often runs as root
+chown -R www-data:www-data storage bootstrap/cache
+chmod -R ug+rwX storage bootstrap/cache
 
 exec "$@"

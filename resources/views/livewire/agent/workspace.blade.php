@@ -1,6 +1,6 @@
 @php
     $secondaryTabs = ['scoreboard' => 'Scoreboard', 'leaderboard' => 'Leaderboard', 'callbacks' => 'Callbacks', 'lookup' => 'Lookup'];
-    $leadIsWorkable = $lead && ! in_array($lead->status->value, ['booked', 'terminal', 'dnc'], true);
+    $leadIsWorkable = $lead && ! $leadReadOnly && ! in_array($lead->status->value, ['booked', 'terminal', 'dnc'], true);
 @endphp
 
 <div class="grid grid-cols-1 items-start gap-5 md:grid-cols-[1fr_320px]" wire:poll.10s>
@@ -32,7 +32,10 @@
                 'bookingUrl' => $this->bookingUrl,
                 'manualDialOnly' => $this->manualDialOnly,
                 'localTime' => $this->localTime,
-                'readOnly' => false,
+                'readOnly' => $leadReadOnly,
+                'readOnlyMessage' => $leadReadOnlyMessage,
+                'canRunSoftScore' => $canRunSoftScore,
+                'canRunQualification' => $canRunQualification,
                 'softScoreMessage' => $softScoreMessage,
                 'qualificationMessage' => $qualificationMessage,
                 'showSoftScoreRecentModal' => $showSoftScoreRecentModal,
@@ -41,7 +44,7 @@
     </div>
 
     {{-- RIGHT COLUMN: disposition (primary action) above secondary panels --}}
-    <div class="sticky top-4 flex flex-col gap-3.5" x-data="{ tab: 'scoreboard' }">
+    <div class="sticky top-4 flex flex-col gap-3.5" x-data="{ tab: @js($defaultSecondaryTab) }">
 
         @if ($leadIsWorkable)
             <div
@@ -79,28 +82,21 @@
                     <div class="my-1 h-px bg-slate-200 dark:bg-slate-700"></div>
 
                     <div class="grid grid-cols-2 gap-2">
-                        <button type="button" x-on:click="selected = 'not_interested'; pendingKey = 'not_interested'; pendingLabel = 'Not Interested'; modalOpen = true" class="rounded-lg border border-red-200 bg-red-50 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100 dark:border-red-800 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20">Not Interested</button>
-                        <button type="button" x-on:click="selected = 'not_qualified'; pendingKey = 'not_qualified'; pendingLabel = 'Not Qualified'; modalOpen = true" class="rounded-lg border border-red-200 bg-red-50 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100 dark:border-red-800 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20">Not Qualified</button>
+                        <button type="button" x-on:click="selected = 'not_interested'; pendingKey = 'not_interested'; pendingLabel = 'Not Interested'; modalOpen = true; $wire.set('dispositionReasonId', null)" class="rounded-lg border border-red-200 bg-red-50 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100 dark:border-red-800 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20">Not Interested</button>
+                        <button type="button" x-on:click="selected = 'not_qualified'; pendingKey = 'not_qualified'; pendingLabel = 'Not Qualified'; modalOpen = true; $wire.set('dispositionReasonId', null)" class="rounded-lg border border-red-200 bg-red-50 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100 dark:border-red-800 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20">Not Qualified</button>
                         <button type="button" x-on:click="selected = 'wrong_number'; pendingKey = 'wrong_number'; pendingLabel = 'Wrong Number'; modalOpen = true" class="rounded-lg border border-red-200 bg-red-50 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100 dark:border-red-800 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20">Wrong Number</button>
                         <button type="button" x-on:click="selected = 'bad_number'; pendingKey = 'bad_number'; pendingLabel = 'Bad Number'; modalOpen = true" class="rounded-lg border border-red-200 bg-red-50 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100 dark:border-red-800 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20">Bad Number</button>
                     </div>
                     <button type="button" x-on:click="selected = 'dnc'; pendingKey = 'dnc'; pendingLabel = 'DNC'; modalOpen = true" class="w-full rounded-lg border border-red-200 bg-red-50 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100 dark:border-red-800 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20">DNC</button>
 
-                    <div class="mt-1 flex flex-col gap-2 border-t border-dashed border-slate-200 pt-3 dark:border-slate-800">
-                        <input
-                            type="text"
-                            wire:model="skipReason"
-                            placeholder="Skip reason (required)"
-                            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
-                        >
+                    <div class="mt-1 border-t border-dashed border-slate-200 pt-3 dark:border-slate-800">
                         <button
                             type="button"
-                            wire:click="applyDisposition('skip')"
+                            x-on:click="selected = 'skip'; pendingKey = 'skip'; pendingLabel = 'Skip'; modalOpen = true; $wire.set('dispositionReasonId', null)"
                             class="w-full rounded-lg border border-dashed border-slate-400 bg-white py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-950"
                         >
-                            Skip (bottom of queue)
+                            Skip
                         </button>
-                        @error('skipReason') <span class="text-xs font-semibold text-red-600">{{ $message }}</span> @enderror
                     </div>
                 </div>
 
@@ -108,6 +104,25 @@
                     <div class="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900" x-on:click.outside="modalOpen = false">
                         <h3 class="m-0 text-base font-bold text-slate-900 dark:text-slate-100">Add a note</h3>
                         <p class="m-0 mt-1 text-sm text-slate-500 dark:text-slate-400">Dispositioning as <strong class="text-slate-700 dark:text-slate-300" x-text="pendingLabel"></strong>. Optional &mdash; add context for the next call.</p>
+                        <div x-show="pendingKey === 'not_interested' || pendingKey === 'not_qualified' || pendingKey === 'skip'" x-cloak class="mt-3">
+                            <label class="text-xs font-semibold text-slate-700 dark:text-slate-300">Reason (required)</label>
+                            <select
+                                wire:model="dispositionReasonId"
+                                class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-950"
+                            >
+                                <option value="">Select a reason</option>
+                                @foreach ($notInterestedReasons as $reason)
+                                    <option value="{{ $reason->id }}" x-bind:hidden="pendingKey !== 'not_interested'">{{ $reason->label }}</option>
+                                @endforeach
+                                @foreach ($notQualifiedReasons as $reason)
+                                    <option value="{{ $reason->id }}" x-bind:hidden="pendingKey !== 'not_qualified'">{{ $reason->label }}</option>
+                                @endforeach
+                                @foreach ($skipReasons as $reason)
+                                    <option value="{{ $reason->id }}" x-bind:hidden="pendingKey !== 'skip'">{{ $reason->label }}</option>
+                                @endforeach
+                            </select>
+                            @error('dispositionReasonId') <p class="m-0 mt-1 text-xs font-semibold text-red-600">{{ $message }}</p> @enderror
+                        </div>
                         <textarea
                             wire:model="dispositionNote"
                             placeholder="e.g. Asked to call back after 5pm, interested in pricing"
@@ -116,7 +131,7 @@
                         ></textarea>
                         <div class="mt-4 flex justify-end gap-2">
                             <button type="button" x-on:click="modalOpen = false" class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-950">Cancel</button>
-                            <button type="button" x-on:click="$wire.applyDisposition(pendingKey); modalOpen = false" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">Save &amp; Disposition</button>
+                            <button type="button" x-on:click="$wire.applyDisposition(pendingKey)" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">Save &amp; Disposition</button>
                         </div>
                     </div>
                 </div>
@@ -133,6 +148,9 @@
                         class="flex-1 border-b-2 bg-transparent px-1.5 py-2.5 text-xs font-semibold"
                     >
                         {{ $label }}
+                        @if ($key === 'callbacks' && $overdueCallbackCount > 0)
+                            <span class="ml-1 inline-flex min-w-4 justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-bold text-white">{{ $overdueCallbackCount }}</span>
+                        @endif
                     </button>
                 @endforeach
             </div>
@@ -176,20 +194,26 @@
 
                 <div x-show="tab === 'callbacks'" x-cloak>
                     <p class="m-0 mb-2.5 text-[11px] font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">My Callbacks</p>
-                    <ul class="m-0 flex list-none flex-col gap-1.5 p-0">
+                    <ul class="m-0 flex max-h-72 list-none flex-col gap-1.5 overflow-y-auto p-0">
                         @forelse ($this->callbacks as $callback)
-                            <li @class([
-                                'rounded-md px-3 py-2 text-sm border',
-                                'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-500/10' => $callback->callback_at?->isPast(),
-                                'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950' => ! $callback->callback_at?->isPast(),
-                            ])>
-                                <div class="flex items-center justify-between gap-2">
-                                    <span class="font-medium text-slate-700 dark:text-slate-300">{{ $callback->fullName() ?: $callback->phone }}</span>
-                                    <span class="text-[11px] text-slate-400 dark:text-slate-500">{{ $callback->callback_at?->format('M j, g:i A') }}</span>
-                                </div>
-                                @if ($callback->callback_at?->isPast())
-                                    <p class="m-0 mt-1 text-xs font-bold text-red-700">Overdue</p>
-                                @endif
+                            <li>
+                                <button
+                                    type="button"
+                                    wire:click="openCallback({{ $callback->id }})"
+                                    @class([
+                                        'w-full rounded-md px-3 py-2 text-left text-sm border',
+                                        'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-500/10' => $callback->callback_at?->isPast(),
+                                        'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950' => ! $callback->callback_at?->isPast(),
+                                    ])
+                                >
+                                    <div class="flex items-center justify-between gap-2">
+                                        <span class="font-medium text-slate-700 dark:text-slate-300">{{ $callback->fullName() ?: $callback->phone }}</span>
+                                        <span class="text-[11px] text-slate-400 dark:text-slate-500">{{ $callback->callback_at?->format('M j, g:i A') }}</span>
+                                    </div>
+                                    @if ($callback->callback_at?->isPast())
+                                        <p class="m-0 mt-1 text-xs font-bold text-red-700">Overdue</p>
+                                    @endif
+                                </button>
                             </li>
                         @empty
                             <li class="text-sm text-slate-400 dark:text-slate-500">No scheduled callbacks.</li>

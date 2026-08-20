@@ -6,7 +6,10 @@ use App\Enums\Disposition;
 use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
 use App\Exceptions\CallbackOutsideWindowException;
+use App\Exceptions\MissingDispositionReasonException;
 use App\Jobs\DncPushJob;
+use App\Jobs\SalesforceDncPushJob;
+use App\Models\DispositionReason;
 use App\Models\Lead;
 use App\Models\LeadHistory;
 use App\Models\User;
@@ -28,8 +31,8 @@ class DispositionService
         User $user,
         Disposition $disposition,
         ?CarbonInterface $callbackAt = null,
-        ?string $skipReason = null,
         ?string $note = null,
+        ?string $reason = null,
     ): Lead {
         if ($disposition === Disposition::Callback) {
             if (! $callbackAt || ! $this->compliance->validateCallbackTime($lead, $callbackAt)) {
@@ -37,15 +40,18 @@ class DispositionService
             }
         }
 
-        $updated = DB::transaction(function () use ($lead, $user, $disposition, $callbackAt, $skipReason, $note): Lead {
+        $requiresReason = in_array($disposition, [Disposition::NotInterested, Disposition::NotQualified, Disposition::Skip], true);
+        $resolvedReason = $requiresReason ? $this->resolveReason($lead, $disposition, $reason) : null;
+
+        $updated = DB::transaction(function () use ($lead, $user, $disposition, $callbackAt, $note, $resolvedReason): Lead {
             $lead = Lead::withoutGlobalScopes()->lockForUpdate()->findOrFail($lead->id);
 
             $payload = [
                 'disposition' => $disposition->value,
             ];
 
-            if ($skipReason) {
-                $payload['skip_reason'] = $skipReason;
+            if ($resolvedReason) {
+                $payload['reason'] = $resolvedReason;
             }
 
             $trimmedNote = is_string($note) ? trim($note) : '';
@@ -115,6 +121,7 @@ class DispositionService
 
         if ($disposition === Disposition::Dnc) {
             DncPushJob::dispatch($updated->id);
+            SalesforceDncPushJob::dispatch($updated->id, $user->id);
         }
 
         return $updated;
@@ -132,5 +139,33 @@ class DispositionService
             ->max('queue_rank');
 
         return ((int) $max) + 1;
+    }
+
+    private function resolveReason(Lead $lead, Disposition $disposition, ?string $reason): string
+    {
+        $trimmed = is_string($reason) ? trim($reason) : '';
+
+        if ($trimmed === '') {
+            throw MissingDispositionReasonException::make();
+        }
+
+        $match = DispositionReason::withoutGlobalScopes()
+            ->where('company_id', $lead->company_id)
+            ->where('disposition', $disposition->value)
+            ->where('active', true)
+            ->where(function ($query) use ($trimmed): void {
+                $query->where('label', $trimmed);
+
+                if (ctype_digit($trimmed)) {
+                    $query->orWhere('id', (int) $trimmed);
+                }
+            })
+            ->first();
+
+        if (! $match) {
+            throw MissingDispositionReasonException::make();
+        }
+
+        return $match->label;
     }
 }

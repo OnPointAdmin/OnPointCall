@@ -121,5 +121,21 @@ class ViewLeadTest extends TestCase
         ]);
 
         $this->assertSame('Callable → Terminal (rnd_reassigned)', $statusChange->detailLabel());
+
+        $fieldEdit = new LeadHistory([
+            'event_type' => LeadHistoryType::FieldEdit,
+            'payload' => [
+                'changes' => [
+                    'email' => ['from' => 'a@example.com', 'to' => 'b@example.com'],
+                    'zip' => ['from' => '30000', 'to' => '30301'],
+                    'age_range' => ['from' => '45-54', 'to' => '55-64'],
+                ],
+            ],
+        ]);
+
+        $this->assertSame(
+            'Email: a@example.com → b@example.com; Zip: 30000 → 30301; Age range: 45-54 → 55-64',
+            $fieldEdit->detailLabel(),
+        );
     }
 }

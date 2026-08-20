@@ -1,25 +1,22 @@
 @php
     use App\Enums\Disposition;
+    use App\Enums\LeadHistoryType;
+    use App\Enums\QualificationStatus;
     use App\Enums\SoftScoreStatus;
     use App\Support\LeadDemographicOptions;
     use App\Support\LeadDisplayFields;
 
     $isReadOnly = $readOnly || in_array($lead->status->value, ['booked', 'terminal', 'dnc'], true);
     $showSoftScoreRecentModal = $showSoftScoreRecentModal ?? false;
+    $canRunSoftScore = $canRunSoftScore ?? false;
+    $canRunQualification = $canRunQualification ?? false;
+    $readOnlyMessage = $readOnlyMessage ?? null;
     $companyId = (int) $lead->company_id;
     $ageRangeOptions = LeadDemographicOptions::for('age_range', $companyId, $lead->age_range);
     $incomeOptions = LeadDemographicOptions::for('annual_income', $companyId, $lead->annual_income);
     $maritalStatusOptions = LeadDemographicOptions::for('marital_status', $companyId, $lead->marital_status);
     $genderOptions = LeadDemographicOptions::for('gender', $companyId, $lead->gender);
     $homeownerOptions = LeadDemographicOptions::for('home_owner', $companyId, $lead->home_owner);
-
-    $hasDemographics = collect([
-        $lead->age_range,
-        $lead->annual_income,
-        $lead->marital_status,
-        $lead->gender,
-        $lead->home_owner,
-    ])->filter(fn ($v) => $v !== null && $v !== '')->isNotEmpty();
 
     $hasTour = collect([
         $lead->tour_location,
@@ -32,11 +29,13 @@
         $lead->booking_id,
     ])->filter(fn ($v) => $v !== null && $v !== '')->isNotEmpty();
 
+    $showTour = $lead->lead_type === 'tnb' || $hasTour;
+
     $sectionedKeys = [
         'address', 'address_2', 'zip', 'email', 'age_range', 'annual_income', 'marital_status',
         'gender', 'home_owner', 'original_lead_submit_date', 'booking_id', 'phone_2',
         'tour_location', 'tour_date_start', 'tour_date', 'premiums', 'tour_result', 'tour_or_no_show',
-        'external_lead_id',
+        'external_lead_id', 'first_name', 'last_name', 'phone', 'city', 'state',
     ];
 
     $extraFields = collect();
@@ -67,8 +66,20 @@
         SoftScoreStatus::Recent => $lead->soft_score_code
             ? $lead->soft_score_code.' (recently checked)'
             : 'Recently checked',
-        default => $lead->soft_score_status ? '—' : null,
+        default => $lead->soft_score_code ?: '—',
     };
+
+    $qualifiedToTourAt = match ($lead->qualification_status) {
+        QualificationStatus::Error => 'Error',
+        QualificationStatus::Pending => 'Pending',
+        QualificationStatus::NotQualified => 'Not qualified',
+        QualificationStatus::Qualified => $lead->qualifiedPartnerNames() !== []
+            ? implode(', ', $lead->qualifiedPartnerNames())
+            : '—',
+        default => '—',
+    };
+
+    $tourValue = fn ($value) => ($value !== null && $value !== '') ? $value : '—';
 
     $outcomePillClasses = function (?string $dispositionValue): string {
         return match ($dispositionValue) {
@@ -86,7 +97,7 @@
     <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-3 dark:border-slate-800">
         <div class="flex items-center gap-2.5">
             <span class="text-xs font-bold uppercase tracking-wide text-blue-600">Active Lead</span>
-            <span class="text-xs text-slate-400 dark:text-slate-500">{{ $lead->id }} &middot; Attempt {{ $lead->attempt_count }}</span>
+            <span class="text-xs text-slate-400 dark:text-slate-500">{{ $lead->id }}</span>
         </div>
         <div class="flex flex-shrink-0 items-center gap-2">
             @unless ($isReadOnly)
@@ -131,7 +142,11 @@
         </div>
     </div>
 
-    @if ($isReadOnly)
+    @if ($readOnly && $readOnlyMessage)
+        <div class="border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm font-semibold text-amber-900 dark:border-amber-800 dark:bg-amber-500/10 dark:text-amber-400">
+            {{ $readOnlyMessage }}
+        </div>
+    @elseif ($isReadOnly)
         <div class="border-b border-red-200 bg-red-50 px-5 py-3 text-sm font-semibold text-red-800 dark:border-red-800 dark:bg-red-500/10 dark:text-red-400">
             {{ $lead->status->label() }} — read only
         </div>
@@ -146,12 +161,46 @@
         'name' => $lead->fullName(),
         'manualDialOnly' => $manualDialOnly,
         'phone2' => $lead->phone_2,
+        'secondaryName' => trim($lead->first_name_2.' '.$lead->last_name_2) ?: null,
     ])
 
     <div class="flex flex-col gap-1 px-5 py-5">
         <div>
+            <div class="mb-2.5 flex items-center justify-between gap-3">
+                <h3 class="m-0 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Qualified to Tour At</h3>
+                <div class="m-0 flex shrink-0 select-none flex-col items-end text-right text-xs text-slate-500 dark:text-slate-400" oncopy="return false">
+                    <span class="font-bold text-slate-700 dark:text-slate-300">Lead type</span>
+                    <span class="text-slate-900 dark:text-slate-100">{{ $lead->leadTypeName() }}</span>
+                </div>
+            </div>
+            <p class="m-0 mt-0.5 text-sm font-bold text-slate-900 dark:text-slate-100">{{ $qualifiedToTourAt }}</p>
+            @if ($lead->qualification_status === QualificationStatus::Error && $lead->qualification_last_error)
+                <p class="m-0 mt-1 text-xs text-slate-600 dark:text-slate-400">{{ $lead->qualification_last_error }}</p>
+            @endif
+        </div>
+
+        <div class="mt-4 border-t border-slate-100 pt-4 dark:border-slate-800">
             <h3 class="m-0 mb-2.5 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Contact</h3>
             <div class="grid gap-x-4 gap-y-3" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
+                <template x-if="editMode">
+                    <div>
+                        <p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">First name</p>
+                        <input type="text" wire:model="editable.first_name" class="mt-0.5 w-full rounded-md border border-blue-300 bg-blue-50 px-2 py-1.5 text-sm dark:bg-blue-500/10">
+                    </div>
+                </template>
+                <template x-if="editMode">
+                    <div>
+                        <p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Last name</p>
+                        <input type="text" wire:model="editable.last_name" class="mt-0.5 w-full rounded-md border border-blue-300 bg-blue-50 px-2 py-1.5 text-sm dark:bg-blue-500/10">
+                    </div>
+                </template>
+                <template x-if="editMode">
+                    <div>
+                        <p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Phone</p>
+                        <input type="text" wire:model="editable.phone" class="mt-0.5 w-full rounded-md border border-blue-300 bg-blue-50 px-2 py-1.5 text-sm dark:bg-blue-500/10">
+                        @error('editable.phone') <p class="m-0 mt-0.5 text-xs text-red-600">{{ $message }}</p> @enderror
+                    </div>
+                </template>
                 <div>
                     <p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Email</p>
                     <template x-if="!editMode">
@@ -206,166 +255,108 @@
         </div>
 
         <div class="mt-4 border-t border-slate-100 pt-4 dark:border-slate-800">
-            <h3 class="m-0 mb-2.5 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Opportunity context</h3>
+            <h3 class="m-0 mb-2.5 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Demographics / profile</h3>
+            <div class="grid gap-x-4 gap-y-3" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
+                <div>
+                    <p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Age range</p>
+                    <template x-if="!editMode"><p class="m-0 mt-0.5 select-none text-sm text-slate-900 dark:text-slate-100" oncopy="return false">{{ $lead->age_range ?: '—' }}</p></template>
+                    <template x-if="editMode">
+                        <select wire:model="editable.age_range" class="mt-0.5 w-full rounded-md border border-blue-300 bg-blue-50 px-2 py-1.5 text-sm dark:bg-blue-500/10">
+                            <option value="">—</option>
+                            @foreach ($ageRangeOptions as $opt)<option value="{{ $opt }}">{{ $opt }}</option>@endforeach
+                        </select>
+                    </template>
+                </div>
+                <div>
+                    <p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Annual income</p>
+                    <template x-if="!editMode"><p class="m-0 mt-0.5 select-none text-sm text-slate-900 dark:text-slate-100" oncopy="return false">{{ $lead->annual_income ?: '—' }}</p></template>
+                    <template x-if="editMode">
+                        <select wire:model="editable.annual_income" class="mt-0.5 w-full rounded-md border border-blue-300 bg-blue-50 px-2 py-1.5 text-sm dark:bg-blue-500/10">
+                            <option value="">—</option>
+                            @foreach ($incomeOptions as $opt)<option value="{{ $opt }}">{{ $opt }}</option>@endforeach
+                        </select>
+                    </template>
+                </div>
+                <div>
+                    <p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Marital status</p>
+                    <template x-if="!editMode"><p class="m-0 mt-0.5 select-none text-sm text-slate-900 dark:text-slate-100" oncopy="return false">{{ $lead->marital_status ?: '—' }}</p></template>
+                    <template x-if="editMode">
+                        <select wire:model="editable.marital_status" class="mt-0.5 w-full rounded-md border border-blue-300 bg-blue-50 px-2 py-1.5 text-sm dark:bg-blue-500/10">
+                            <option value="">—</option>
+                            @foreach ($maritalStatusOptions as $opt)<option value="{{ $opt }}">{{ $opt }}</option>@endforeach
+                        </select>
+                    </template>
+                </div>
+                <div>
+                    <p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Gender</p>
+                    <template x-if="!editMode"><p class="m-0 mt-0.5 select-none text-sm text-slate-900 dark:text-slate-100" oncopy="return false">{{ $lead->gender ?: '—' }}</p></template>
+                    <template x-if="editMode">
+                        <select wire:model="editable.gender" class="mt-0.5 w-full rounded-md border border-blue-300 bg-blue-50 px-2 py-1.5 text-sm dark:bg-blue-500/10">
+                            <option value="">—</option>
+                            @foreach ($genderOptions as $opt)<option value="{{ $opt }}">{{ $opt }}</option>@endforeach
+                        </select>
+                    </template>
+                </div>
+                <div>
+                    <p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Homeowner</p>
+                    <template x-if="!editMode"><p class="m-0 mt-0.5 select-none text-sm text-slate-900 dark:text-slate-100" oncopy="return false">{{ $lead->home_owner ?: '—' }}</p></template>
+                    <template x-if="editMode">
+                        <select wire:model="editable.home_owner" class="mt-0.5 w-full rounded-md border border-blue-300 bg-blue-50 px-2 py-1.5 text-sm dark:bg-blue-500/10">
+                            <option value="">—</option>
+                            @foreach ($homeownerOptions as $opt)<option value="{{ $opt }}">{{ $opt }}</option>@endforeach
+                        </select>
+                    </template>
+                </div>
+                <div>
+                    <p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Soft Score</p>
+                    <p class="m-0 mt-0.5 select-none text-sm text-slate-900 dark:text-slate-100" oncopy="return false">{{ $softScoreDisplay }}</p>
+                    @if ($lead->soft_score_checked_at)
+                        <p class="m-0 mt-0.5 text-xs text-slate-500 dark:text-slate-400">Last checked {{ $lead->soft_score_checked_at->timezone(config('app.timezone'))->format('M j, Y') }}</p>
+                    @endif
+                </div>
+            </div>
+            @unless ($isReadOnly)
+                @if ($canRunSoftScore)
+                    <div class="mt-3">
+                        <button type="button" wire:click="runSoftScore" class="rounded-md border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">Run Soft Score</button>
+                    </div>
+                @endif
+            @endunless
+        </div>
+
+        @if ($showTour)
+            <div class="mt-4 border-t border-slate-100 pt-4 dark:border-slate-800">
+                <h3 class="m-0 mb-2.5 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Tour / TNB</h3>
+                <div class="grid gap-x-4 gap-y-3" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
+                    <div><p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Tour location</p><p class="m-0 mt-0.5 text-sm text-slate-900 dark:text-slate-100">{{ $tourValue($lead->tour_location) }}</p></div>
+                    <div><p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Tour date start</p><p class="m-0 mt-0.5 text-sm text-slate-900 dark:text-slate-100">{{ $tourValue($lead->tour_date_start) }}</p></div>
+                    <div><p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Tour date</p><p class="m-0 mt-0.5 text-sm text-slate-900 dark:text-slate-100">{{ $tourValue($lead->tour_date) }}</p></div>
+                    <div><p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Premiums</p><p class="m-0 mt-0.5 text-sm text-slate-900 dark:text-slate-100">{{ $tourValue($lead->premiums) }}</p></div>
+                    <div><p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Tour result</p><p class="m-0 mt-0.5 text-sm text-slate-900 dark:text-slate-100">{{ $tourValue($lead->tour_result) }}</p></div>
+                    <div><p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Tour / no show</p><p class="m-0 mt-0.5 text-sm text-slate-900 dark:text-slate-100">{{ $tourValue($lead->tour_or_no_show) }}</p></div>
+                    <div><p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Original submit date</p><p class="m-0 mt-0.5 text-sm text-slate-900 dark:text-slate-100">{{ $tourValue($lead->original_lead_submit_date) }}</p></div>
+                    <div><p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Booking ID</p><p class="m-0 mt-0.5 text-sm text-slate-900 dark:text-slate-100">{{ $tourValue($lead->booking_id) }}</p></div>
+                </div>
+            </div>
+        @endif
+
+        <div class="mt-4 border-t border-slate-100 pt-4 dark:border-slate-800">
+            <h3 class="m-0 mb-2.5 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Source Information</h3>
             <div class="grid gap-x-4 gap-y-3" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
                 <div>
                     <p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Venue / Event</p>
                     <p class="m-0 mt-0.5 select-none break-words text-sm text-slate-900 dark:text-slate-100" oncopy="return false">{{ collect([$lead->venue, $lead->event])->filter()->implode(' / ') ?: '—' }}</p>
                 </div>
                 <div>
-                    <p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Partners</p>
-                    <p class="m-0 mt-0.5 select-none break-words text-sm text-slate-900 dark:text-slate-100" oncopy="return false">{{ $lead->partner_list ?: '—' }}</p>
+                    <p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Source file</p>
+                    <p class="m-0 mt-0.5 select-none break-words text-sm text-slate-900 dark:text-slate-100" oncopy="return false">{{ $lead->file_name ?: '—' }}</p>
                 </div>
-                @if ($lead->file_name)
-                    <div>
-                        <p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Source file</p>
-                        <p class="m-0 mt-0.5 select-none break-words text-sm text-slate-900 dark:text-slate-100" oncopy="return false">{{ $lead->file_name }}</p>
-                    </div>
-                @endif
                 <div>
                     <p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Lead ID</p>
                     <p class="m-0 mt-0.5 text-sm text-slate-900 dark:text-slate-100">{{ $lead->external_lead_id ?: $lead->id }}</p>
                 </div>
-                <div>
-                    <p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Attempts</p>
-                    <p class="m-0 mt-0.5 text-sm text-slate-900 dark:text-slate-100">{{ $lead->attempt_count }}</p>
-                </div>
             </div>
         </div>
-
-        @if ($hasDemographics)
-            <div class="mt-4 border-t border-slate-100 pt-4 dark:border-slate-800">
-                <h3 class="m-0 mb-2.5 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Demographics / profile</h3>
-                <div class="grid gap-x-4 gap-y-3" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
-                    <div>
-                        <p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Age range</p>
-                        <template x-if="!editMode"><p class="m-0 mt-0.5 select-none text-sm text-slate-900 dark:text-slate-100" oncopy="return false">{{ $lead->age_range ?: '—' }}</p></template>
-                        <template x-if="editMode">
-                            <select wire:model="editable.age_range" class="mt-0.5 w-full rounded-md border border-blue-300 bg-blue-50 px-2 py-1.5 text-sm dark:bg-blue-500/10">
-                                <option value="">—</option>
-                                @foreach ($ageRangeOptions as $opt)<option value="{{ $opt }}">{{ $opt }}</option>@endforeach
-                            </select>
-                        </template>
-                    </div>
-                    <div>
-                        <p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Annual income</p>
-                        <template x-if="!editMode"><p class="m-0 mt-0.5 select-none text-sm text-slate-900 dark:text-slate-100" oncopy="return false">{{ $lead->annual_income ?: '—' }}</p></template>
-                        <template x-if="editMode">
-                            <select wire:model="editable.annual_income" class="mt-0.5 w-full rounded-md border border-blue-300 bg-blue-50 px-2 py-1.5 text-sm dark:bg-blue-500/10">
-                                <option value="">—</option>
-                                @foreach ($incomeOptions as $opt)<option value="{{ $opt }}">{{ $opt }}</option>@endforeach
-                            </select>
-                        </template>
-                    </div>
-                    <div>
-                        <p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Marital status</p>
-                        <template x-if="!editMode"><p class="m-0 mt-0.5 select-none text-sm text-slate-900 dark:text-slate-100" oncopy="return false">{{ $lead->marital_status ?: '—' }}</p></template>
-                        <template x-if="editMode">
-                            <select wire:model="editable.marital_status" class="mt-0.5 w-full rounded-md border border-blue-300 bg-blue-50 px-2 py-1.5 text-sm dark:bg-blue-500/10">
-                                <option value="">—</option>
-                                @foreach ($maritalStatusOptions as $opt)<option value="{{ $opt }}">{{ $opt }}</option>@endforeach
-                            </select>
-                        </template>
-                    </div>
-                    <div>
-                        <p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Gender</p>
-                        <template x-if="!editMode"><p class="m-0 mt-0.5 select-none text-sm text-slate-900 dark:text-slate-100" oncopy="return false">{{ $lead->gender ?: '—' }}</p></template>
-                        <template x-if="editMode">
-                            <select wire:model="editable.gender" class="mt-0.5 w-full rounded-md border border-blue-300 bg-blue-50 px-2 py-1.5 text-sm dark:bg-blue-500/10">
-                                <option value="">—</option>
-                                @foreach ($genderOptions as $opt)<option value="{{ $opt }}">{{ $opt }}</option>@endforeach
-                            </select>
-                        </template>
-                    </div>
-                    <div>
-                        <p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Homeowner</p>
-                        <template x-if="!editMode"><p class="m-0 mt-0.5 select-none text-sm text-slate-900 dark:text-slate-100" oncopy="return false">{{ $lead->home_owner ?: '—' }}</p></template>
-                        <template x-if="editMode">
-                            <select wire:model="editable.home_owner" class="mt-0.5 w-full rounded-md border border-blue-300 bg-blue-50 px-2 py-1.5 text-sm dark:bg-blue-500/10">
-                                <option value="">—</option>
-                                @foreach ($homeownerOptions as $opt)<option value="{{ $opt }}">{{ $opt }}</option>@endforeach
-                            </select>
-                        </template>
-                    </div>
-                    @if ($softScoreDisplay !== null)
-                        <div>
-                            <p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Soft Score</p>
-                            <p class="m-0 mt-0.5 text-sm font-bold text-slate-900 dark:text-slate-100">{{ $softScoreDisplay }}</p>
-                            @if ($lead->soft_score_checked_at)
-                                <p class="m-0 mt-0.5 text-xs text-slate-500 dark:text-slate-400">Last checked {{ $lead->soft_score_checked_at->timezone(config('app.timezone'))->format('M j, Y') }}</p>
-                            @endif
-                        </div>
-                    @endif
-                </div>
-            </div>
-        @elseif ($softScoreDisplay !== null)
-            <div class="mt-4 border-t border-slate-100 pt-4 dark:border-slate-800">
-                <p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Soft Score</p>
-                <p class="m-0 mt-0.5 text-sm font-bold text-slate-900 dark:text-slate-100">{{ $softScoreDisplay }}</p>
-                @if ($lead->soft_score_checked_at)
-                    <p class="m-0 mt-0.5 text-xs text-slate-500 dark:text-slate-400">Last checked {{ $lead->soft_score_checked_at->timezone(config('app.timezone'))->format('M j, Y') }}</p>
-                @endif
-            </div>
-        @endif
-
-        @if ($lead->qualification_status)
-            <div class="mt-4 border-t border-slate-100 pt-4 dark:border-slate-800">
-                <p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Qualification</p>
-                <p class="m-0 mt-0.5 text-sm font-bold text-slate-900 dark:text-slate-100">
-                    @if ($lead->qualification_status === \App\Enums\QualificationStatus::Error)
-                        Error
-                    @elseif ($lead->qualification_status === \App\Enums\QualificationStatus::Pending)
-                        Pending
-                    @elseif ($lead->qualification_status === \App\Enums\QualificationStatus::NotQualified)
-                        Not qualified
-                    @else
-                        {{ $lead->qualifiedPartnerNames() !== [] ? implode(', ', $lead->qualifiedPartnerNames()) : 'Qualified' }}
-                    @endif
-                </p>
-                @if ($lead->qualification_status === \App\Enums\QualificationStatus::Error && $lead->qualification_last_error)
-                    <p class="m-0 mt-1 text-xs text-slate-600 dark:text-slate-400">{{ $lead->qualification_last_error }}</p>
-                @endif
-            </div>
-        @endif
-
-        @if ($softScoreMessage)
-            <p class="mt-3 text-sm text-slate-700 dark:text-slate-300">{{ $softScoreMessage }}</p>
-        @endif
-        @if ($qualificationMessage)
-            <p class="mt-1 text-sm text-slate-700 dark:text-slate-300">{{ $qualificationMessage }}</p>
-        @endif
-
-        @if ($hasTour)
-            <div class="mt-4 border-t border-slate-100 pt-4 dark:border-slate-800">
-                <h3 class="m-0 mb-2.5 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Tour / TNB</h3>
-                <div class="grid gap-x-4 gap-y-3" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
-                    @if ($lead->tour_location)
-                        <div><p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Tour location</p><p class="m-0 mt-0.5 text-sm text-slate-900 dark:text-slate-100">{{ $lead->tour_location }}</p></div>
-                    @endif
-                    @if ($lead->tour_date_start)
-                        <div><p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Tour date start</p><p class="m-0 mt-0.5 text-sm text-slate-900 dark:text-slate-100">{{ $lead->tour_date_start }}</p></div>
-                    @endif
-                    @if ($lead->tour_date)
-                        <div><p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Tour date</p><p class="m-0 mt-0.5 text-sm text-slate-900 dark:text-slate-100">{{ $lead->tour_date }}</p></div>
-                    @endif
-                    @if ($lead->premiums)
-                        <div><p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Premiums</p><p class="m-0 mt-0.5 text-sm text-slate-900 dark:text-slate-100">{{ $lead->premiums }}</p></div>
-                    @endif
-                    @if ($lead->tour_result)
-                        <div><p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Tour result</p><p class="m-0 mt-0.5 text-sm text-slate-900 dark:text-slate-100">{{ $lead->tour_result }}</p></div>
-                    @endif
-                    @if ($lead->tour_or_no_show)
-                        <div><p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Tour / no show</p><p class="m-0 mt-0.5 text-sm text-slate-900 dark:text-slate-100">{{ $lead->tour_or_no_show }}</p></div>
-                    @endif
-                    @if ($lead->original_lead_submit_date)
-                        <div><p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Original submit date</p><p class="m-0 mt-0.5 text-sm text-slate-900 dark:text-slate-100">{{ $lead->original_lead_submit_date }}</p></div>
-                    @endif
-                    @if ($lead->booking_id)
-                        <div><p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Booking ID</p><p class="m-0 mt-0.5 text-sm text-slate-900 dark:text-slate-100">{{ $lead->booking_id }}</p></div>
-                    @endif
-                </div>
-            </div>
-        @endif
 
         @if ($extraFields->isNotEmpty())
             <div class="mt-4 border-t border-slate-100 pt-4 dark:border-slate-800">
@@ -383,11 +374,19 @@
             </div>
         @endif
 
+        @if ($softScoreMessage)
+            <p class="mt-3 text-sm text-slate-700 dark:text-slate-300">{{ $softScoreMessage }}</p>
+        @endif
+        @if ($qualificationMessage)
+            <p class="mt-1 text-sm text-slate-700 dark:text-slate-300">{{ $qualificationMessage }}</p>
+        @endif
+
         @unless ($isReadOnly)
-            <div class="mt-4 flex flex-wrap items-center gap-2.5 border-t border-slate-100 pt-4 dark:border-slate-800">
-                <button type="button" wire:click="runSoftScore" class="rounded-md border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">Run Soft Score</button>
-                <button type="button" wire:click="runQualification" class="rounded-md border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">Run Qualification</button>
-            </div>
+            @if ($canRunQualification)
+                <div class="mt-4 flex flex-wrap items-center gap-2.5 border-t border-slate-100 pt-4 dark:border-slate-800">
+                    <button type="button" wire:click="runQualification" class="rounded-md border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">Run Qualification</button>
+                </div>
+            @endif
         @endunless
     </div>
 </div>
@@ -418,7 +417,9 @@
                     $outcomeLabel = $dispositionValue
                         ? (Disposition::tryFrom($dispositionValue)?->label() ?? $dispositionValue)
                         : $entry->event_type->label();
-                    $note = $entry->payload['note'] ?? $entry->payload['skip_reason'] ?? null;
+                    $note = $entry->event_type === LeadHistoryType::FieldEdit
+                        ? $entry->detailLabel()
+                        : ($entry->noteLabel() ?? '—');
                 @endphp
                 <div class="grid items-center gap-0 border-t border-slate-100 py-2 dark:border-slate-800" style="grid-template-columns: 140px 130px 140px 90px minmax(160px, 1fr); min-width: 640px;">
                     <span class="whitespace-nowrap pl-5 text-sm text-slate-900 dark:text-slate-100">{{ $entry->occurred_at?->format('M j, g:i A') ?? '—' }}</span>
@@ -434,7 +435,7 @@
     </div>
 @endif
 
-@if ($showSoftScoreRecentModal)
+@if ($showSoftScoreRecentModal && $canRunSoftScore)
     <div
         class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
         role="dialog"
@@ -446,7 +447,7 @@
                 Soft Score recently checked
             </h2>
             <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">
-                Soft Score was checked within the last {{ (int) config('services.soft_score.freshness_days', 30) }} days.
+                Soft Score was checked within the last {{ (int) config('services.soft_score.freshness_days', 15) }} days.
                 The existing value on this lead will be kept.
             </p>
             @if ($lead->soft_score_code || $lead->soft_score_checked_at)

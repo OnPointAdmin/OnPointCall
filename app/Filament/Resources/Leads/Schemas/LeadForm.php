@@ -27,6 +27,10 @@ class LeadForm
                     ->tel(),
                 TextInput::make('first_name'),
                 TextInput::make('last_name'),
+                TextInput::make('first_name_2')
+                    ->label('First name 2'),
+                TextInput::make('last_name_2')
+                    ->label('Last name 2'),
                 TextInput::make('address'),
                 TextInput::make('address_2')
                     ->label('Address 2'),

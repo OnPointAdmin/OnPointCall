@@ -7,6 +7,8 @@ use App\Enums\QualificationStatus;
 use App\Models\ImportBatch;
 use App\Models\Lead;
 use App\Models\LeadHistory;
+use Carbon\Carbon;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 
 class QualificationService
@@ -15,8 +17,49 @@ class QualificationService
         private readonly QualificationClient $client,
     ) {}
 
-    public function qualifyLead(Lead $lead, ?int $actorId = null): void
+    public function shouldRun(Lead $lead): bool
     {
+        if ($lead->qualification_status === QualificationStatus::Error) {
+            return true;
+        }
+
+        if ($lead->qualification_status === null) {
+            return true;
+        }
+
+        if ($lead->qualification_checked_at === null) {
+            return true;
+        }
+
+        $checked = $lead->qualification_checked_at instanceof CarbonInterface
+            ? $lead->qualification_checked_at
+            : Carbon::parse($lead->qualification_checked_at);
+
+        $days = max(0, (int) config('services.qualification.freshness_days', 15));
+
+        return $checked->lte(now()->subDays($days));
+    }
+
+    public function isBlank(Lead $lead): bool
+    {
+        return $lead->qualification_status === null;
+    }
+
+    public function shouldShowRunButton(Lead $lead): bool
+    {
+        if ($lead->qualification_status === QualificationStatus::Pending) {
+            return false;
+        }
+
+        return $this->shouldRun($lead);
+    }
+
+    public function qualifyLead(Lead $lead, ?int $actorId = null, bool $force = false): void
+    {
+        // $force is accepted so callers (QualifyLeadJob) can opt into a rerun;
+        // qualification itself always runs when invoked.
+        unset($force);
+
         $previousStatus = $lead->qualification_status;
         $batchId = $lead->import_batch_id;
 

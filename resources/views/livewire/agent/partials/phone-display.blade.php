@@ -41,10 +41,18 @@
         </p>
     @endif
 
-    @if ($displayPhone2)
+    @if ($displayPhone2 || ($secondaryName ?? null))
         <p class="m-0 mt-2.5 text-sm text-slate-500 dark:text-slate-400">
             Secondary contact:
-            <span class="select-none font-semibold text-slate-700 dark:text-slate-300" oncopy="return false">{{ $displayPhone2 }}</span>
+            @if ($displayPhone2)
+                <span class="select-none font-semibold text-slate-700 dark:text-slate-300" oncopy="return false">{{ $displayPhone2 }}</span>
+            @endif
+            @if ($displayPhone2 && ($secondaryName ?? null))
+                <span class="text-slate-400"> · </span>
+            @endif
+            @if ($secondaryName ?? null)
+                <span class="select-none font-semibold text-slate-700 dark:text-slate-300" oncopy="return false">{{ $secondaryName }}</span>
+            @endif
         </p>
     @endif
 </div>

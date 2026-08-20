@@ -2,7 +2,6 @@
 
 namespace App\Jobs;
 
-use App\Enums\QualificationStatus;
 use App\Models\Lead;
 use App\Services\SoftScore\SoftScoreService;
 use App\Support\CompanyContext;
@@ -18,6 +17,7 @@ class SoftScoreLeadJob implements ShouldQueue
         public ?int $batchId = null,
         public ?int $actorId = null,
         public bool $dispatchQualificationAfter = false,
+        public bool $force = false,
     ) {}
 
     public function handle(SoftScoreService $softScoreService): void
@@ -27,7 +27,7 @@ class SoftScoreLeadJob implements ShouldQueue
         CompanyContext::set($lead->company_id);
 
         try {
-            $softScoreService->scoreLead($lead, $this->actorId);
+            $softScoreService->scoreLead($lead, $this->actorId, $this->force);
         } finally {
             CompanyContext::clear();
         }
@@ -39,8 +39,6 @@ class SoftScoreLeadJob implements ShouldQueue
         $lead->refresh();
 
         // Soft Score finished and soft_score_code is on the lead — now qualify.
-        if ($lead->qualification_status === QualificationStatus::Pending) {
-            QualifyLeadJob::dispatch($this->leadId, $this->batchId, $this->actorId);
-        }
+        QualifyLeadJob::dispatch($this->leadId, $this->batchId, $this->actorId, $this->force);
     }
 }

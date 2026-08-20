@@ -25,6 +25,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        $this->ignoreDockerBladeUtimeFailures();
         Event::listen(CommandStarting::class, function (CommandStarting $event): void {
             if (! in_array($event->command, ['migrate:fresh', 'migrate:refresh', 'db:wipe'], true)) {
                 return;
@@ -37,6 +38,29 @@ class AppServiceProvider extends ServiceProvider
             throw new RuntimeException(
                 "Refusing to run {$event->command} because it would wipe the database. Set ALLOW_DESTRUCTIVE_DB=true if you intend to destroy local data."
             );
+        });
+    }
+
+    /**
+     * Docker Desktop bind mounts can reject Blade's compiled-view timestamp bump.
+     */
+    private function ignoreDockerBladeUtimeFailures(): void
+    {
+        $previous = set_error_handler(function (
+            int $errno,
+            string $errstr,
+            string $errfile,
+            int $errline,
+        ) use (&$previous): bool {
+            if (str_contains($errstr, 'Utime failed') && str_contains($errfile, 'BladeCompiler.php')) {
+                return true;
+            }
+
+            if ($previous !== null) {
+                return (bool) $previous($errno, $errstr, $errfile, $errline);
+            }
+
+            return false;
         });
     }
 }

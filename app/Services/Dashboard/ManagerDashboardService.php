@@ -5,6 +5,7 @@ namespace App\Services\Dashboard;
 use App\Enums\Disposition;
 use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
+use App\Enums\UserRole;
 use App\Models\AppSetting;
 use App\Models\Lead;
 use App\Models\LeadHistory;
@@ -62,6 +63,64 @@ class ManagerDashboardService
     }
 
     /**
+     * @return array{totals: array<string, array{label: string, count: int, percent: ?float}>, agents: list<array{user_id: int, name: string, metrics: array<string, array{count: int, percent: ?float}>}>}
+     */
+    public function report(int $companyId, ?int $actorId, ?string $leadType, Carbon $start, Carbon $end): array
+    {
+        $history = $this->historyQuery($companyId, $actorId, $leadType, $start, $end)->get();
+        $overdueByOwner = $this->overdueCallbacksByOwner($companyId, $actorId, $leadType);
+
+        $agentBuckets = [];
+        $totals = $this->emptyMetrics();
+
+        foreach ($history as $row) {
+            if ($row->actor_id === null) {
+                continue;
+            }
+
+            $actorKey = (int) $row->actor_id;
+
+            if (! isset($agentBuckets[$actorKey])) {
+                $agentBuckets[$actorKey] = $this->emptyMetrics();
+            }
+
+            $this->applyHistoryRow($totals, $row);
+            $this->applyHistoryRow($agentBuckets[$actorKey], $row);
+        }
+
+        $totals['overdue_callbacks']['count'] = array_sum($overdueByOwner);
+        $this->applyPercents($totals);
+
+        $users = User::withoutGlobalScopes()
+            ->where('company_id', $companyId)
+            ->get()
+            ->keyBy('id');
+
+        $agentIds = $this->resolveAgentIds($companyId, $actorId, array_keys($agentBuckets), array_keys($overdueByOwner));
+
+        $agents = [];
+
+        foreach ($agentIds as $agentId) {
+            $metrics = $agentBuckets[$agentId] ?? $this->emptyMetrics();
+            $metrics['overdue_callbacks']['count'] = $overdueByOwner[$agentId] ?? 0;
+            $this->applyPercents($metrics);
+
+            $agents[] = [
+                'user_id' => $agentId,
+                'name' => $users->get($agentId)?->name ?? 'Unknown',
+                'metrics' => $metrics,
+            ];
+        }
+
+        usort($agents, fn (array $a, array $b): int => strcasecmp($a['name'], $b['name']));
+
+        return [
+            'totals' => $totals,
+            'agents' => $agents,
+        ];
+    }
+
+    /**
      * @return array{start: Carbon, end: Carbon}
      */
     public function priorDayRange(int $companyId): array
@@ -70,7 +129,7 @@ class ManagerDashboardService
             ->where('company_id', $companyId)
             ->first();
 
-        $timezone = $settings?->dashboard_email_timezone ?? 'America/New_York';
+        $timezone = $this->timezone($settings);
         $start = Carbon::now($timezone)->subDay()->startOfDay()->utc();
         $end = Carbon::now($timezone)->subDay()->endOfDay()->utc();
 
@@ -80,17 +139,86 @@ class ManagerDashboardService
     /**
      * @return array{start: Carbon, end: Carbon}
      */
-    private function todayRange(int $companyId): array
+    public function todayRange(int $companyId): array
     {
         $settings = AppSetting::withoutGlobalScopes()
             ->where('company_id', $companyId)
             ->first();
 
-        $timezone = $settings?->dashboard_email_timezone ?? 'America/New_York';
+        $timezone = $this->timezone($settings);
         $start = Carbon::now($timezone)->startOfDay()->utc();
         $end = Carbon::now($timezone)->endOfDay()->utc();
 
         return ['start' => $start, 'end' => $end];
+    }
+
+    public function companyTimezone(int $companyId): string
+    {
+        $settings = AppSetting::withoutGlobalScopes()
+            ->where('company_id', $companyId)
+            ->first();
+
+        return $this->timezone($settings);
+    }
+
+    /**
+     * @return array{start: Carbon, end: Carbon}
+     */
+    public function dateRange(int $companyId, Carbon $startDate, Carbon $endDate): array
+    {
+        $timezone = $this->companyTimezone($companyId);
+        $start = $startDate->copy()->timezone($timezone)->startOfDay()->utc();
+        $end = $endDate->copy()->timezone($timezone)->endOfDay()->utc();
+
+        return ['start' => $start, 'end' => $end];
+    }
+
+    /**
+     * Weeks run Monday through Sunday.
+     *
+     * @return array{start: Carbon, end: Carbon}
+     */
+    public function presetDates(string $preset, string $timezone, ?Carbon $now = null): array
+    {
+        $now = ($now ?? Carbon::now($timezone))->copy()->timezone($timezone);
+        $today = $now->copy()->startOfDay();
+
+        return match ($preset) {
+            'this_week' => [
+                'start' => $today->copy()->startOfWeek(Carbon::MONDAY),
+                'end' => $today->copy(),
+            ],
+            'last_week' => [
+                'start' => $today->copy()->subWeek()->startOfWeek(Carbon::MONDAY),
+                'end' => $today->copy()->subWeek()->endOfWeek(Carbon::SUNDAY)->startOfDay(),
+            ],
+            'mtd' => [
+                'start' => $today->copy()->startOfMonth(),
+                'end' => $today->copy(),
+            ],
+            'ytd' => [
+                'start' => $today->copy()->startOfYear(),
+                'end' => $today->copy(),
+            ],
+            default => [
+                'start' => $today->copy(),
+                'end' => $today->copy(),
+            ],
+        };
+    }
+
+    /**
+     * @return list<array{key: string, label: string}>
+     */
+    public function datePresets(): array
+    {
+        return [
+            ['key' => 'today', 'label' => 'Today'],
+            ['key' => 'this_week', 'label' => 'This Week'],
+            ['key' => 'last_week', 'label' => 'Last Week'],
+            ['key' => 'mtd', 'label' => 'MTD'],
+            ['key' => 'ytd', 'label' => 'YTD'],
+        ];
     }
 
     /**
@@ -158,5 +286,187 @@ class ManagerDashboardService
         }
 
         return $result;
+    }
+
+    /**
+     * @return list<array{key: string, label: string, show_percent: bool}>
+     */
+    public function metricDefinitions(): array
+    {
+        return [
+            ['key' => 'total_leads_called', 'label' => 'Total Leads Called', 'show_percent' => false],
+            ['key' => 'booked', 'label' => 'Booked', 'show_percent' => true],
+            ['key' => 'not_interested', 'label' => 'Not Interested', 'show_percent' => true],
+            ['key' => 'not_qualified', 'label' => 'Not Qualified', 'show_percent' => true],
+            ['key' => 'no_answer_vm', 'label' => 'No Answer / VM', 'show_percent' => true],
+            ['key' => 'wrong_dnc', 'label' => 'Wrong / DNC', 'show_percent' => true],
+            ['key' => 'skipped', 'label' => 'Skipped', 'show_percent' => true],
+            ['key' => 'callbacks', 'label' => 'Call Backs', 'show_percent' => true],
+            ['key' => 'overdue_callbacks', 'label' => 'Overdue Call Backs', 'show_percent' => true],
+        ];
+    }
+
+    /**
+     * @param  array<string, array{label: string, count: int, percent: ?float}>  $metrics
+     */
+    public function formatPercent(array $metrics, string $key): string
+    {
+        $percent = $metrics[$key]['percent'] ?? null;
+
+        return $percent === null ? '—' : number_format($percent, 1).'%';
+    }
+
+    /**
+     * @return array<string, array{label: string, count: int, percent: ?float}>
+     */
+    private function emptyMetrics(): array
+    {
+        $metrics = [];
+
+        foreach ($this->metricDefinitions() as $definition) {
+            $metrics[$definition['key']] = [
+                'label' => $definition['label'],
+                'count' => 0,
+                'percent' => null,
+            ];
+        }
+
+        return $metrics;
+    }
+
+    private function applyHistoryRow(array &$metrics, LeadHistory $row): void
+    {
+        if ($row->event_type === LeadHistoryType::Skip) {
+            $metrics['skipped']['count']++;
+            $metrics['total_leads_called']['count']++;
+
+            return;
+        }
+
+        if ($row->event_type !== LeadHistoryType::Disposition) {
+            return;
+        }
+
+        $metrics['total_leads_called']['count']++;
+
+        $disposition = Disposition::tryFrom((string) ($row->payload['disposition'] ?? ''));
+
+        if ($disposition === null) {
+            return;
+        }
+
+        match ($disposition) {
+            Disposition::Booked => $metrics['booked']['count']++,
+            Disposition::NotInterested => $metrics['not_interested']['count']++,
+            Disposition::NotQualified => $metrics['not_qualified']['count']++,
+            Disposition::NoAnswer, Disposition::LeftVm => $metrics['no_answer_vm']['count']++,
+            Disposition::WrongNumber, Disposition::BadNumber, Disposition::Dnc => $metrics['wrong_dnc']['count']++,
+            Disposition::Callback => $metrics['callbacks']['count']++,
+            default => null,
+        };
+    }
+
+    /**
+     * @param  array<string, array{label: string, count: int, percent: ?float}>  $metrics
+     */
+    private function applyPercents(array &$metrics): void
+    {
+        $total = $metrics['total_leads_called']['count'];
+
+        foreach ($metrics as $key => &$metric) {
+            if ($key === 'total_leads_called' || $key === 'overdue_callbacks') {
+                $metric['percent'] = null;
+
+                continue;
+            }
+
+            $metric['percent'] = $total > 0
+                ? round(($metric['count'] / $total) * 100, 1)
+                : null;
+        }
+    }
+
+    /**
+     * @param  list<int>  $activityAgentIds
+     * @param  list<int|string|null>  $overdueOwnerIds
+     * @return list<int>
+     */
+    private function resolveAgentIds(int $companyId, ?int $actorId, array $activityAgentIds, array $overdueOwnerIds): array
+    {
+        if ($actorId !== null) {
+            return [$actorId];
+        }
+
+        $ids = collect($activityAgentIds)
+            ->merge($overdueOwnerIds)
+            ->filter(fn (mixed $id): bool => $id !== null && $id !== '')
+            ->map(fn (mixed $id): int => (int) $id)
+            ->unique()
+            ->values();
+
+        if ($ids->isEmpty()) {
+            return [];
+        }
+
+        $validAgentIds = User::withoutGlobalScopes()
+            ->where('company_id', $companyId)
+            ->where('role', UserRole::Agent)
+            ->whereIn('id', $ids)
+            ->pluck('id')
+            ->map(fn (mixed $id): int => (int) $id);
+
+        return $validAgentIds->sort()->values()->all();
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function overdueCallbacksByOwner(int $companyId, ?int $actorId, ?string $leadType): array
+    {
+        $query = Lead::withoutGlobalScopes()
+            ->where('company_id', $companyId)
+            ->where('status', LeadStatus::Callback)
+            ->where('callback_at', '<', now());
+
+        if ($actorId !== null) {
+            $query->where('callback_owner_id', $actorId);
+        }
+
+        if ($leadType !== null) {
+            $query->where('lead_type', $leadType);
+        }
+
+        return $query
+            ->selectRaw('callback_owner_id, count(*) as aggregate_count')
+            ->groupBy('callback_owner_id')
+            ->pluck('aggregate_count', 'callback_owner_id')
+            ->mapWithKeys(fn (mixed $count, mixed $ownerId): array => [(int) $ownerId => (int) $count])
+            ->all();
+    }
+
+    private function historyQuery(int $companyId, ?int $actorId, ?string $leadType, Carbon $start, Carbon $end)
+    {
+        $query = LeadHistory::withoutGlobalScopes()
+            ->where('company_id', $companyId)
+            ->whereBetween('occurred_at', [$start, $end])
+            ->whereIn('event_type', [
+                LeadHistoryType::Disposition->value,
+                LeadHistoryType::Skip->value,
+            ]);
+
+        if ($actorId !== null) {
+            $query->where('actor_id', $actorId);
+        }
+
+        if ($leadType !== null) {
+            $query->whereHas('lead', fn ($leadQuery) => $leadQuery->where('lead_type', $leadType));
+        }
+
+        return $query;
+    }
+
+    private function timezone(?AppSetting $settings): string
+    {
+        return $settings?->dashboard_email_timezone ?? 'America/New_York';
     }
 }

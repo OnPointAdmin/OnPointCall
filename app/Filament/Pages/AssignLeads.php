@@ -13,7 +13,6 @@ use App\Support\LeadDemographicOptions;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
-use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
@@ -59,8 +58,7 @@ class AssignLeads extends Page
         ]);
 
         $this->releaseForm->fill([
-            'release_mode' => 'all',
-            'fresh_count' => 10,
+            'max_count' => null,
         ]);
 
         $this->refreshCount($releaseService);
@@ -157,18 +155,13 @@ class AssignLeads extends Page
                             })
                             ->required()
                             ->searchable(),
-                        Radio::make('release_mode')
-                            ->options([
-                                'all' => 'Assign all matching leads',
-                                'fresh' => 'Assign N freshest (by import date)',
-                            ])
-                            ->default('all')
-                            ->live(),
-                        TextInput::make('fresh_count')
-                            ->label('Number of freshest leads')
+                        TextInput::make('max_count')
+                            ->label('Max Count')
                             ->numeric()
+                            ->integer()
                             ->minValue(1)
-                            ->visible(fn (): bool => ($this->releaseData['release_mode'] ?? 'all') === 'fresh'),
+                            ->nullable()
+                            ->helperText('Leave empty to assign all matching leads. Enter a number to assign that many freshest leads.'),
                     ])
                     ->columns(1),
             ])
@@ -217,23 +210,23 @@ class AssignLeads extends Page
     {
         $filter = $this->buildFilter();
         $release = $this->releaseForm->getState();
+        $maxCount = $this->maxCountFromRelease($release);
 
         try {
-            $released = match ($release['release_mode']) {
-                'fresh' => $releaseService->releaseFresh(
-                    auth()->user()->company_id,
-                    $filter,
-                    (int) $release['calling_list_id'],
-                    (int) $release['fresh_count'],
-                    auth()->id(),
-                ),
-                default => $releaseService->releaseAll(
+            $released = $maxCount === null
+                ? $releaseService->releaseAll(
                     auth()->user()->company_id,
                     $filter,
                     (int) $release['calling_list_id'],
                     auth()->id(),
-                ),
-            };
+                )
+                : $releaseService->releaseFresh(
+                    auth()->user()->company_id,
+                    $filter,
+                    (int) $release['calling_list_id'],
+                    $maxCount,
+                    auth()->id(),
+                );
         } catch (HoldingReleaseException $exception) {
             Notification::make()
                 ->title($exception->getMessage())
@@ -325,6 +318,20 @@ class AssignLeads extends Page
                 ? (string) $data['qualification_status']
                 : null,
         );
+    }
+
+    /**
+     * @param  array<string, mixed>  $release
+     */
+    private function maxCountFromRelease(array $release): ?int
+    {
+        $value = $release['max_count'] ?? null;
+
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        return (int) $value;
     }
 
     /**

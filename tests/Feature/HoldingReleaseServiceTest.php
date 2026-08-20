@@ -586,4 +586,84 @@ class HoldingReleaseServiceTest extends TestCase
             $service->countHolding($company->id, new HoldingFilter(leadType: 'standard')),
         );
     }
+
+    public function test_release_fresh_assigns_n_newest_leads_by_imported_at(): void
+    {
+        $company = Company::factory()->create();
+
+        $list = CallingList::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'name' => 'Standard List',
+            'lead_type' => 'standard',
+            'cadence' => [],
+            'active' => true,
+        ]);
+
+        $oldest = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045551001',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'imported_at' => now()->subDays(3),
+        ]);
+
+        $middle = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045551002',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'imported_at' => now()->subDays(2),
+        ]);
+
+        $newest = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045551003',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'imported_at' => now()->subDay(),
+        ]);
+
+        $service = app(HoldingReleaseService::class);
+        $filter = new HoldingFilter(leadType: 'standard');
+
+        $this->assertSame(3, $service->countHolding($company->id, $filter));
+        $this->assertSame(2, $service->releaseFresh($company->id, $filter, $list->id, 2));
+
+        $oldest->refresh();
+        $middle->refresh();
+        $newest->refresh();
+
+        $this->assertSame(LeadStatus::Holding, $oldest->status);
+        $this->assertNull($oldest->calling_list_id);
+
+        $this->assertSame(LeadStatus::Callable, $middle->status);
+        $this->assertSame($list->id, $middle->calling_list_id);
+
+        $this->assertSame(LeadStatus::Callable, $newest->status);
+        $this->assertSame($list->id, $newest->calling_list_id);
+    }
+
+    public function test_release_fresh_rejects_count_below_one(): void
+    {
+        $company = Company::factory()->create();
+
+        $list = CallingList::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'name' => 'Standard List',
+            'lead_type' => 'standard',
+            'cadence' => [],
+            'active' => true,
+        ]);
+
+        $service = app(HoldingReleaseService::class);
+
+        $this->expectException(HoldingReleaseException::class);
+
+        $service->releaseFresh(
+            $company->id,
+            new HoldingFilter(leadType: 'standard'),
+            $list->id,
+            0,
+        );
+    }
 }

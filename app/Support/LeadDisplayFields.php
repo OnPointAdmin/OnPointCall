@@ -22,6 +22,8 @@ class LeadDisplayFields
         'original_lead_submit_date' => 'Original submit date',
         'booking_id' => 'Booking ID',
         'phone_2' => 'Phone 2',
+        'first_name_2' => 'First name 2',
+        'last_name_2' => 'Last name 2',
         'tour_location' => 'Tour location',
         'tour_date_start' => 'Tour date start',
         'tour_date' => 'Tour date',
@@ -29,7 +31,17 @@ class LeadDisplayFields
         'tour_result' => 'Tour result',
         'tour_or_no_show' => 'Tour / no show',
         'external_lead_id' => 'Lead ID',
+        'first_name' => 'First name',
+        'last_name' => 'Last name',
+        'phone' => 'Phone',
+        'city' => 'City',
+        'state' => 'State',
     ];
+
+    public static function labelFor(string $attribute): string
+    {
+        return self::AGENT_FIELD_LABELS[$attribute] ?? ucwords(str_replace('_', ' ', $attribute));
+    }
 
     /**
      * @return list<array{label: string, value: string}>

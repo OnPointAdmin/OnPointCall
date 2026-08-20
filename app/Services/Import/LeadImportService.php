@@ -36,6 +36,8 @@ class LeadImportService
         'phone' => 'Phone',
         'first_name' => 'First name',
         'last_name' => 'Last name',
+        'first_name_2' => 'First name 2',
+        'last_name_2' => 'Last name 2',
         'address' => 'Address',
         'city' => 'City',
         'state' => 'State',

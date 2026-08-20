@@ -39,7 +39,7 @@ return [
         'base_url' => env('SOFT_SCORE_BASE_URL', 'https://prod.onpointapi.com'),
         'client_id' => env('SOFT_SCORE_CLIENT_ID'),
         'client_secret' => env('SOFT_SCORE_CLIENT_SECRET'),
-        'freshness_days' => (int) env('SOFT_SCORE_FRESHNESS_DAYS', 30),
+        'freshness_days' => (int) env('SOFT_SCORE_FRESHNESS_DAYS', 15),
     ],
 
     'rnd' => [
@@ -52,6 +52,8 @@ return [
         'instance_url' => env('SALESFORCE_INSTANCE_URL', 'https://onpointmrg--staging.sandbox.my.salesforce.com'),
         'client_id' => env('SALESFORCE_CLIENT_ID'),
         'client_secret' => env('SALESFORCE_CLIENT_SECRET'),
+        'api_version' => env('SALESFORCE_API_VERSION', 'v64.0'),
+        'freshness_days' => (int) env('QUALIFICATION_FRESHNESS_DAYS', 15),
     ],
 
     'dnc' => [

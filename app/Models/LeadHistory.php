@@ -9,9 +9,11 @@ use App\Enums\QualificationStatus;
 use App\Enums\RndStatus;
 use App\Enums\SoftScoreStatus;
 use App\Models\Concerns\BelongsToCompany;
+use App\Support\LeadDisplayFields;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\DB;
 
 class LeadHistory extends Model
 {
@@ -68,6 +70,8 @@ class LeadHistory extends Model
             LeadHistoryType::SoftScore => $this->formatSoftScoreDetails($payload),
             LeadHistoryType::RndCheck => $this->formatRndDetails($payload),
             LeadHistoryType::Qualification => $this->formatQualificationDetails($payload),
+            LeadHistoryType::FieldEdit => $this->formatFieldEditDetails($payload),
+            LeadHistoryType::DncPush => $this->formatDncPushDetails($payload),
             LeadHistoryType::Claim => isset($payload['source'])
                 ? 'Source: '.$payload['source']
                 : '—',
@@ -84,16 +88,57 @@ class LeadHistory extends Model
     public function noteLabel(): ?string
     {
         $payload = $this->payload ?? [];
+        $parts = [];
 
-        $note = $payload['note'] ?? $payload['skip_reason'] ?? null;
+        foreach (['reason', 'skip_reason', 'note'] as $key) {
+            $value = $payload[$key] ?? null;
 
-        if (! is_string($note)) {
-            return null;
+            if (is_string($value) && trim($value) !== '') {
+                $parts[] = trim($value);
+            }
         }
 
-        $trimmed = trim($note);
+        return $parts !== [] ? implode(' — ', array_unique($parts)) : null;
+    }
 
-        return $trimmed !== '' ? $trimmed : null;
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    public static function mergeDncPushPayload(Lead $lead, array $payload, ?int $actorId = null): self
+    {
+        return DB::transaction(function () use ($lead, $payload, $actorId): self {
+            $existing = self::withoutGlobalScopes()
+                ->where('lead_id', $lead->id)
+                ->where('event_type', LeadHistoryType::DncPush)
+                ->lockForUpdate()
+                ->orderByDesc('id')
+                ->first();
+
+            $merged = array_merge($existing?->payload ?? [], $payload);
+
+            foreach ($payload as $key => $value) {
+                if ($value === null) {
+                    unset($merged[$key]);
+                }
+            }
+
+            if ($existing) {
+                $existing->update([
+                    'payload' => $merged,
+                ]);
+
+                return $existing->fresh() ?? $existing;
+            }
+
+            return self::withoutGlobalScopes()->create([
+                'company_id' => $lead->company_id,
+                'lead_id' => $lead->id,
+                'actor_id' => $actorId,
+                'event_type' => LeadHistoryType::DncPush,
+                'occurred_at' => now(),
+                'payload' => $merged,
+            ]);
+        });
     }
 
     /**
@@ -105,6 +150,10 @@ class LeadHistory extends Model
 
         if (isset($payload['disposition']) && is_string($payload['disposition'])) {
             $parts[] = Disposition::tryFrom($payload['disposition'])?->label() ?? $payload['disposition'];
+        }
+
+        if (isset($payload['reason']) && is_string($payload['reason']) && $payload['reason'] !== '') {
+            $parts[] = $payload['reason'];
         }
 
         if (isset($payload['callback_at']) && is_string($payload['callback_at'])) {
@@ -205,6 +254,64 @@ class LeadHistory extends Model
 
         if (isset($payload['error']) && is_string($payload['error']) && $payload['error'] !== '') {
             $parts[] = 'Error: '.$payload['error'];
+        }
+
+        return $parts !== [] ? implode(' · ', $parts) : '—';
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function formatFieldEditDetails(array $payload): string
+    {
+        $changes = $payload['changes'] ?? null;
+
+        if (! is_array($changes) || $changes === []) {
+            return '—';
+        }
+
+        $parts = [];
+
+        foreach ($changes as $field => $diff) {
+            if (! is_array($diff)) {
+                continue;
+            }
+
+            $label = LeadDisplayFields::labelFor((string) $field);
+            $from = $this->formatEditValue($diff['from'] ?? null);
+            $to = $this->formatEditValue($diff['to'] ?? null);
+            $parts[] = $label.': '.$from.' → '.$to;
+        }
+
+        return $parts !== [] ? implode('; ', $parts) : '—';
+    }
+
+    private function formatEditValue(mixed $value): string
+    {
+        if ($value === null || $value === '') {
+            return '—';
+        }
+
+        return is_scalar($value) ? (string) $value : json_encode($value);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function formatDncPushDetails(array $payload): string
+    {
+        $parts = [];
+
+        if (isset($payload['phones']) && is_array($payload['phones']) && $payload['phones'] !== []) {
+            $parts[] = 'DNC.com: '.implode(', ', array_map(strval(...), $payload['phones']));
+        }
+
+        if (isset($payload['salesforce_id']) && is_string($payload['salesforce_id']) && $payload['salesforce_id'] !== '') {
+            $parts[] = 'Salesforce: '.$payload['salesforce_id'];
+        }
+
+        if (isset($payload['salesforce_error']) && is_string($payload['salesforce_error']) && $payload['salesforce_error'] !== '') {
+            $parts[] = 'Salesforce error: '.$payload['salesforce_error'];
         }
 
         return $parts !== [] ? implode(' · ', $parts) : '—';
