@@ -13,7 +13,8 @@ class MigrateLeadMasterCommand extends Command
         {file : Path to LeadMaster CSV file}
         {--company= : Company ID}
         {--dry-run : Validate and report without writing}
-        {--skip-existing : Skip rows that match an existing phone or Lead ID}';
+        {--force : Insert even when phone or Lead ID already exists in the database}
+        {--backfill-dates : Update occurred_at on existing leadmaster_migration disposition rows from Batch Date}';
 
     protected $description = 'One-time migration from LeadMaster Google Sheet export';
 
@@ -31,7 +32,22 @@ class MigrateLeadMasterCommand extends Command
         CompanyContext::set($company->id);
 
         $dryRun = (bool) $this->option('dry-run');
-        $skipExisting = $this->option('skip-existing') !== false;
+        $skipExisting = ! (bool) $this->option('force');
+
+        if ($this->option('backfill-dates')) {
+            try {
+                $stats = $migration->backfillDispositionDates($company, $path);
+            } finally {
+                CompanyContext::clear();
+            }
+
+            $this->info('LeadMaster disposition date backfill');
+            $this->line("Updated: {$stats['updated']}");
+            $this->line("No Batch Date in CSV (left unchanged): {$stats['fallback_now']}");
+            $this->line("Skipped (missing lead): {$stats['skipped']}");
+
+            return self::SUCCESS;
+        }
 
         if ($dryRun) {
             $this->warn('DRY RUN — no database writes.');

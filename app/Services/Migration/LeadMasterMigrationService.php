@@ -143,6 +143,7 @@ class LeadMasterMigrationService
             }
 
             $submitDate = $this->parseSheetDate($this->value($row, $headerIndex, 'Lead Submit Date'), $stats);
+            $batchDate = $this->parseSheetDate($this->value($row, $headerIndex, 'Batch Date'), $stats);
             $tourDate = $this->parseSheetDate($this->value($row, $headerIndex, 'Tour Date'), $stats);
 
             $state = strtoupper(substr(trim($this->value($row, $headerIndex, 'State') ?? ''), 0, 2));
@@ -220,7 +221,7 @@ class LeadMasterMigrationService
                 continue;
             }
 
-            DB::transaction(function () use ($company, $leadAttributes, $disposition, $sheetStatus, $actor, $note): void {
+            DB::transaction(function () use ($company, $leadAttributes, $disposition, $sheetStatus, $actor, $note, $batchDate): void {
                 $lead = Lead::withoutGlobalScopes()->create($leadAttributes);
 
                 if ($disposition === null) {
@@ -245,7 +246,7 @@ class LeadMasterMigrationService
                     'lead_id' => $lead->id,
                     'actor_id' => $actor?->id,
                     'event_type' => LeadHistoryType::Disposition,
-                    'occurred_at' => now(),
+                    'occurred_at' => $this->resolveDispositionOccurredAt($batchDate, $leadAttributes['timezone']),
                     'payload' => $payload,
                 ]);
             });
@@ -260,6 +261,97 @@ class LeadMasterMigrationService
         ksort($stats['unmatched_agents']);
 
         return $stats;
+    }
+
+    /**
+     * @return array{updated: int, skipped: int, fallback_now: int}
+     */
+    public function backfillDispositionDates(Company $company, string $filePath): array
+    {
+        $datesByExternalId = [];
+        $datesByPhone = [];
+        $stats = ['updated' => 0, 'skipped' => 0, 'fallback_now' => 0];
+
+        $file = new SplFileObject($filePath, 'r');
+        $file->setFlags(SplFileObject::READ_CSV | SplFileObject::SKIP_EMPTY | SplFileObject::DROP_NEW_LINE);
+
+        $headers = array_map(fn (mixed $header): string => trim((string) $header), $file->fgetcsv() ?: []);
+        $headerIndex = $this->buildHeaderIndex($headers);
+        $parseStats = ['bad_dates' => 0];
+
+        while (! $file->eof()) {
+            $row = $file->fgetcsv();
+
+            if (! is_array($row) || $this->isBlankRow($row)) {
+                continue;
+            }
+
+            if ($this->nullable($this->value($row, $headerIndex, 'Disposition')) === null) {
+                continue;
+            }
+
+            $batchDate = $this->parseSheetDate($this->value($row, $headerIndex, 'Batch Date'), $parseStats);
+            $externalId = trim($this->value($row, $headerIndex, 'Lead ID') ?? '');
+            $phone = $this->phoneNormalizer->normalize($this->value($row, $headerIndex, 'Phone') ?? '');
+
+            if ($externalId !== '') {
+                $datesByExternalId[$externalId] = $batchDate;
+            }
+
+            if ($phone !== null) {
+                $datesByPhone[$phone] = $batchDate;
+            }
+        }
+
+        $histories = LeadHistory::withoutGlobalScopes()
+            ->where('company_id', $company->id)
+            ->where('event_type', LeadHistoryType::Disposition)
+            ->where('payload->source', 'leadmaster_migration')
+            ->with(['lead' => fn ($query) => $query->withoutGlobalScopes()])
+            ->get();
+
+        foreach ($histories as $history) {
+            $lead = $history->lead;
+
+            if (! $lead) {
+                $stats['skipped']++;
+
+                continue;
+            }
+
+            $batchDate = null;
+
+            if ($lead->external_lead_id) {
+                $batchDate = $datesByExternalId[$lead->external_lead_id] ?? null;
+            }
+
+            if ($batchDate === null && $lead->phone) {
+                $batchDate = $datesByPhone[$lead->phone] ?? null;
+            }
+
+            if ($batchDate === null) {
+                $stats['fallback_now']++;
+
+                continue;
+            }
+
+            $history->update([
+                'occurred_at' => $this->resolveDispositionOccurredAt($batchDate, $lead->timezone),
+            ]);
+
+            $stats['updated']++;
+        }
+
+        return $stats;
+    }
+
+    private function resolveDispositionOccurredAt(?string $batchDate, ?string $timezone): Carbon
+    {
+        if ($batchDate !== null) {
+            return Carbon::parse($batchDate, $timezone ?: 'America/New_York')->endOfDay()->utc();
+        }
+
+        return now();
     }
 
     /**
