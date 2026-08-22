@@ -5,6 +5,7 @@ namespace App\Support;
 use App\Models\Cadence;
 use App\Models\CadenceAttemptGap;
 use App\Models\CadenceDayPart;
+use Illuminate\Support\Facades\Schema;
 
 class CadenceProvisioner
 {
@@ -54,19 +55,24 @@ class CadenceProvisioner
     public static function syncDayParts(Cadence $cadence, array $rows): void
     {
         foreach ($rows as $row) {
+            $attributes = [
+                'rotation_order' => $row['rotation_order'],
+                'enabled' => $row['enabled'],
+                'window_start' => self::normalizeTime($row['window_start']),
+                'window_end' => self::normalizeTime($row['window_end']),
+            ];
+
+            if (Schema::hasColumn('cadence_day_parts', 'wait_after_value')) {
+                $attributes['wait_after_value'] = $row['wait_after_value'] ?? null;
+                $attributes['wait_after_unit'] = $row['wait_after_unit'] ?? null;
+            }
+
             CadenceDayPart::withoutGlobalScopes()->updateOrCreate(
                 [
                     'cadence_id' => $cadence->id,
                     'day_part' => $row['day_part'],
                 ],
-                [
-                    'rotation_order' => $row['rotation_order'],
-                    'enabled' => $row['enabled'],
-                    'window_start' => self::normalizeTime($row['window_start']),
-                    'window_end' => self::normalizeTime($row['window_end']),
-                    'wait_after_value' => $row['wait_after_value'] ?? null,
-                    'wait_after_unit' => $row['wait_after_unit'] ?? null,
-                ],
+                $attributes,
             );
         }
     }
