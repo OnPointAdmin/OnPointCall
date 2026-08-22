@@ -3,18 +3,18 @@
 namespace Tests\Feature;
 
 use App\Enums\LeadStatus;
-use App\Models\CallingList;
 use App\Models\Company;
 use App\Models\Lead;
 use App\Models\StateRule;
 use App\Services\Compliance\ComplianceService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Support\CreatesCadences;
 use Tests\TestCase;
 
 class ComplianceServiceTest extends TestCase
 {
-    use RefreshDatabase;
+    use CreatesCadences, RefreshDatabase;
 
     public function test_lead_is_callable_during_legal_window(): void
     {
@@ -46,6 +46,40 @@ class ComplianceServiceTest extends TestCase
         $this->assertFalse($service->canDialNow($lead));
     }
 
+    public function test_due_callback_skips_cadence_timing(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-10 22:30:00', 'America/New_York'));
+
+        $company = Company::factory()->create();
+        $this->seedStateRule($company->id, 'NY');
+
+        $list = $this->createCallingList($company->id);
+        $lead = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045559999',
+            'state' => 'NY',
+            'timezone' => 'America/New_York',
+            'status' => LeadStatus::Callback,
+            'lead_type' => 'standard',
+            'calling_list_id' => $list->id,
+            'attempt_count' => 2,
+            'last_attempt_at' => now()->subMinutes(5),
+            'next_day_part' => 'morning',
+            'imported_at' => now(),
+        ])->load('callingList.cadence.dayParts', 'callingList.cadence.attemptGaps');
+
+        $service = app(ComplianceService::class);
+
+        $this->assertFalse($service->isWithinLegalWindow($lead));
+        $this->assertFalse($service->canDialNow($lead));
+
+        Carbon::setTestNow(Carbon::parse('2026-08-10 15:00:00', 'America/New_York'));
+
+        $this->assertTrue($service->isWithinLegalWindow($lead));
+        $this->assertTrue($service->canDialNow($lead));
+        $this->assertFalse($service->isCadenceReady($lead));
+    }
+
     private function seedStateRule(int $companyId, string $state): void
     {
         StateRule::withoutGlobalScopes()->create([
@@ -69,16 +103,7 @@ class ComplianceServiceTest extends TestCase
 
     private function makeLead(int $companyId): Lead
     {
-        $list = CallingList::withoutGlobalScopes()->create([
-            'company_id' => $companyId,
-            'name' => 'Standard',
-            'lead_type' => 'standard',
-            'cadence' => [
-                'day_parts' => ['morning', 'afternoon', 'evening'],
-                'min_gap_minutes' => 60,
-            ],
-            'active' => true,
-        ]);
+        $list = $this->createCallingList($companyId);
 
         return Lead::withoutGlobalScopes()->create([
             'company_id' => $companyId,
@@ -90,6 +115,6 @@ class ComplianceServiceTest extends TestCase
             'calling_list_id' => $list->id,
             'imported_at' => now(),
             'queue_rank' => 1,
-        ])->load('callingList');
+        ])->load('callingList.cadence.dayParts', 'callingList.cadence.attemptGaps');
     }
 }

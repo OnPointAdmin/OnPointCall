@@ -11,11 +11,12 @@ use App\Models\LeadTypeDefinition;
 use App\Services\Import\HoldingReleaseService;
 use App\Support\CompanyContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Support\CreatesCadences;
 use Tests\TestCase;
 
 class LeadTypeDefinitionTest extends TestCase
 {
-    use RefreshDatabase;
+    use CreatesCadences, RefreshDatabase;
 
     public function test_create_from_name_generates_slug_and_is_company_scoped(): void
     {
@@ -42,12 +43,9 @@ class LeadTypeDefinitionTest extends TestCase
 
         LeadTypeDefinition::createFromName('Custom Batch');
 
-        $list = CallingList::withoutGlobalScopes()->create([
-            'company_id' => $company->id,
+        $list = $this->createCallingList($company->id, overrides: [
             'name' => 'Custom List',
             'lead_type' => 'custom-batch',
-            'cadence' => [],
-            'active' => true,
         ]);
 
         Lead::withoutGlobalScopes()->create([

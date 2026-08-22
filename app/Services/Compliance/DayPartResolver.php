@@ -2,35 +2,26 @@
 
 namespace App\Services\Compliance;
 
+use App\Models\CadenceDayPart;
 use App\Models\Lead;
+use App\Support\CadenceDefaults;
+use App\Support\CadenceWait;
 use Carbon\CarbonInterface;
 
 class DayPartResolver
 {
     /**
-     * @var array<string, array{0: string, 1: string}>
-     */
-    private const DEFAULT_WINDOWS = [
-        'morning' => ['08:00', '12:00'],
-        'afternoon' => ['12:00', '17:00'],
-        'evening' => ['17:00', '21:00'],
-    ];
-
-    /**
      * @return list<string>
      */
     public function dayPartsFor(Lead $lead): array
     {
-        $cadence = $lead->callingList?->cadence ?? [];
+        $parts = $this->enabledDayParts($lead);
 
-        return $cadence['day_parts'] ?? ['morning', 'afternoon', 'evening'];
-    }
+        if ($parts !== []) {
+            return $parts->pluck('day_part')->all();
+        }
 
-    public function minGapMinutesFor(Lead $lead): int
-    {
-        $cadence = $lead->callingList?->cadence ?? [];
-
-        return (int) ($cadence['min_gap_minutes'] ?? 60);
+        return CadenceDefaults::DAY_PARTS;
     }
 
     public function currentDayPart(Lead $lead, ?CarbonInterface $at = null): ?string
@@ -48,27 +39,70 @@ class DayPartResolver
         return null;
     }
 
+    /**
+     * Day-part windows this lead may be served in (rotation-aware).
+     *
+     * @return array<string, array{0: string, 1: string}>
+     */
+    public function eligibleWindows(Lead $lead): array
+    {
+        $windows = $this->windowsFor($lead);
+        $parts = $this->dayPartsFor($lead);
+
+        if ($lead->next_day_part === null || ! in_array($lead->next_day_part, $parts, true)) {
+            return $windows;
+        }
+
+        if (! isset($windows[$lead->next_day_part])) {
+            return $windows;
+        }
+
+        return [$lead->next_day_part => $windows[$lead->next_day_part]];
+    }
+
+    public function waitAfterEligibleAt(Lead $lead): ?CarbonInterface
+    {
+        if ($lead->last_attempt_at === null) {
+            return null;
+        }
+
+        $dialedInPart = $this->currentDayPart($lead, $lead->last_attempt_at);
+
+        if ($dialedInPart === null) {
+            return null;
+        }
+
+        $row = $this->dayPartRow($lead, $dialedInPart);
+
+        if ($row === null || $row->wait_after_value === null || $row->wait_after_unit === null) {
+            return null;
+        }
+
+        return CadenceWait::eligibleAt(
+            $lead,
+            $row->wait_after_value,
+            $row->wait_after_unit,
+            $lead->last_attempt_at,
+        );
+    }
+
     public function matchesNextDayPart(Lead $lead, ?CarbonInterface $at = null): bool
     {
-        if ($lead->next_day_part === null) {
-            return true;
+        $at ??= now();
+        $parts = $this->dayPartsFor($lead);
+
+        if ($lead->next_day_part === null || ! in_array($lead->next_day_part, $parts, true)) {
+            return in_array($this->currentDayPart($lead, $at), $parts, true);
+        }
+
+        if (! $this->isDialWaitSatisfied($lead, $at)) {
+            return false;
         }
 
         return $lead->next_day_part === $this->currentDayPart($lead, $at);
     }
 
-    public function isCadenceGapSatisfied(Lead $lead, ?CarbonInterface $at = null): bool
-    {
-        $at ??= now();
-
-        if ($lead->last_attempt_at === null) {
-            return true;
-        }
-
-        return $lead->last_attempt_at->copy()->addMinutes($this->minGapMinutesFor($lead))->lte($at);
-    }
-
-    public function advanceDayPart(Lead $lead): ?string
+    public function advanceDayPart(Lead $lead, ?CarbonInterface $at = null): ?string
     {
         $parts = $this->dayPartsFor($lead);
 
@@ -76,14 +110,17 @@ class DayPartResolver
             return null;
         }
 
-        $currentIndex = $lead->next_day_part
-            ? array_search($lead->next_day_part, $parts, true)
-            : false;
+        $fromPart = $lead->next_day_part;
 
-        if ($currentIndex === false) {
+        if ($fromPart === null || ! in_array($fromPart, $parts, true)) {
+            $fromPart = $this->currentDayPart($lead, $at);
+        }
+
+        if ($fromPart === null || ! in_array($fromPart, $parts, true)) {
             return $parts[0];
         }
 
+        $currentIndex = array_search($fromPart, $parts, true);
         $nextIndex = ($currentIndex + 1) % count($parts);
 
         return $parts[$nextIndex];
@@ -94,23 +131,56 @@ class DayPartResolver
      */
     private function windowsFor(Lead $lead): array
     {
-        $cadence = $lead->callingList?->cadence ?? [];
-        $custom = $cadence['day_part_hours'] ?? null;
+        $parts = $this->enabledDayParts($lead);
 
-        if (is_array($custom) && $custom !== []) {
-            $windows = [];
-
-            foreach ($custom as $part => $range) {
-                if (is_array($range) && count($range) >= 2) {
-                    $windows[$part] = [$range[0], $range[1]];
-                }
-            }
-
-            if ($windows !== []) {
-                return $windows;
-            }
+        if ($parts->isEmpty()) {
+            return CadenceDefaults::windows();
         }
 
-        return self::DEFAULT_WINDOWS;
+        $windows = [];
+
+        foreach ($parts as $part) {
+            $windows[$part->day_part] = [
+                $this->formatTime($part->window_start),
+                $this->formatTime($part->window_end),
+            ];
+        }
+
+        return $windows;
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, CadenceDayPart>
+     */
+    private function enabledDayParts(Lead $lead): \Illuminate\Support\Collection
+    {
+        $lead->loadMissing('callingList.cadence.dayParts');
+
+        return $lead->callingList?->cadence?->dayParts
+            ?->where('enabled', true)
+            ->sortBy('rotation_order')
+            ->values() ?? collect();
+    }
+
+    private function isDialWaitSatisfied(Lead $lead, CarbonInterface $at): bool
+    {
+        $eligibleAt = $this->waitAfterEligibleAt($lead);
+
+        return $eligibleAt === null || $at->gte($eligibleAt);
+    }
+
+    private function dayPartRow(Lead $lead, string $dayPart): ?CadenceDayPart
+    {
+        $lead->loadMissing('callingList.cadence.dayParts');
+
+        return $lead->callingList?->cadence?->dayParts
+            ->firstWhere('day_part', $dayPart);
+    }
+
+    private function formatTime(mixed $time): string
+    {
+        $value = (string) $time;
+
+        return strlen($value) >= 5 ? substr($value, 0, 5) : $value;
     }
 }

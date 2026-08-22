@@ -14,11 +14,12 @@ use App\Models\User;
 use App\Support\CompanyContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
+use Tests\Support\CreatesCadences;
 use Tests\TestCase;
 
 class AssignLeadsTest extends TestCase
 {
-    use RefreshDatabase;
+    use CreatesCadences, RefreshDatabase;
 
     public function test_assign_leads_page_shows_max_count_and_matching_count(): void
     {
@@ -116,12 +117,8 @@ class AssignLeadsTest extends TestCase
 
         LeadTypeDefinition::createFromName('Standard', 'standard');
 
-        $list = CallingList::withoutGlobalScopes()->create([
-            'company_id' => $company->id,
+        $list = $this->createCallingList($company->id, overrides: [
             'name' => 'Standard List',
-            'lead_type' => 'standard',
-            'cadence' => [],
-            'active' => true,
         ]);
 
         return [$admin, $list];

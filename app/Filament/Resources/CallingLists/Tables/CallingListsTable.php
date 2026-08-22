@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\CallingLists\Tables;
 
+use App\Models\CallingList;
+use App\Services\Leads\DialableInventoryService;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -22,16 +24,28 @@ class CallingListsTable
                 TextColumn::make('lead_type')
                     ->badge()
                     ->searchable(),
+                TextColumn::make('cadence.name')
+                    ->label('Cadence')
+                    ->sortable(),
                 TextColumn::make('leads_count')
                     ->label('Total leads')
                     ->counts('leads')
                     ->numeric()
                     ->sortable(),
-                TextColumn::make('available_leads_count')
-                    ->label('Available leads')
-                    ->counts('availableLeads')
+                TextColumn::make('ready_now')
+                    ->label('Ready now')
                     ->numeric()
-                    ->sortable(),
+                    ->getStateUsing(fn (CallingList $record): int => app(DialableInventoryService::class)
+                        ->forList($record)
+                        ->readyNow)
+                    ->tooltip('Callable leads that can be dialed right now (legal hours and cadence).'),
+                TextColumn::make('waiting')
+                    ->label('Waiting')
+                    ->numeric()
+                    ->getStateUsing(fn (CallingList $record): int => app(DialableInventoryService::class)
+                        ->forList($record)
+                        ->waiting)
+                    ->tooltip('Callable leads waiting on cadence, legal hours, or an active claim.'),
                 TextColumn::make('max_attempts_override')
                     ->numeric()
                     ->sortable(),

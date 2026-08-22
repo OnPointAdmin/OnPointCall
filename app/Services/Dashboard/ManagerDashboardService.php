@@ -184,6 +184,10 @@ class ManagerDashboardService
         $today = $now->copy()->startOfDay();
 
         return match ($preset) {
+            'yesterday' => [
+                'start' => $today->copy()->subDay(),
+                'end' => $today->copy()->subDay(),
+            ],
             'this_week' => [
                 'start' => $today->copy()->startOfWeek(Carbon::MONDAY),
                 'end' => $today->copy(),

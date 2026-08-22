@@ -14,11 +14,12 @@ use App\Models\Lead;
 use App\Services\Import\HoldingReleaseService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use InvalidArgumentException;
+use Tests\Support\CreatesCadences;
 use Tests\TestCase;
 
 class HoldingReleaseServiceTest extends TestCase
 {
-    use RefreshDatabase;
+    use CreatesCadences, RefreshDatabase;
 
     public function test_release_assigns_leads_to_calling_list_with_matching_type(): void
     {
@@ -28,7 +29,7 @@ class HoldingReleaseServiceTest extends TestCase
             'company_id' => $company->id,
             'name' => 'Standard List',
             'lead_type' => 'standard',
-            'cadence' => [],
+            'cadence_id' => $this->createCadence($company->id)->id,
             'active' => true,
         ]);
 
@@ -65,7 +66,7 @@ class HoldingReleaseServiceTest extends TestCase
             'company_id' => $company->id,
             'name' => 'TNB List',
             'lead_type' => 'tnb',
-            'cadence' => [],
+            'cadence_id' => $this->createCadence($company->id)->id,
             'active' => true,
         ]);
 
@@ -277,7 +278,7 @@ class HoldingReleaseServiceTest extends TestCase
             'company_id' => $company->id,
             'name' => 'Standard List',
             'lead_type' => 'standard',
-            'cadence' => [],
+            'cadence_id' => $this->createCadence($company->id)->id,
             'active' => true,
         ]);
 
@@ -314,7 +315,7 @@ class HoldingReleaseServiceTest extends TestCase
             'company_id' => $company->id,
             'name' => 'Standard List',
             'lead_type' => 'standard',
-            'cadence' => [],
+            'cadence_id' => $this->createCadence($company->id)->id,
             'active' => true,
         ]);
 
@@ -351,7 +352,7 @@ class HoldingReleaseServiceTest extends TestCase
             'company_id' => $company->id,
             'name' => 'Standard List',
             'lead_type' => 'standard',
-            'cadence' => [],
+            'cadence_id' => $this->createCadence($company->id)->id,
             'active' => true,
         ]);
 
@@ -388,7 +389,7 @@ class HoldingReleaseServiceTest extends TestCase
             'company_id' => $company->id,
             'name' => 'Standard List',
             'lead_type' => 'standard',
-            'cadence' => [],
+            'cadence_id' => $this->createCadence($company->id)->id,
             'active' => true,
         ]);
 
@@ -417,7 +418,7 @@ class HoldingReleaseServiceTest extends TestCase
             'company_id' => $company->id,
             'name' => 'Standard List',
             'lead_type' => 'standard',
-            'cadence' => [],
+            'cadence_id' => $this->createCadence($company->id)->id,
             'active' => true,
         ]);
 
@@ -595,7 +596,7 @@ class HoldingReleaseServiceTest extends TestCase
             'company_id' => $company->id,
             'name' => 'Standard List',
             'lead_type' => 'standard',
-            'cadence' => [],
+            'cadence_id' => $this->createCadence($company->id)->id,
             'active' => true,
         ]);
 
@@ -651,7 +652,7 @@ class HoldingReleaseServiceTest extends TestCase
             'company_id' => $company->id,
             'name' => 'Standard List',
             'lead_type' => 'standard',
-            'cadence' => [],
+            'cadence_id' => $this->createCadence($company->id)->id,
             'active' => true,
         ]);
 

@@ -157,25 +157,48 @@
 
             <div class="p-3.5">
                 <div x-show="tab === 'scoreboard'">
-                    <p class="m-0 mb-2.5 text-[11px] font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">My Scoreboard &middot; Today</p>
-                    <dl class="m-0 grid grid-cols-2 gap-2.5">
-                        <div class="rounded-lg bg-slate-50 p-2.5 dark:bg-slate-950">
-                            <dt class="m-0 text-[11px] text-slate-400 dark:text-slate-500">Bookings</dt>
-                            <dd class="m-0 mt-0.5 text-2xl font-extrabold text-emerald-700">{{ $this->stats['bookings'] }}</dd>
-                        </div>
-                        <div class="rounded-lg bg-slate-50 p-2.5 dark:bg-slate-950">
-                            <dt class="m-0 text-[11px] text-slate-400 dark:text-slate-500">Calls</dt>
-                            <dd class="m-0 mt-0.5 text-2xl font-extrabold text-slate-900 dark:text-slate-100">{{ $this->stats['calls'] }}</dd>
-                        </div>
-                        <div class="rounded-lg bg-slate-50 p-2.5 dark:bg-slate-950">
-                            <dt class="m-0 text-[11px] text-slate-400 dark:text-slate-500">Skips</dt>
-                            <dd class="m-0 mt-0.5 text-2xl font-extrabold text-slate-600 dark:text-slate-400">{{ $this->stats['skips'] }}</dd>
-                        </div>
-                        <div class="rounded-lg bg-slate-50 p-2.5 dark:bg-slate-950">
-                            <dt class="m-0 text-[11px] text-slate-400 dark:text-slate-500">Callbacks</dt>
-                            <dd class="m-0 mt-0.5 text-2xl font-extrabold text-amber-600">{{ $this->stats['callbacks_pending'] }}</dd>
-                        </div>
-                    </dl>
+                    <p class="m-0 mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                        My Scoreboard &middot; {{ $this->scoreboardPresetLabel() }}
+                    </p>
+
+                    <div class="mb-2.5 flex flex-wrap gap-1" role="group" aria-label="Scoreboard date range">
+                        @foreach ($this->scoreboardPresets as $preset)
+                            <button
+                                type="button"
+                                wire:click="setScoreboardPreset('{{ $preset['key'] }}')"
+                                @class([
+                                    'rounded-full border px-2 py-0.5 text-[10px] font-semibold',
+                                    'border-blue-600 bg-blue-600 text-white' => $this->scoreboardPreset === $preset['key'],
+                                    'border-slate-300 bg-white text-slate-600 hover:border-blue-600 hover:text-blue-600 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-400' => $this->scoreboardPreset !== $preset['key'],
+                                ])
+                            >
+                                {{ $preset['label'] }}
+                            </button>
+                        @endforeach
+                    </div>
+
+                    <div class="flex flex-col gap-2">
+                        @foreach ($this->scoreboardDefinitions as $definition)
+                            @php
+                                $metric = $this->scoreboard[$definition['key']] ?? ['count' => 0, 'percent' => null];
+                            @endphp
+                            <div class="rounded-lg bg-slate-50 p-2.5 dark:bg-slate-950">
+                                <p class="m-0 text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">{{ $definition['label'] }}</p>
+                                <p @class([
+                                    'm-0 mt-1 text-xl font-extrabold leading-none',
+                                    'text-emerald-700' => $definition['key'] === 'booked',
+                                    'text-amber-600' => in_array($definition['key'], ['callbacks', 'overdue_callbacks'], true),
+                                    'text-slate-900 dark:text-slate-100' => ! in_array($definition['key'], ['booked', 'callbacks', 'overdue_callbacks'], true),
+                                ])>{{ number_format($metric['count'] ?? 0) }}</p>
+                                <p class="m-0 mt-1 min-h-3.5 text-[10px] font-semibold text-slate-400 dark:text-slate-500">
+                                    @if ($definition['show_percent'])
+                                        {{ $this->formatScoreboardPercent($this->scoreboard, $definition['key']) }}
+                                    @endif
+                                </p>
+                            </div>
+                        @endforeach
+                    </div>
+                    <p class="m-0 mt-2 text-[10px] text-slate-400 dark:text-slate-500">Percentages are % of total leads called.</p>
                 </div>
 
                 <div x-show="tab === 'leaderboard'" x-cloak>

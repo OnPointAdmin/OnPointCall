@@ -15,11 +15,12 @@ use App\Models\User;
 use App\Services\Leads\NextLeadService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Support\CreatesCadences;
 use Tests\TestCase;
 
 class NextLeadServiceTest extends TestCase
 {
-    use RefreshDatabase;
+    use CreatesCadences, RefreshDatabase;
 
     protected function setUp(): void
     {
@@ -43,6 +44,8 @@ class NextLeadServiceTest extends TestCase
             'calling_list_id' => $list->id,
             'callback_owner_id' => $user->id,
             'callback_at' => now()->subHour(),
+            'attempt_count' => 2,
+            'last_attempt_at' => now()->subMinutes(5),
             'imported_at' => now(),
             'queue_rank' => 99,
         ]);
@@ -68,6 +71,20 @@ class NextLeadServiceTest extends TestCase
         $this->assertSame(EmptyQueueReason::NoneAvailable, $result->emptyReason);
     }
 
+    public function test_prioritizes_never_dialed_leads_when_cadence_flag_enabled(): void
+    {
+        [$user, $list] = $this->makeAgentWithList();
+
+        $retried = $this->makeCallableLead($user->company_id, $list->id, '4045551001', 1, attemptCount: 2);
+        $fresh = $this->makeCallableLead($user->company_id, $list->id, '4045551002', 2, attemptCount: 0);
+
+        $result = app(NextLeadService::class)->getNext($user);
+
+        $this->assertTrue($result->hasLead());
+        $this->assertSame($fresh->id, $result->lead?->id);
+        $this->assertNotSame($retried->id, $result->lead?->id);
+    }
+
     /**
      * @return array{0: User, 1: CallingList}
      */
@@ -90,16 +107,7 @@ class NextLeadServiceTest extends TestCase
             'claim_ttl_minutes' => 20,
         ]);
 
-        $list = CallingList::withoutGlobalScopes()->create([
-            'company_id' => $company->id,
-            'name' => 'Standard',
-            'lead_type' => 'standard',
-            'cadence' => [
-                'day_parts' => ['morning', 'afternoon', 'evening'],
-                'min_gap_minutes' => 60,
-            ],
-            'active' => true,
-        ]);
+        $list = $this->createCallingList($company->id);
 
         $user = User::factory()->create([
             'company_id' => $company->id,
@@ -116,8 +124,13 @@ class NextLeadServiceTest extends TestCase
         return [$user, $list];
     }
 
-    private function makeCallableLead(int $companyId, int $listId, string $phone, int $rank): Lead
-    {
+    private function makeCallableLead(
+        int $companyId,
+        int $listId,
+        string $phone,
+        int $rank,
+        int $attemptCount = 0,
+    ): Lead {
         return Lead::withoutGlobalScopes()->create([
             'company_id' => $companyId,
             'phone' => $phone,
@@ -126,6 +139,7 @@ class NextLeadServiceTest extends TestCase
             'status' => LeadStatus::Callable,
             'lead_type' => 'standard',
             'calling_list_id' => $listId,
+            'attempt_count' => $attemptCount,
             'imported_at' => now(),
             'queue_rank' => $rank,
         ]);

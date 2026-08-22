@@ -16,6 +16,7 @@ use App\Models\DispositionReason;
 use App\Models\Lead;
 use App\Models\LeadHistory;
 use App\Services\Compliance\ComplianceService;
+use App\Services\Dashboard\ManagerDashboardService;
 use App\Services\Leads\AgentStatsService;
 use App\Services\Leads\BookingUrlBuilder;
 use App\Services\Leads\DispositionService;
@@ -107,6 +108,8 @@ class Workspace extends Component
     public string $qualificationMessage = '';
 
     public bool $showSoftScoreRecentModal = false;
+
+    public string $scoreboardPreset = 'today';
 
     public function mount(): void
     {
@@ -469,9 +472,58 @@ class Workspace extends Component
         $this->emptyMessage = null;
     }
 
-    public function getStatsProperty(): array
+    public function setScoreboardPreset(string $preset): void
     {
-        return app(AgentStatsService::class)->statsForUser(Auth::guard('agent')->user());
+        $allowed = array_column($this->scoreboardPresets, 'key');
+
+        if (! in_array($preset, $allowed, true)) {
+            return;
+        }
+
+        $this->scoreboardPreset = $preset;
+    }
+
+    /**
+     * @return array<string, array{label: string, count: int, percent: ?float}>
+     */
+    public function getScoreboardProperty(): array
+    {
+        return app(AgentStatsService::class)->scoreboardForUser(
+            Auth::guard('agent')->user(),
+            $this->scoreboardPreset,
+        );
+    }
+
+    /**
+     * @return list<array{key: string, label: string}>
+     */
+    public function getScoreboardPresetsProperty(): array
+    {
+        return app(AgentStatsService::class)->scoreboardDatePresets();
+    }
+
+    /**
+     * @return list<array{key: string, label: string, show_percent: bool}>
+     */
+    public function getScoreboardDefinitionsProperty(): array
+    {
+        return app(ManagerDashboardService::class)->metricDefinitions();
+    }
+
+    public function scoreboardPresetLabel(): string
+    {
+        foreach ($this->scoreboardPresets as $preset) {
+            if ($preset['key'] === $this->scoreboardPreset) {
+                return $preset['label'];
+            }
+        }
+
+        return 'Today';
+    }
+
+    public function formatScoreboardPercent(array $metrics, string $key): string
+    {
+        return app(ManagerDashboardService::class)->formatPercent($metrics, $key);
     }
 
     public function getLeaderboardProperty(): Collection

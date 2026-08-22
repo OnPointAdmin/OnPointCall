@@ -152,6 +152,10 @@ class ManagerDashboardServiceTest extends TestCase
         $this->assertSame('2026-08-19', $today['start']->toDateString());
         $this->assertSame('2026-08-19', $today['end']->toDateString());
 
+        $yesterday = $service->presetDates('yesterday', 'America/New_York', $now);
+        $this->assertSame('2026-08-18', $yesterday['start']->toDateString());
+        $this->assertSame('2026-08-18', $yesterday['end']->toDateString());
+
         $thisWeek = $service->presetDates('this_week', 'America/New_York', $now);
         $this->assertSame('2026-08-17', $thisWeek['start']->toDateString());
         $this->assertSame('2026-08-19', $thisWeek['end']->toDateString());

@@ -18,6 +18,7 @@ use App\Models\LeadClaim;
 use App\Models\LeadHistory;
 use App\Models\ListAssignment;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
@@ -516,5 +517,107 @@ class AgentWorkspaceTest extends TestCase
         ]);
 
         return [$user, $lead];
+    }
+
+    public function test_scoreboard_shows_logged_in_agent_totals_and_date_presets(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-21 15:00:00', 'America/New_York'));
+
+        [$user, $lead] = $this->makeWorkableLead();
+        $otherAgent = User::factory()->create([
+            'company_id' => $user->company_id,
+            'role' => UserRole::Agent,
+        ]);
+
+        $this->createWorkspaceDisposition($user->company_id, $lead->id, $user->id, Disposition::Booked, now());
+        $this->createWorkspaceDisposition($user->company_id, $lead->id, $user->id, Disposition::NoAnswer, now());
+        $this->createWorkspaceSkip($user->company_id, $lead->id, $user->id, now());
+        $this->createWorkspaceDisposition($user->company_id, $lead->id, $otherAgent->id, Disposition::Booked, now());
+        $this->createWorkspaceDisposition($user->company_id, $lead->id, $user->id, Disposition::NotInterested, now()->subDay());
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $user->company_id,
+            'phone' => '4045559100',
+            'status' => LeadStatus::Callback,
+            'lead_type' => 'standard',
+            'callback_owner_id' => $user->id,
+            'callback_at' => now()->subHour(),
+            'imported_at' => now(),
+        ]);
+
+        $this->actingAs($user, 'agent');
+
+        $component = Livewire::test(Workspace::class)
+            ->assertSet('scoreboardPreset', 'today')
+            ->assertSee('Total Leads Called')
+            ->assertSee('Booked')
+            ->assertSee('Not Interested')
+            ->assertSee('Not Qualified')
+            ->assertSee('No Answer / VM')
+            ->assertSee('Wrong / DNC')
+            ->assertSee('Skipped')
+            ->assertSee('Call Backs')
+            ->assertSee('Overdue Call Backs')
+            ->assertSee('Yesterday')
+            ->assertSee('This Week')
+            ->assertSee('Last Week')
+            ->assertSee('MTD')
+            ->assertSee('YTD');
+
+        $today = $component->instance()->scoreboard;
+        $this->assertSame(3, $today['total_leads_called']['count']);
+        $this->assertSame(1, $today['booked']['count']);
+        $this->assertSame(1, $today['no_answer_vm']['count']);
+        $this->assertSame(1, $today['skipped']['count']);
+        $this->assertSame(0, $today['not_interested']['count']);
+        $this->assertSame(1, $today['overdue_callbacks']['count']);
+
+        $component->call('setScoreboardPreset', 'yesterday');
+        $yesterday = $component->instance()->scoreboard;
+        $this->assertSame('yesterday', $component->get('scoreboardPreset'));
+        $this->assertSame(1, $yesterday['total_leads_called']['count']);
+        $this->assertSame(1, $yesterday['not_interested']['count']);
+        $this->assertSame(0, $yesterday['booked']['count']);
+        $this->assertSame(1, $yesterday['overdue_callbacks']['count']);
+
+        $component->call('setScoreboardPreset', 'mtd');
+        $mtd = $component->instance()->scoreboard;
+        $this->assertSame(4, $mtd['total_leads_called']['count']);
+        $this->assertSame(1, $mtd['booked']['count']);
+        $this->assertSame(1, $mtd['not_interested']['count']);
+
+        $component->call('setScoreboardPreset', 'not_a_preset');
+        $this->assertSame('mtd', $component->get('scoreboardPreset'));
+
+        Carbon::setTestNow();
+    }
+
+    private function createWorkspaceDisposition(
+        int $companyId,
+        int $leadId,
+        int $actorId,
+        Disposition $disposition,
+        Carbon $occurredAt,
+    ): void {
+        LeadHistory::withoutGlobalScopes()->create([
+            'company_id' => $companyId,
+            'lead_id' => $leadId,
+            'actor_id' => $actorId,
+            'event_type' => LeadHistoryType::Disposition,
+            'occurred_at' => $occurredAt,
+            'payload' => ['disposition' => $disposition->value],
+        ]);
+    }
+
+    private function createWorkspaceSkip(int $companyId, int $leadId, int $actorId, Carbon $occurredAt): void
+    {
+        LeadHistory::withoutGlobalScopes()->create([
+            'company_id' => $companyId,
+            'lead_id' => $leadId,
+            'actor_id' => $actorId,
+            'event_type' => LeadHistoryType::Skip,
+            'occurred_at' => $occurredAt,
+            'payload' => [],
+        ]);
     }
 }

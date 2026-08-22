@@ -14,6 +14,7 @@ class ComplianceService
 {
     public function __construct(
         private readonly DayPartResolver $dayPartResolver,
+        private readonly AttemptGapResolver $attemptGapResolver,
     ) {}
 
     /**
@@ -41,8 +42,15 @@ class ComplianceService
             return false;
         }
 
-        return $this->isWithinLegalWindow($lead, $at)
-            && $this->isCadenceReady($lead, $at);
+        if (! $this->isWithinLegalWindow($lead, $at)) {
+            return false;
+        }
+
+        if ($lead->status === LeadStatus::Callback) {
+            return true;
+        }
+
+        return $this->isCadenceReady($lead, $at);
     }
 
     public function isWithinLegalWindow(Lead $lead, ?CarbonInterface $at = null): bool
@@ -89,9 +97,41 @@ class ComplianceService
         return (bool) $this->resolveStateRule($lead)?->manual_dial_only;
     }
 
+    /**
+     * Legal calling window on a lead-local calendar date, or null if that day is closed.
+     *
+     * @return array{start: string, end: string}|null
+     */
+    public function legalWindowOnLocalDate(Lead $lead, CarbonInterface $localDate): ?array
+    {
+        $at = $localDate->copy()->timezone($lead->timezone ?: 'America/New_York')->startOfDay();
+
+        if ($this->isBlackedOut($lead, $at)) {
+            return null;
+        }
+
+        $rule = $this->resolveStateRule($lead);
+
+        if (! $rule) {
+            return null;
+        }
+
+        $weekday = (int) $at->dayOfWeek;
+        $permitted = $rule->permitted_weekdays ?? [];
+
+        if ($permitted !== [] && ! in_array($weekday, $permitted, true)) {
+            return null;
+        }
+
+        return [
+            'start' => $this->normalizeTime((string) $rule->window_start),
+            'end' => $this->normalizeTime((string) $rule->window_end),
+        ];
+    }
+
     public function isCadenceReady(Lead $lead, ?CarbonInterface $at = null): bool
     {
-        return $this->dayPartResolver->isCadenceGapSatisfied($lead, $at)
+        return $this->attemptGapResolver->isGapSatisfied($lead, $at)
             && $this->dayPartResolver->matchesNextDayPart($lead, $at);
     }
 

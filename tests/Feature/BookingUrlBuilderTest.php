@@ -8,11 +8,12 @@ use App\Models\Company;
 use App\Models\Lead;
 use App\Services\Leads\BookingUrlBuilder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Support\CreatesCadences;
 use Tests\TestCase;
 
 class BookingUrlBuilderTest extends TestCase
 {
-    use RefreshDatabase;
+    use CreatesCadences, RefreshDatabase;
 
     public function test_builds_url_from_list_template_and_param_map(): void
     {
@@ -26,11 +27,8 @@ class BookingUrlBuilderTest extends TestCase
             'claim_ttl_minutes' => 20,
         ]);
 
-        $list = CallingList::withoutGlobalScopes()->create([
-            'company_id' => $company->id,
+        $list = $this->createCallingList($company->id, overrides: [
             'name' => 'Standard',
-            'lead_type' => 'standard',
-            'active' => true,
             'booking_url_template' => 'https://form.example.com/tnb',
             'booking_param_map' => ['lead_id' => 'external_lead_id'],
         ]);

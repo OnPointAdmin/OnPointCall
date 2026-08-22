@@ -23,6 +23,14 @@ class Dashboard extends BaseDashboard implements HasSchemas
 {
     use InteractsWithSchemas;
 
+    protected static string|\UnitEnum|null $navigationGroup = 'Dashboard';
+
+    protected static ?string $navigationLabel = 'Agent Dashboard';
+
+    protected static ?string $title = 'Agent Dashboard';
+
+    protected static ?int $navigationSort = 1;
+
     protected string $view = 'filament.pages.dashboard';
 
     /**

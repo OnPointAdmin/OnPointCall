@@ -15,6 +15,15 @@ use Illuminate\Support\Facades\DB;
 
 class NextLeadService
 {
+    private const POOL_CANDIDATE_LIMIT = 250;
+
+    /** @var list<string> */
+    private const LEAD_RELATIONS = [
+        'callingList.cadence.dayParts',
+        'callingList.cadence.attemptGaps',
+        'claim',
+    ];
+
     public function __construct(
         private readonly ComplianceService $compliance,
         private readonly LeadClaimService $claimService,
@@ -33,7 +42,7 @@ class NextLeadService
         $existing = $this->claimService->activeClaimForUser($user);
 
         if ($existing?->lead) {
-            return new NextLeadResult(lead: $existing->lead->load(['callingList', 'claim']));
+            return new NextLeadResult(lead: $existing->lead->load(self::LEAD_RELATIONS));
         }
 
         $lead = $this->claimNextLead($user, $listIds);
@@ -72,7 +81,7 @@ class NextLeadService
     private function callbackCandidates(User $user, array $listIds): Collection
     {
         return Lead::withoutGlobalScopes()
-            ->with('callingList')
+            ->with(self::LEAD_RELATIONS)
             ->where('company_id', $user->company_id)
             ->where('status', LeadStatus::Callback)
             ->where('callback_owner_id', $user->id)
@@ -91,14 +100,18 @@ class NextLeadService
     private function poolCandidates(User $user, array $listIds): Collection
     {
         return Lead::withoutGlobalScopes()
-            ->with('callingList')
-            ->where('company_id', $user->company_id)
-            ->where('status', LeadStatus::Callable)
-            ->whereIn('calling_list_id', $listIds)
+            ->with(self::LEAD_RELATIONS)
+            ->join('calling_lists', 'leads.calling_list_id', '=', 'calling_lists.id')
+            ->join('cadences', 'calling_lists.cadence_id', '=', 'cadences.id')
+            ->where('leads.company_id', $user->company_id)
+            ->where('leads.status', LeadStatus::Callable)
+            ->whereIn('leads.calling_list_id', $listIds)
             ->whereDoesntHave('claim', fn ($query) => $query->where('expires_at', '>', now()))
-            ->orderBy('queue_rank')
-            ->orderBy('imported_at')
-            ->limit(50)
+            ->orderByRaw('CASE WHEN cadences.prioritize_unattempted THEN leads.attempt_count ELSE 0 END ASC')
+            ->orderBy('leads.queue_rank')
+            ->orderBy('leads.imported_at')
+            ->select('leads.*')
+            ->limit(self::POOL_CANDIDATE_LIMIT)
             ->get()
             ->filter(fn (Lead $lead): bool => $this->compliance->hasAttemptsRemaining($lead))
             ->values();
@@ -116,7 +129,7 @@ class NextLeadService
 
             $lead = DB::transaction(function () use ($user, $candidate): ?Lead {
                 $lead = Lead::withoutGlobalScopes()
-                    ->with('callingList')
+                    ->with(self::LEAD_RELATIONS)
                     ->whereKey($candidate->id)
                     ->lock('for update skip locked')
                     ->first();
@@ -140,7 +153,7 @@ class NextLeadService
                     'payload' => [],
                 ]);
 
-                return $lead->fresh(['callingList', 'claim']);
+                return $lead->fresh(self::LEAD_RELATIONS);
             });
 
             if ($lead) {
@@ -183,7 +196,13 @@ class NextLeadService
             return EmptyQueueReason::BlockedByHours;
         }
 
-        $cadenceReady = $inHours->filter(fn (Lead $lead): bool => $this->compliance->isCadenceReady($lead));
+        $cadenceReady = $inHours->filter(function (Lead $lead): bool {
+            if ($lead->status === LeadStatus::Callback) {
+                return true;
+            }
+
+            return $this->compliance->isCadenceReady($lead);
+        });
 
         if ($cadenceReady->isEmpty()) {
             return EmptyQueueReason::BlockedByCadence;

@@ -5,6 +5,7 @@ namespace App\Providers\Filament;
 use App\Filament\Pages\Dashboard;
 use App\Http\Middleware\SetCompanyContext;
 use Filament\Http\Middleware\Authenticate;
+use Filament\Navigation\NavigationGroup;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
@@ -49,11 +50,20 @@ class AdminPanelProvider extends PanelProvider
             ->pages([
                 Dashboard::class,
             ])
+            ->navigationGroups([
+                NavigationGroup::make('Dashboard'),
+                NavigationGroup::make('Leads'),
+                NavigationGroup::make('Lists'),
+                NavigationGroup::make('Imports'),
+                NavigationGroup::make('Configuration'),
+                NavigationGroup::make('Administration'),
+            ])
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\Filament\Widgets')
             ->renderHook(
                 PanelsRenderHook::HEAD_END,
                 fn (): HtmlString => new HtmlString(
                     '<link rel="stylesheet" href="'.asset('css/manager-dashboard.css').'?v='.filemtime(public_path('css/manager-dashboard.css')).'">'
+                    .'<link rel="stylesheet" href="'.asset('css/cadence-form.css').'?v='.filemtime(public_path('css/cadence-form.css')).'">'
                 ),
             )
             ->middleware([

@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\CallingLists\Schemas;
 
 use App\Filament\Support\LeadTypeSelect;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -17,9 +18,17 @@ class CallingListForm
                 TextInput::make('name')
                     ->required(),
                 LeadTypeSelect::make(),
-                TextInput::make('cadence')
+                Select::make('cadence_id')
+                    ->label('Cadence')
+                    ->relationship(
+                        name: 'cadence',
+                        titleAttribute: 'name',
+                        modifyQueryUsing: fn ($query) => $query->orderBy('name'),
+                    )
+                    ->searchable()
+                    ->preload()
                     ->required()
-                    ->default('{}'),
+                    ->helperText('Timing, day-part rotation, and attempt wait rules come from the selected cadence.'),
                 TextInput::make('max_attempts_override')
                     ->numeric(),
                 Toggle::make('active')

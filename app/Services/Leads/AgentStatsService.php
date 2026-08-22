@@ -9,11 +9,41 @@ use App\Models\AppSetting;
 use App\Models\Lead;
 use App\Models\LeadHistory;
 use App\Models\User;
+use App\Services\Dashboard\ManagerDashboardService;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 
 class AgentStatsService
 {
+    /**
+     * @return array<string, array{label: string, count: int, percent: ?float}>
+     */
+    public function scoreboardForUser(User $user, string $preset = 'today'): array
+    {
+        $dashboard = app(ManagerDashboardService::class);
+        $timezone = $dashboard->companyTimezone($user->company_id);
+        $dates = $dashboard->presetDates($preset, $timezone);
+        $range = $dashboard->dateRange($user->company_id, $dates['start'], $dates['end']);
+        $report = $dashboard->report($user->company_id, $user->id, null, $range['start'], $range['end']);
+
+        return $report['totals'];
+    }
+
+    /**
+     * @return list<array{key: string, label: string}>
+     */
+    public function scoreboardDatePresets(): array
+    {
+        return [
+            ['key' => 'today', 'label' => 'Today'],
+            ['key' => 'yesterday', 'label' => 'Yesterday'],
+            ['key' => 'this_week', 'label' => 'This Week'],
+            ['key' => 'last_week', 'label' => 'Last Week'],
+            ['key' => 'mtd', 'label' => 'MTD'],
+            ['key' => 'ytd', 'label' => 'YTD'],
+        ];
+    }
+
     /**
      * @return array{bookings: int, calls: int, skips: int, callbacks_pending: int, callable_remaining: int}
      */

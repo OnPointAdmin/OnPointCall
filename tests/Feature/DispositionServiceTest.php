@@ -19,22 +19,24 @@ use App\Models\User;
 use App\Services\Leads\DispositionService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Support\CreatesCadences;
 use Tests\TestCase;
 
 class DispositionServiceTest extends TestCase
 {
-    use RefreshDatabase;
+    use CreatesCadences, RefreshDatabase;
 
     public function test_skip_moves_lead_to_bottom_without_incrementing_attempts(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-08-10 14:00:00', 'America/New_York'));
 
         $company = Company::factory()->create();
+        $cadence = $this->createCadenceWithDayParts($company->id, ['morning']);
         $list = CallingList::withoutGlobalScopes()->create([
             'company_id' => $company->id,
             'name' => 'Standard',
             'lead_type' => 'standard',
-            'cadence' => ['day_parts' => ['morning'], 'min_gap_minutes' => 60],
+            'cadence_id' => $cadence->id,
             'active' => true,
         ]);
 

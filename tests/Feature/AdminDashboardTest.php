@@ -27,6 +27,7 @@ class AdminDashboardTest extends TestCase
         $response->assertOk();
         $response->assertSee('Totals');
         $response->assertSee('Results by Rep');
+        $response->assertSee('Agent Dashboard');
     }
 
     public function test_dashboard_page_renders_report_sections(): void

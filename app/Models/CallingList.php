@@ -6,6 +6,7 @@ use App\Enums\LeadStatus;
 use App\Models\Concerns\BelongsToCompany;
 use App\Models\Concerns\RecordsSettingsChanges;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class CallingList extends Model
@@ -16,7 +17,7 @@ class CallingList extends Model
         'company_id',
         'name',
         'lead_type',
-        'cadence',
+        'cadence_id',
         'max_attempts_override',
         'active',
         'booking_url_template',
@@ -26,10 +27,14 @@ class CallingList extends Model
     protected function casts(): array
     {
         return [
-            'cadence' => 'array',
             'booking_param_map' => 'array',
             'active' => 'boolean',
         ];
+    }
+
+    public function cadence(): BelongsTo
+    {
+        return $this->belongsTo(Cadence::class);
     }
 
     public function leads(): HasMany

@@ -1,0 +1,46 @@
+.fi-cadence-day-parts-table > table {
+    display: table;
+    width: 100%;
+}
+
+.fi-cadence-day-parts-table > table > thead {
+    display: table-header-group;
+}
+
+.fi-cadence-day-parts-table > table > tbody {
+    display: table-row-group;
+}
+
+.fi-cadence-day-parts-table > table > tbody > tr {
+    display: table-row;
+    padding: 0;
+}
+
+.fi-cadence-day-parts-table > table > thead > tr > th,
+.fi-cadence-day-parts-table > table > tbody > tr > td {
+    display: table-cell;
+    text-align: left;
+    vertical-align: middle;
+    padding-inline: 0.75rem;
+    padding-block: 0.5rem;
+}
+
+.fi-cadence-day-parts-table > table > thead > tr > th {
+    font-weight: 600;
+}
+
+.fi-cadence-day-parts-table .fi-fo-field-wrp,
+.fi-cadence-day-parts-table .fi-fo-field-content-col,
+.fi-cadence-day-parts-table .fi-fo-placeholder,
+.fi-cadence-day-parts-table .fi-fo-toggle {
+    justify-content: flex-start;
+}
+
+.fi-cadence-day-parts-table .fi-fo-field-label-content,
+.fi-cadence-day-parts-table .fi-in-entry-label {
+    display: none;
+}
+
+.fi-cadence-day-parts-table .fi-input-wrp {
+    margin-inline-end: auto;
+}

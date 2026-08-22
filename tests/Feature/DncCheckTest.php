@@ -24,11 +24,12 @@ use App\Support\CompanyContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
+use Tests\Support\CreatesCadences;
 use Tests\TestCase;
 
 class DncCheckTest extends TestCase
 {
-    use RefreshDatabase;
+    use CreatesCadences, RefreshDatabase;
 
     public function test_import_dispatches_batched_dnc_jobs_when_enabled(): void
     {
@@ -267,12 +268,8 @@ class DncCheckTest extends TestCase
     {
         $company = Company::factory()->create();
 
-        $list = CallingList::withoutGlobalScopes()->create([
-            'company_id' => $company->id,
+        $list = $this->createCallingList($company->id, overrides: [
             'name' => 'Standard List',
-            'lead_type' => 'standard',
-            'cadence' => [],
-            'active' => true,
         ]);
 
         Lead::withoutGlobalScopes()->create([
