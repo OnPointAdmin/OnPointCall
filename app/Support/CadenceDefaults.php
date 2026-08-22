@@ -101,6 +101,8 @@ class CadenceDefaults
     {
         return [
             ['after_attempt' => 3, 'wait_value' => 2, 'wait_unit' => 'days'],
+            ['after_attempt' => 9, 'wait_value' => 2, 'wait_unit' => 'days'],
+            ['after_attempt' => 12, 'wait_value' => 30, 'wait_unit' => 'days'],
         ];
     }
 

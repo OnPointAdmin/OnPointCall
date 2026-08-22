@@ -149,6 +149,61 @@ class LeadImportServiceTest extends TestCase
         $this->assertSame($existing->id, $skipped->existing_lead_id);
     }
 
+    public function test_standard_default_mapping_covers_leadmaster_columns(): void
+    {
+        $company = Company::factory()->create();
+        CompanyContext::set($company->id);
+
+        (new ImportMappingSeeder)->run($company->id);
+
+        $mapping = ImportMapping::query()->where('name', 'Standard Default')->first();
+
+        $this->assertNotNull($mapping);
+        $this->assertSame('standard', $mapping->lead_type);
+        $this->assertSame('Age Range', $mapping->column_map['age_range'] ?? null);
+        $this->assertSame('Lead Submit Date', $mapping->column_map['original_lead_submit_date'] ?? null);
+        $this->assertSame('Phone 2', $mapping->column_map['phone_2'] ?? null);
+        $this->assertSame('Tour Location', $mapping->column_map['tour_location'] ?? null);
+
+        $csv = implode("\n", [
+            'Lead ID,Phone,First Name,Last Name,First Name 2,Last Name 2,Address,City,State,Zip,Email,Age Range,Annual Income,Marital Status,Gender,Home Owner,Venue,Event,Lead Submit Date,Partner List,File Name,Booking Id,Phone 2,Address 2,Tour Location,Tour Date,Premiums,Tour Result,Tour Or No Show',
+            '00Q-TEST,4045557777,Jane,Doe,John,Doe,1 Main St,Atlanta,GA,30301,jane@example.com,50 - 59,$75k - $99k,Married,Female,Yes,Florida Event 1,Prime Expo,2026-05-13,Holidays Network Group,batch.csv,BK-9,4045558888,Unit 5,Orlando Resort,2026-09-15,2 Nights,Completed,Show',
+        ]);
+
+        $path = storage_path('app/imports/leadmaster-mapping.csv');
+        if (! is_dir(dirname($path))) {
+            mkdir(dirname($path), 0777, true);
+        }
+        file_put_contents($path, $csv);
+
+        $service = app(LeadImportService::class);
+        $batch = $service->createBatch($company->id, 'leadmaster-mapping.csv', 'standard', false);
+
+        $result = $service->process($batch, $path, $mapping->column_map, 'standard');
+
+        CompanyContext::clear();
+
+        $this->assertSame(1, $result['inserted_count']);
+
+        $lead = Lead::withoutGlobalScopes()
+            ->where('company_id', $company->id)
+            ->where('phone', '4045557777')
+            ->first();
+
+        $this->assertNotNull($lead);
+        $this->assertSame('00Q-TEST', $lead->external_lead_id);
+        $this->assertSame('Jane', $lead->first_name);
+        $this->assertSame('John', $lead->first_name_2);
+        $this->assertSame('50 - 59', $lead->age_range);
+        $this->assertSame('$75k - $99k', $lead->annual_income);
+        $this->assertSame('Holidays Network Group', $lead->partner_list);
+        $this->assertSame('2026-05-13', $lead->original_lead_submit_date);
+        $this->assertSame('BK-9', $lead->booking_id);
+        $this->assertSame('4045558888', $lead->phone_2);
+        $this->assertSame('Orlando Resort', $lead->tour_location);
+        $this->assertSame('Show', $lead->tour_or_no_show);
+    }
+
     public function test_ssis_mapping_imports_standard_demographic_columns(): void
     {
         $company = Company::factory()->create();
