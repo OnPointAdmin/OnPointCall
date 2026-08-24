@@ -9,7 +9,7 @@ class AppSettingSeeder extends Seeder
 {
     public function run(int $companyId): void
     {
-        AppSetting::query()->firstOrCreate(
+        $settings = AppSetting::query()->firstOrCreate(
             ['company_id' => $companyId],
             [
                 'max_attempts' => 6,
@@ -17,8 +17,12 @@ class AppSettingSeeder extends Seeder
                 'dashboard_email_enabled' => false,
                 'dashboard_email_send_time' => '07:00:00',
                 'dashboard_email_timezone' => 'America/New_York',
-                'booking_param_map' => ['id' => 'external_lead_id'],
             ],
         );
+
+        $settings->update([
+            'booking_url_template' => 'https://peoplereally.win/data/i_opma_call.html',
+            'booking_param_map' => ['2ff7-7114-0d49' => 'external_lead_id'],
+        ]);
     }
 }
