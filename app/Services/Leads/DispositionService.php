@@ -69,6 +69,9 @@ class DispositionService
 
             if ($disposition->incrementsAttempt()) {
                 $updates['attempt_count'] = $lead->attempt_count + 1;
+            }
+
+            if ($disposition->incrementsAttempt() || $disposition === Disposition::Skip) {
                 $updates['last_attempt_at'] = now();
             }
 
@@ -79,7 +82,7 @@ class DispositionService
                     'callback_owner_id' => $user->id,
                     'callback_at' => $callbackAt,
                 ],
-                Disposition::NoAnswer, Disposition::LeftVm => $updates += [
+                Disposition::NoAnswer, Disposition::LeftVm, Disposition::Skip => $updates += [
                     'status' => LeadStatus::Callable,
                     'callback_owner_id' => null,
                     'callback_at' => null,
@@ -95,13 +98,14 @@ class DispositionService
                     'callback_owner_id' => null,
                     'callback_at' => null,
                 ],
-                Disposition::Skip => $updates += [
-                    'status' => LeadStatus::Callable,
-                    'callback_owner_id' => null,
-                    'callback_at' => null,
-                    'queue_rank' => $this->nextQueueRank($lead),
-                ],
             };
+
+            if ($disposition === Disposition::Skip) {
+                $updates['queue_rank'] = $this->nextQueueRank($lead);
+                $updates['last_skipped_by_user_id'] = $user->id;
+            } else {
+                $updates['last_skipped_by_user_id'] = null;
+            }
 
             $lead->update($updates);
 

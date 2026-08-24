@@ -55,6 +55,7 @@ class Lead extends Model
         'attempt_count',
         'next_day_part',
         'last_attempt_at',
+        'last_skipped_by_user_id',
         'callback_at',
         'callback_owner_id',
         'calling_list_id',
@@ -111,6 +112,11 @@ class Lead extends Model
     public function callbackOwner(): BelongsTo
     {
         return $this->belongsTo(User::class, 'callback_owner_id');
+    }
+
+    public function lastSkippedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'last_skipped_by_user_id');
     }
 
     public function importBatch(): BelongsTo

@@ -26,6 +26,7 @@ class LeadRecycleService
                 'attempt_count' => 0,
                 'next_day_part' => null,
                 'last_attempt_at' => null,
+                'last_skipped_by_user_id' => null,
                 'callback_owner_id' => null,
                 'callback_at' => null,
             ]);

@@ -70,7 +70,10 @@ class NextLeadService
 
         return $this->tryClaimFromCandidates(
             $user,
-            $this->poolCandidates($user, $listIds),
+            $this->preferLeadsNotSkippedBy(
+                $this->poolCandidates($user, $listIds),
+                $user,
+            ),
         );
     }
 
@@ -115,6 +118,22 @@ class NextLeadService
             ->get()
             ->filter(fn (Lead $lead): bool => $this->compliance->hasAttemptsRemaining($lead))
             ->values();
+    }
+
+    /**
+     * Prefer leads another agent can take after a skip; the skipper is fallback only.
+     *
+     * @param  Collection<int, Lead>  $candidates
+     * @return Collection<int, Lead>
+     */
+    private function preferLeadsNotSkippedBy(Collection $candidates, User $user): Collection
+    {
+        [$skippedByUser, $preferred] = $candidates->partition(
+            fn (Lead $lead): bool => $lead->last_skipped_by_user_id !== null
+                && (int) $lead->last_skipped_by_user_id === (int) $user->id,
+        );
+
+        return $preferred->concat($skippedByUser)->values();
     }
 
     /**

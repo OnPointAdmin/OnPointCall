@@ -440,6 +440,8 @@ class AgentWorkspaceTest extends TestCase
         $this->actingAs($user, 'agent');
 
         Livewire::test(Workspace::class)
+            ->assertSeeHtml('type="date"')
+            ->assertSeeHtml('type="time"')
             ->call('applyDisposition', 'callback')
             ->assertHasErrors(['callbackAt'])
             ->assertSet('leadId', $lead->id);

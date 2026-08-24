@@ -44,7 +44,7 @@
     </div>
 
     {{-- RIGHT COLUMN: disposition (primary action) above secondary panels --}}
-    <div class="sticky top-4 flex flex-col gap-3.5" x-data="{ tab: @js($defaultSecondaryTab) }">
+    <div class="sticky top-4 flex flex-col gap-3.5 overflow-visible" x-data="{ tab: @js($defaultSecondaryTab) }">
 
         @if ($leadIsWorkable)
             <div
@@ -70,11 +70,38 @@
 
                     <div x-show="selected === 'callback'" x-cloak class="flex flex-col gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 dark:border-amber-800 dark:bg-amber-500/10">
                         <label class="text-xs font-semibold text-amber-800 dark:text-amber-400">Callback date/time</label>
-                        <input
-                            type="datetime-local"
-                            wire:model="callbackAt"
-                            class="rounded-md border border-amber-300 bg-white px-3 py-1.5 text-sm dark:bg-slate-900"
+                        <div
+                            wire:ignore
+                            class="grid grid-cols-1 gap-1.5"
+                            x-data="{
+                                date: @js(str_contains($callbackAt, 'T') ? strstr($callbackAt, 'T', true) : ''),
+                                time: @js(str_contains($callbackAt, 'T') ? substr(strstr($callbackAt, 'T'), 1) : ''),
+                                sync() {
+                                    $wire.set('callbackAt', this.date && this.time ? (this.date + 'T' + this.time) : '');
+                                },
+                                openPicker(event) {
+                                    const input = event.currentTarget;
+                                    if (typeof input.showPicker === 'function') {
+                                        try { input.showPicker(); } catch (e) {}
+                                    }
+                                },
+                            }"
                         >
+                            <input
+                                type="date"
+                                x-model="date"
+                                x-on:change="sync()"
+                                x-on:click="openPicker($event)"
+                                class="w-full min-h-10 cursor-pointer rounded-md border border-amber-300 bg-white px-3 py-1.5 text-sm dark:bg-slate-900"
+                            >
+                            <input
+                                type="time"
+                                x-model="time"
+                                x-on:change="sync()"
+                                x-on:click="openPicker($event)"
+                                class="w-full min-h-10 cursor-pointer rounded-md border border-amber-300 bg-white px-3 py-1.5 text-sm dark:bg-slate-900"
+                            >
+                        </div>
                         <p class="m-0 text-[11px] text-amber-800/80 dark:text-amber-400/80">Times use {{ $agentTimezone }}</p>
                         @error('callbackAt') <p class="m-0 text-xs text-red-600">{{ $message }}</p> @enderror
                         <button type="button" x-on:click="pendingKey = 'callback'; pendingLabel = 'Callback'; modalOpen = true" class="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-700">Continue</button>

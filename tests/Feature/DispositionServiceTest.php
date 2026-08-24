@@ -31,7 +31,7 @@ class DispositionServiceTest extends TestCase
         Carbon::setTestNow(Carbon::parse('2026-08-10 14:00:00', 'America/New_York'));
 
         $company = Company::factory()->create();
-        $cadence = $this->createCadenceWithDayParts($company->id, ['morning']);
+        $cadence = $this->createCadenceWithDayParts($company->id);
         $list = CallingList::withoutGlobalScopes()->create([
             'company_id' => $company->id,
             'name' => 'Standard',
@@ -95,6 +95,9 @@ class DispositionServiceTest extends TestCase
 
         $this->assertSame(2, $updated->attempt_count);
         $this->assertSame(6, $updated->queue_rank);
+        $this->assertEquals(now(), $updated->last_attempt_at);
+        $this->assertSame('evening', $updated->next_day_part);
+        $this->assertSame($user->id, $updated->last_skipped_by_user_id);
         $this->assertDatabaseMissing('lead_claims', ['lead_id' => $lead->id]);
 
         $history = LeadHistory::withoutGlobalScopes()
@@ -106,6 +109,44 @@ class DispositionServiceTest extends TestCase
         $this->assertNotNull($history);
         $this->assertSame('Busy signal', $history->payload['reason'] ?? null);
         $this->assertSame(LeadStatus::Callable, $updated->status);
+    }
+
+    public function test_non_skip_disposition_clears_last_skipped_by(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-10 14:00:00', 'America/New_York'));
+
+        $company = Company::factory()->create();
+        $cadence = $this->createCadenceWithDayParts($company->id);
+        $list = CallingList::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'name' => 'Standard',
+            'lead_type' => 'standard',
+            'cadence_id' => $cadence->id,
+            'active' => true,
+        ]);
+        $user = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Agent,
+        ]);
+        $lead = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045552004',
+            'state' => 'NY',
+            'timezone' => 'America/New_York',
+            'status' => LeadStatus::Callable,
+            'lead_type' => 'standard',
+            'calling_list_id' => $list->id,
+            'last_skipped_by_user_id' => $user->id,
+            'imported_at' => now(),
+        ]);
+
+        $updated = app(DispositionService::class)->apply(
+            $lead,
+            $user,
+            Disposition::NoAnswer,
+        );
+
+        $this->assertNull($updated->last_skipped_by_user_id);
     }
 
     public function test_skip_requires_configured_reason(): void
