@@ -17,11 +17,7 @@ class DispositionReasonForm
         return $schema
             ->components([
                 Select::make('disposition')
-                    ->options([
-                        Disposition::NotInterested->value => Disposition::NotInterested->label(),
-                        Disposition::NotQualified->value => Disposition::NotQualified->label(),
-                        Disposition::Skip->value => Disposition::Skip->label(),
-                    ])
+                    ->options(Disposition::reasonOptions())
                     ->required(),
                 TextInput::make('label')
                     ->required()

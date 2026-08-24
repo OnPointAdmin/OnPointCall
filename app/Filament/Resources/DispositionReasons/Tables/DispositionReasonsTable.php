@@ -2,11 +2,13 @@
 
 namespace App\Filament\Resources\DispositionReasons\Tables;
 
+use App\Enums\Disposition;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 
 class DispositionReasonsTable
@@ -27,6 +29,10 @@ class DispositionReasonsTable
                     ->sortable(),
                 IconColumn::make('active')
                     ->boolean(),
+            ])
+            ->filters([
+                SelectFilter::make('disposition')
+                    ->options(Disposition::reasonOptions()),
             ])
             ->recordActions([
                 EditAction::make(),

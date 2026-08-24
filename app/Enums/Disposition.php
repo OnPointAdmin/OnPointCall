@@ -45,4 +45,18 @@ enum Disposition: string
             self::WrongNumber,
         ], true);
     }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function reasonOptions(): array
+    {
+        return collect([
+            self::NotInterested,
+            self::NotQualified,
+            self::Skip,
+        ])->mapWithKeys(fn (self $disposition): array => [
+            $disposition->value => $disposition->label(),
+        ])->all();
+    }
 }

@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Enums\Disposition;
 use App\Enums\UserRole;
 use App\Filament\Resources\DispositionReasons\Pages\CreateDispositionReason;
+use App\Filament\Resources\DispositionReasons\Pages\ListDispositionReasons;
 use App\Models\Company;
 use App\Models\DispositionReason;
 use App\Models\User;
@@ -57,6 +58,34 @@ class DispositionReasonResourceTest extends TestCase
             'label' => 'Other',
             'active' => true,
         ]);
+    }
+
+    public function test_list_can_filter_by_disposition(): void
+    {
+        $admin = $this->makeAdmin();
+        CompanyContext::set($admin->company_id);
+
+        $skip = DispositionReason::withoutGlobalScopes()->create([
+            'company_id' => $admin->company_id,
+            'disposition' => Disposition::Skip,
+            'label' => 'Skip Other',
+            'sort_order' => 0,
+            'active' => true,
+        ]);
+        $notQualified = DispositionReason::withoutGlobalScopes()->create([
+            'company_id' => $admin->company_id,
+            'disposition' => Disposition::NotQualified,
+            'label' => 'Age',
+            'sort_order' => 1,
+            'active' => true,
+        ]);
+
+        Livewire::actingAs($admin)
+            ->test(ListDispositionReasons::class)
+            ->assertCanSeeTableRecords([$skip, $notQualified])
+            ->filterTable('disposition', Disposition::Skip->value)
+            ->assertCanSeeTableRecords([$skip])
+            ->assertCanNotSeeTableRecords([$notQualified]);
     }
 
     private function makeAdmin(): User
