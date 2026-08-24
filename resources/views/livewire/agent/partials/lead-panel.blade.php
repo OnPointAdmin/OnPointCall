@@ -80,6 +80,7 @@
     };
 
     $tourValue = fn ($value) => ($value !== null && $value !== '') ? $value : '—';
+    $canPutBackCallback = $canPutBackCallback ?? false;
 
     $outcomePillClasses = function (?string $dispositionValue): string {
         return match ($dispositionValue) {
@@ -100,6 +101,15 @@
             <span class="text-xs text-slate-400 dark:text-slate-500">{{ $lead->id }}</span>
         </div>
         <div class="flex flex-shrink-0 items-center gap-2">
+            @if ($canPutBackCallback)
+                <button
+                    type="button"
+                    wire:click="putBackCallback"
+                    class="whitespace-nowrap rounded-md border border-slate-300 bg-white px-3.5 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-950"
+                >
+                    Put Back
+                </button>
+            @endif
             @unless ($isReadOnly)
                 <template x-if="!editMode">
                     <button

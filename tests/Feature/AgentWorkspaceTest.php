@@ -334,7 +334,107 @@ class AgentWorkspaceTest extends TestCase
 
         Livewire::test(Workspace::class)
             ->call('openCallback', $lead->id)
+            ->assertSet('leadId', $lead->id)
+            ->assertSee('Put Back');
+    }
+
+    public function test_put_back_keeps_callback_and_clears_workspace(): void
+    {
+        [$user, $lead] = $this->makeWorkableLead([
+            'status' => LeadStatus::Callback,
+            'callback_at' => now()->subHour(),
+            'timezone' => 'America/New_York',
+            'state' => 'GA',
+            'soft_score_status' => SoftScoreStatus::Complete,
+            'soft_score_code' => 'A',
+            'soft_score_checked_at' => now(),
+            'qualification_status' => QualificationStatus::Qualified,
+            'qualification_checked_at' => now(),
+        ]);
+        $lead->update([
+            'callback_owner_id' => $user->id,
+        ]);
+
+        $this->actingAs($user, 'agent');
+
+        Livewire::test(Workspace::class)
+            ->call('putBackCallback')
+            ->assertSet('leadId', null)
+            ->assertSee('Callback kept on your list');
+
+        $lead->refresh();
+
+        $this->assertSame(LeadStatus::Callback, $lead->status);
+        $this->assertSame($user->id, $lead->callback_owner_id);
+        $this->assertNotNull($lead->callback_at);
+        $this->assertSame(0, $lead->attempt_count);
+        $this->assertDatabaseMissing('lead_claims', ['lead_id' => $lead->id]);
+    }
+
+    public function test_put_back_does_not_apply_to_pool_leads(): void
+    {
+        [$user, $lead] = $this->makeWorkableLead([
+            'soft_score_status' => SoftScoreStatus::Complete,
+            'soft_score_code' => 'A',
+            'soft_score_checked_at' => now(),
+            'qualification_status' => QualificationStatus::Qualified,
+            'qualification_checked_at' => now(),
+        ]);
+        $this->actingAs($user, 'agent');
+
+        Livewire::test(Workspace::class)
+            ->assertSee('Skip')
+            ->assertDontSee('Put Back')
+            ->call('putBackCallback')
             ->assertSet('leadId', $lead->id);
+
+        $this->assertDatabaseHas('lead_claims', ['lead_id' => $lead->id]);
+    }
+
+    public function test_put_back_restores_previously_claimed_pool_lead(): void
+    {
+        [$user, $poolLead] = $this->makeWorkableLead([
+            'soft_score_status' => SoftScoreStatus::Complete,
+            'soft_score_code' => 'A',
+            'soft_score_checked_at' => now(),
+            'qualification_status' => QualificationStatus::Qualified,
+            'qualification_checked_at' => now(),
+        ]);
+
+        $callback = Lead::withoutGlobalScopes()->create([
+            'company_id' => $user->company_id,
+            'phone' => '4045555101',
+            'first_name' => 'Kim',
+            'status' => LeadStatus::Callback,
+            'lead_type' => 'standard',
+            'calling_list_id' => $poolLead->calling_list_id,
+            'callback_owner_id' => $user->id,
+            'callback_at' => now()->subHour(),
+            'timezone' => 'America/New_York',
+            'state' => 'GA',
+            'imported_at' => now(),
+            'soft_score_status' => SoftScoreStatus::Complete,
+            'soft_score_code' => 'A',
+            'soft_score_checked_at' => now(),
+            'qualification_status' => QualificationStatus::Qualified,
+            'qualification_checked_at' => now(),
+        ]);
+
+        $this->actingAs($user, 'agent');
+
+        Livewire::test(Workspace::class)
+            ->assertSet('leadId', $poolLead->id)
+            ->call('openCallback', $callback->id)
+            ->assertSet('leadId', $callback->id)
+            ->call('putBackCallback')
+            ->assertSet('leadId', $poolLead->id);
+
+        $callback->refresh();
+
+        $this->assertSame(LeadStatus::Callback, $callback->status);
+        $this->assertSame($user->id, $callback->callback_owner_id);
+        $this->assertDatabaseMissing('lead_claims', ['lead_id' => $callback->id]);
+        $this->assertDatabaseHas('lead_claims', ['lead_id' => $poolLead->id]);
     }
 
     public function test_not_interested_requires_reason(): void

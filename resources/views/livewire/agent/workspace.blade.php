@@ -1,6 +1,9 @@
 @php
     $secondaryTabs = ['scoreboard' => 'Scoreboard', 'leaderboard' => 'Leaderboard', 'callbacks' => 'Callbacks', 'lookup' => 'Lookup'];
     $leadIsWorkable = $lead && ! $leadReadOnly && ! in_array($lead->status->value, ['booked', 'terminal', 'dnc'], true);
+    $canPutBackCallback = $lead
+        && $lead->status->value === 'callback'
+        && $lead->callback_owner_id === auth('agent')->id();
 @endphp
 
 <div class="grid grid-cols-1 items-start gap-5 md:grid-cols-[1fr_320px]" wire:poll.10s>
@@ -39,6 +42,7 @@
                 'softScoreMessage' => $softScoreMessage,
                 'qualificationMessage' => $qualificationMessage,
                 'showSoftScoreRecentModal' => $showSoftScoreRecentModal,
+                'canPutBackCallback' => $canPutBackCallback,
             ])
         @endif
     </div>
@@ -118,13 +122,24 @@
                     <button type="button" x-on:click="selected = 'dnc'; pendingKey = 'dnc'; pendingLabel = 'DNC'; modalOpen = true" class="w-full rounded-lg border border-red-200 bg-red-50 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100 dark:border-red-800 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20">DNC</button>
 
                     <div class="mt-1 border-t border-dashed border-slate-200 pt-3 dark:border-slate-800">
-                        <button
-                            type="button"
-                            x-on:click="selected = 'skip'; pendingKey = 'skip'; pendingLabel = 'Skip'; modalOpen = true; $wire.set('dispositionReasonId', null)"
-                            class="w-full rounded-lg border border-dashed border-slate-400 bg-white py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-950"
-                        >
-                            Skip
-                        </button>
+                        @if ($canPutBackCallback)
+                            <button
+                                type="button"
+                                wire:click="putBackCallback"
+                                class="w-full rounded-lg border border-slate-300 bg-white py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-950"
+                            >
+                                Put Back
+                            </button>
+                            <p class="m-0 mt-1.5 text-[11px] leading-snug text-slate-400 dark:text-slate-500">Keeps this callback. Open it again when you are ready to call.</p>
+                        @else
+                            <button
+                                type="button"
+                                x-on:click="selected = 'skip'; pendingKey = 'skip'; pendingLabel = 'Skip'; modalOpen = true; $wire.set('dispositionReasonId', null)"
+                                class="w-full rounded-lg border border-dashed border-slate-400 bg-white py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-950"
+                            >
+                                Skip
+                            </button>
+                        @endif
                     </div>
                 </div>
 

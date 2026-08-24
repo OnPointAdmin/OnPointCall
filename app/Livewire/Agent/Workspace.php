@@ -313,6 +313,46 @@ class Workspace extends Component
         }
     }
 
+    public function putBackCallback(): void
+    {
+        $user = Auth::guard('agent')->user();
+        $lead = $this->currentLead();
+
+        if (! $lead || $lead->status !== LeadStatus::Callback || $lead->callback_owner_id !== $user->id) {
+            return;
+        }
+
+        app(LeadClaimService::class)->releaseClaimForLead($lead, $user->id);
+
+        $this->resetDispositionFields();
+        $this->editable = [];
+        $this->lookupLeadId = null;
+        $this->lookupReadOnly = false;
+        $this->softScoreMessage = '';
+        $this->qualificationMessage = '';
+        $this->showSoftScoreRecentModal = false;
+
+        $remaining = app(LeadClaimService::class)->activeClaimForUser($user);
+
+        if ($remaining?->lead && $remaining->lead_id !== $lead->id) {
+            $this->leadReadOnly = false;
+            $this->leadReadOnlyMessage = '';
+            $this->loadLead($remaining->lead->load([
+                'callingList',
+                'claim',
+                'history' => fn ($q) => $this->callHistoryQuery($q),
+            ]));
+            $this->emptyMessage = null;
+
+            return;
+        }
+
+        $this->leadId = null;
+        $this->leadReadOnly = false;
+        $this->leadReadOnlyMessage = '';
+        $this->emptyMessage = 'Callback kept on your list. Open it again when you are ready to call.';
+    }
+
     public function runSoftScore(): void
     {
         $lead = $this->currentLead();
