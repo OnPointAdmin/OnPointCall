@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\AppSettings\Schemas;
 
+use App\Support\CompanyTimezone;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\TimePicker;
@@ -29,10 +31,12 @@ class AppSettingForm
                     ->required(),
                 TimePicker::make('dashboard_email_send_time')
                     ->required(),
-                TextInput::make('dashboard_email_timezone')
-                    ->email()
+                Select::make('dashboard_email_timezone')
+                    ->label('Agent timezone')
+                    ->options(CompanyTimezone::options())
                     ->required()
-                    ->default('America/New_York'),
+                    ->default(CompanyTimezone::DEFAULT)
+                    ->helperText('Used for dashboard dates, digest emails, and callback due times.'),
                 TextInput::make('soft_score_originator'),
                 TextInput::make('soft_score_base_url')
                     ->url(),

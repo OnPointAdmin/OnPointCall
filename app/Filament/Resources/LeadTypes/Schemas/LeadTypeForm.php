@@ -33,7 +33,7 @@ class LeadTypeForm
                     ->unique(
                         ignoreRecord: true,
                         modifyRuleUsing: function (Unique $rule): Unique {
-                            $companyId = CompanyContext::id();
+                            $companyId = CompanyContext::idOrAuthenticated();
 
                             return $companyId
                                 ? $rule->where('company_id', $companyId)

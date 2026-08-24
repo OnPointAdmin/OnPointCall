@@ -56,7 +56,7 @@ class ListUsers extends ListRecords
                         ->required(),
                 ])
                 ->action(function (array $data, UserInviteService $invites): void {
-                    $companyId = CompanyContext::id() ?? auth()->user()?->company_id;
+                    $companyId = CompanyContext::idOrAuthenticated();
                     $company = Company::query()->find($companyId);
 
                     if (! $company) {

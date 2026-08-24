@@ -38,6 +38,8 @@ class DispositionService
             if (! $callbackAt || ! $this->compliance->validateCallbackTime($lead, $callbackAt)) {
                 throw CallbackOutsideWindowException::make();
             }
+
+            $callbackAt = $callbackAt->copy()->utc();
         }
 
         $requiresReason = in_array($disposition, [Disposition::NotInterested, Disposition::NotQualified, Disposition::Skip], true);

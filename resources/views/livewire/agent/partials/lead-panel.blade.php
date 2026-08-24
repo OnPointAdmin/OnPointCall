@@ -152,7 +152,7 @@
         </div>
     @elseif ($lead->status->value === 'callback' && $lead->callback_at?->isPast())
         <div class="border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm font-semibold text-amber-900 dark:border-amber-800 dark:bg-amber-500/10 dark:text-amber-400">
-            Callback overdue — {{ $lead->callback_at->format('M j, g:i A') }}
+            Callback overdue — {{ \App\Support\CompanyTimezone::display($lead->callback_at) }}
         </div>
     @endif
 
@@ -218,7 +218,7 @@
                 @endif
                 <div>
                     <p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Last call</p>
-                    <p class="m-0 mt-0.5 text-sm text-slate-900 dark:text-slate-100">{{ $lead->last_attempt_at?->format('M j, g:i A') ?? '—' }}</p>
+                    <p class="m-0 mt-0.5 text-sm text-slate-900 dark:text-slate-100">{{ \App\Support\CompanyTimezone::display($lead->last_attempt_at) ?? '—' }}</p>
                 </div>
             </div>
         </div>
@@ -311,7 +311,7 @@
                     <p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Soft Score</p>
                     <p class="m-0 mt-0.5 select-none text-sm text-slate-900 dark:text-slate-100" oncopy="return false">{{ $softScoreDisplay }}</p>
                     @if ($lead->soft_score_checked_at)
-                        <p class="m-0 mt-0.5 text-xs text-slate-500 dark:text-slate-400">Last checked {{ $lead->soft_score_checked_at->timezone(config('app.timezone'))->format('M j, Y') }}</p>
+                        <p class="m-0 mt-0.5 text-xs text-slate-500 dark:text-slate-400">Last checked {{ \App\Support\CompanyTimezone::display($lead->soft_score_checked_at, format: 'M j, Y') }}</p>
                     @endif
                 </div>
             </div>
@@ -422,7 +422,7 @@
                         : ($entry->noteLabel() ?? '—');
                 @endphp
                 <div class="grid items-center gap-0 border-t border-slate-100 py-2 dark:border-slate-800" style="grid-template-columns: 140px 130px 140px 90px minmax(160px, 1fr); min-width: 640px;">
-                    <span class="whitespace-nowrap pl-5 text-sm text-slate-900 dark:text-slate-100">{{ $entry->occurred_at?->format('M j, g:i A') ?? '—' }}</span>
+                    <span class="whitespace-nowrap pl-5 text-sm text-slate-900 dark:text-slate-100">{{ \App\Support\CompanyTimezone::display($entry->occurred_at) ?? '—' }}</span>
                     <span class="pl-3 text-xs">
                         <span class="inline-block rounded-full px-2.5 py-0.5 font-bold {{ $outcomePillClasses(is_string($dispositionValue) ? $dispositionValue : null) }}">{{ $outcomeLabel }}</span>
                     </span>
@@ -457,7 +457,7 @@
                     @endif
                     @if ($lead->soft_score_checked_at)
                         <span class="block text-xs text-slate-500 dark:text-slate-400">
-                            Last checked {{ $lead->soft_score_checked_at->timezone(config('app.timezone'))->format('M j, Y') }}
+                            Last checked {{ \App\Support\CompanyTimezone::display($lead->soft_score_checked_at, format: 'M j, Y') }}
                         </span>
                     @endif
                 </p>

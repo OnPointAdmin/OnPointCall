@@ -7,6 +7,7 @@ use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
 use App\Enums\UserRole;
 use App\Filament\Resources\Leads\Pages\ListLeads;
+use App\Models\AppSetting;
 use App\Models\Company;
 use App\Models\Lead;
 use App\Models\LeadHistory;
@@ -23,13 +24,20 @@ class LeadsTableTest extends TestCase
 
     public function test_lead_list_shows_last_disposition_and_last_call_date(): void
     {
-        Carbon::setTestNow(Carbon::parse('2026-08-10 14:00:00', 'America/New_York'));
+        Carbon::setTestNow(Carbon::parse('2026-08-10 14:00:00', 'America/New_York')->utc());
 
         $company = Company::factory()->create();
         $admin = User::factory()->create([
             'company_id' => $company->id,
             'role' => UserRole::Admin,
             'active' => true,
+        ]);
+
+        AppSetting::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'max_attempts' => 6,
+            'claim_ttl_minutes' => 20,
+            'dashboard_email_timezone' => 'America/Los_Angeles',
         ]);
 
         $lead = Lead::withoutGlobalScopes()->create([
@@ -42,7 +50,7 @@ class LeadsTableTest extends TestCase
             'status' => LeadStatus::Callable,
             'lead_type' => 'standard',
             'imported_at' => now(),
-            'last_attempt_at' => Carbon::parse('2026-08-10 14:00:00', 'America/New_York'),
+            'last_attempt_at' => Carbon::parse('2026-08-10 14:00:00', 'America/New_York')->utc(),
         ]);
 
         LeadHistory::withoutGlobalScopes()->create([
@@ -72,6 +80,8 @@ class LeadsTableTest extends TestCase
             ->assertSee('Last Call Date')
             ->assertSee('Left VM')
             ->assertDontSee('No Answer')
-            ->assertSee('Aug 10, 2026');
+            ->assertSee('Aug 10, 2026')
+            ->assertSee('11:00')
+            ->assertDontSee('18:00');
     }
 }

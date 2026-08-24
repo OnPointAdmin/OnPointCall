@@ -4,7 +4,9 @@ namespace App\Providers;
 
 use App\Http\Controllers\Admin\FilamentLogoutController;
 use App\Services\Leads\DialableInventoryService;
+use App\Support\CompanyTimezone;
 use Filament\Auth\Http\Controllers\LogoutController as FilamentVendorLogoutController;
+use Filament\Support\Facades\FilamentTimezone;
 use Illuminate\Console\Events\CommandStarting;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
@@ -27,6 +29,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        FilamentTimezone::set(fn (): string => CompanyTimezone::forAuthenticated());
+
         $this->ignoreDockerBladeUtimeFailures();
         Event::listen(CommandStarting::class, function (CommandStarting $event): void {
             if (! in_array($event->command, ['migrate:fresh', 'migrate:refresh', 'db:wipe'], true)) {

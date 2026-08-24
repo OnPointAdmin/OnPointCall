@@ -75,6 +75,7 @@
                             wire:model="callbackAt"
                             class="rounded-md border border-amber-300 bg-white px-3 py-1.5 text-sm dark:bg-slate-900"
                         >
+                        <p class="m-0 text-[11px] text-amber-800/80 dark:text-amber-400/80">Times use {{ $agentTimezone }}</p>
                         @error('callbackAt') <p class="m-0 text-xs text-red-600">{{ $message }}</p> @enderror
                         <button type="button" x-on:click="pendingKey = 'callback'; pendingLabel = 'Callback'; modalOpen = true" class="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-700">Continue</button>
                     </div>
@@ -231,7 +232,7 @@
                                 >
                                     <div class="flex items-center justify-between gap-2">
                                         <span class="font-medium text-slate-700 dark:text-slate-300">{{ $callback->fullName() ?: $callback->phone }}</span>
-                                        <span class="text-[11px] text-slate-400 dark:text-slate-500">{{ $callback->callback_at?->format('M j, g:i A') }}</span>
+                                        <span class="text-[11px] text-slate-400 dark:text-slate-500">{{ \App\Support\CompanyTimezone::display($callback->callback_at) }}</span>
                                     </div>
                                     @if ($callback->callback_at?->isPast())
                                         <p class="m-0 mt-1 text-xs font-bold text-red-700">Overdue</p>

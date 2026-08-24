@@ -29,7 +29,7 @@ class DispositionReasonForm
                     ->unique(
                         ignoreRecord: true,
                         modifyRuleUsing: function (Unique $rule, callable $get): Unique {
-                            $companyId = CompanyContext::id();
+                            $companyId = CompanyContext::idOrAuthenticated();
                             $disposition = $get('disposition');
 
                             $rule = $rule->where('disposition', $disposition);

@@ -28,6 +28,10 @@ return Application::configure(basePath: dirname(__DIR__))
             return route('agent.login');
         });
 
+        $middleware->web(append: [
+            SetCompanyContext::class,
+        ]);
+
         $middleware->alias([
             'can.call' => EnsureCanCall::class,
             'company.context' => SetCompanyContext::class,

@@ -27,7 +27,7 @@
 
     @if ($lead->last_attempt_at)
         <p class="m-0 mt-3 text-xs font-semibold text-slate-400 dark:text-slate-500">Last call</p>
-        <p class="m-0 mt-0.5 text-sm text-slate-700 dark:text-slate-300">{{ $lead->last_attempt_at->format('M j, g:i A') }}</p>
+        <p class="m-0 mt-0.5 text-sm text-slate-700 dark:text-slate-300">{{ \App\Support\CompanyTimezone::display($lead->last_attempt_at) }}</p>
     @endif
 
     @php
@@ -37,7 +37,7 @@
         <p class="m-0 mt-3 text-xs font-semibold text-slate-400 dark:text-slate-500">Last disposition</p>
         <p class="m-0 mt-0.5 text-sm text-slate-700 dark:text-slate-300">
             {{ $lastDisposition->payload['disposition'] ?? '—' }}
-            ({{ $lastDisposition->occurred_at?->format('M j, g:i A') }})
+            ({{ \App\Support\CompanyTimezone::display($lastDisposition->occurred_at) }})
         </p>
     @endif
 </div>

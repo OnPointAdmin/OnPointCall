@@ -25,8 +25,8 @@ use App\Services\Leads\LeadLookupService;
 use App\Services\Leads\NextLeadService;
 use App\Services\Qualification\QualificationService;
 use App\Services\SoftScore\SoftScoreService;
+use App\Support\CompanyTimezone;
 use App\Support\PhoneNormalizer;
-use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -262,7 +262,16 @@ class Workspace extends Component
             $callbackAt = null;
 
             if ($disposition === Disposition::Callback) {
-                $callbackAt = Carbon::parse($this->callbackAt);
+                if (trim($this->callbackAt) === '') {
+                    $this->addError('callbackAt', 'Callback date/time is required.');
+
+                    return;
+                }
+
+                $callbackAt = CompanyTimezone::parse(
+                    $this->callbackAt,
+                    Auth::guard('agent')->user()->company_id,
+                );
             }
 
             $reason = null;
@@ -719,6 +728,7 @@ class Workspace extends Component
             'notInterestedReasons' => $this->reasonsFor(Disposition::NotInterested),
             'notQualifiedReasons' => $this->reasonsFor(Disposition::NotQualified),
             'skipReasons' => $this->reasonsFor(Disposition::Skip),
+            'agentTimezone' => CompanyTimezone::for(Auth::guard('agent')->user()->company_id),
         ]);
     }
 }

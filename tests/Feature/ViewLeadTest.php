@@ -109,7 +109,7 @@ class ViewLeadTest extends TestCase
             ],
         ]);
 
-        $this->assertSame('Callback · Callback: 2026-08-11T10:00:00-04:00', $history->detailLabel());
+        $this->assertSame('Callback · Callback: Aug 11, 10:00 AM EDT', $history->detailLabel());
 
         $statusChange = new LeadHistory([
             'event_type' => LeadHistoryType::StatusChange,

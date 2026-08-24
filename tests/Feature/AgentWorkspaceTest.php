@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\Disposition;
+use App\Enums\EmptyQueueReason;
 use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
 use App\Enums\QualificationStatus;
@@ -11,13 +12,16 @@ use App\Enums\UserRole;
 use App\Jobs\QualifyLeadJob;
 use App\Jobs\SoftScoreLeadJob;
 use App\Livewire\Agent\Workspace;
+use App\Models\AppSetting;
 use App\Models\CallingList;
 use App\Models\Company;
 use App\Models\Lead;
 use App\Models\LeadClaim;
 use App\Models\LeadHistory;
 use App\Models\ListAssignment;
+use App\Models\StateRule;
 use App\Models\User;
+use App\Services\Leads\NextLeadService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -365,6 +369,119 @@ class AgentWorkspaceTest extends TestCase
             ->call('applyDisposition', 'skip')
             ->assertHasErrors(['dispositionReasonId'])
             ->assertSet('leadId', $lead->id);
+    }
+
+    public function test_callback_time_uses_app_setting_timezone_and_is_not_due_until_that_local_time(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-10 14:00:00', 'America/New_York')->utc());
+
+        [$user, $lead] = $this->makeWorkableLead([
+            'state' => 'NY',
+            'timezone' => 'America/New_York',
+            'soft_score_status' => SoftScoreStatus::Complete,
+            'soft_score_code' => 'A',
+            'soft_score_checked_at' => now(),
+            'qualification_status' => QualificationStatus::Qualified,
+            'qualification_checked_at' => now(),
+        ]);
+
+        AppSetting::withoutGlobalScopes()->create([
+            'company_id' => $user->company_id,
+            'max_attempts' => 6,
+            'claim_ttl_minutes' => 20,
+            'dashboard_email_timezone' => 'America/Los_Angeles',
+        ]);
+
+        StateRule::withoutGlobalScopes()->create([
+            'company_id' => $user->company_id,
+            'state_code' => 'NY',
+            'window_start' => '08:00:00',
+            'window_end' => '21:00:00',
+            'permitted_weekdays' => [0, 1, 2, 3, 4, 5, 6],
+            'manual_dial_only' => false,
+        ]);
+
+        $this->actingAs($user, 'agent');
+
+        Livewire::test(Workspace::class)
+            ->set('callbackAt', '2026-08-10T16:00')
+            ->call('applyDisposition', 'callback')
+            ->assertHasNoErrors()
+            ->assertSee('4:00 PM PDT');
+
+        $lead->refresh();
+
+        $expected = Carbon::parse('2026-08-10 16:00:00', 'America/Los_Angeles');
+        $this->assertTrue($lead->callback_at->equalTo($expected));
+        $this->assertFalse($lead->callback_at->equalTo(Carbon::parse('2026-08-10 16:00:00', 'UTC')));
+
+        $result = app(NextLeadService::class)->getNext($user);
+        $this->assertFalse($result->hasLead());
+        $this->assertSame(EmptyQueueReason::NoneAvailable, $result->emptyReason);
+
+        Carbon::setTestNow(Carbon::parse('2026-08-10 16:00:00', 'America/Los_Angeles')->utc());
+
+        $result = app(NextLeadService::class)->getNext($user);
+        $this->assertTrue($result->hasLead());
+        $this->assertSame($lead->id, $result->lead?->id);
+
+        Carbon::setTestNow();
+    }
+
+    public function test_callback_requires_date_time(): void
+    {
+        [$user, $lead] = $this->makeWorkableLead([
+            'soft_score_status' => SoftScoreStatus::Complete,
+            'soft_score_code' => 'A',
+            'soft_score_checked_at' => now(),
+            'qualification_status' => QualificationStatus::Qualified,
+            'qualification_checked_at' => now(),
+        ]);
+        $this->actingAs($user, 'agent');
+
+        Livewire::test(Workspace::class)
+            ->call('applyDisposition', 'callback')
+            ->assertHasErrors(['callbackAt'])
+            ->assertSet('leadId', $lead->id);
+    }
+
+    public function test_workspace_displays_last_call_and_history_in_app_setting_timezone(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-10 14:00:00', 'America/New_York')->utc());
+
+        [$user, $lead] = $this->makeWorkableLead([
+            'last_attempt_at' => Carbon::parse('2026-08-10 14:00:00', 'America/New_York')->utc(),
+            'soft_score_status' => SoftScoreStatus::Complete,
+            'soft_score_code' => 'A',
+            'soft_score_checked_at' => Carbon::parse('2026-08-10 14:00:00', 'America/New_York')->utc(),
+            'qualification_status' => QualificationStatus::Qualified,
+            'qualification_checked_at' => now(),
+        ]);
+
+        AppSetting::withoutGlobalScopes()->create([
+            'company_id' => $user->company_id,
+            'max_attempts' => 6,
+            'claim_ttl_minutes' => 20,
+            'dashboard_email_timezone' => 'America/Los_Angeles',
+        ]);
+
+        LeadHistory::withoutGlobalScopes()->create([
+            'company_id' => $user->company_id,
+            'lead_id' => $lead->id,
+            'actor_id' => $user->id,
+            'event_type' => LeadHistoryType::Disposition,
+            'occurred_at' => Carbon::parse('2026-08-10 14:00:00', 'America/New_York')->utc(),
+            'payload' => ['disposition' => Disposition::LeftVm->value],
+        ]);
+
+        $this->actingAs($user, 'agent');
+
+        Livewire::test(Workspace::class)
+            ->assertSee('11:00 AM PDT')
+            ->assertSee('Last checked Aug 10, 2026')
+            ->assertDontSee('6:00 PM');
+
+        Carbon::setTestNow();
     }
 
     public function test_lead_panel_shows_tnb_fields_and_hides_partners(): void

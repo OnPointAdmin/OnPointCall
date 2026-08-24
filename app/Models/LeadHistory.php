@@ -9,6 +9,7 @@ use App\Enums\QualificationStatus;
 use App\Enums\RndStatus;
 use App\Enums\SoftScoreStatus;
 use App\Models\Concerns\BelongsToCompany;
+use App\Support\CompanyTimezone;
 use App\Support\LeadDisplayFields;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -156,8 +157,9 @@ class LeadHistory extends Model
             $parts[] = $payload['reason'];
         }
 
-        if (isset($payload['callback_at']) && is_string($payload['callback_at'])) {
-            $parts[] = 'Callback: '.$payload['callback_at'];
+        if (isset($payload['callback_at']) && is_string($payload['callback_at']) && $payload['callback_at'] !== '') {
+            $formatted = CompanyTimezone::display($payload['callback_at'], $this->company_id);
+            $parts[] = 'Callback: '.($formatted ?? $payload['callback_at']);
         }
 
         return $parts !== [] ? implode(' · ', $parts) : '—';

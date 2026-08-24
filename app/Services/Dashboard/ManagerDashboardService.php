@@ -10,6 +10,7 @@ use App\Models\AppSetting;
 use App\Models\Lead;
 use App\Models\LeadHistory;
 use App\Models\User;
+use App\Support\CompanyTimezone;
 use Carbon\Carbon;
 
 class ManagerDashboardService
@@ -154,11 +155,7 @@ class ManagerDashboardService
 
     public function companyTimezone(int $companyId): string
     {
-        $settings = AppSetting::withoutGlobalScopes()
-            ->where('company_id', $companyId)
-            ->first();
-
-        return $this->timezone($settings);
+        return CompanyTimezone::for($companyId);
     }
 
     /**
@@ -471,6 +468,6 @@ class ManagerDashboardService
 
     private function timezone(?AppSetting $settings): string
     {
-        return $settings?->dashboard_email_timezone ?? 'America/New_York';
+        return CompanyTimezone::normalize($settings?->dashboard_email_timezone);
     }
 }

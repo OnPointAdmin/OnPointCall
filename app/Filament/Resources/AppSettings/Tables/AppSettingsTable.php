@@ -29,6 +29,7 @@ class AppSettingsTable
                     ->time()
                     ->sortable(),
                 TextColumn::make('dashboard_email_timezone')
+                    ->label('Agent timezone')
                     ->searchable(),
                 TextColumn::make('soft_score_originator')
                     ->searchable(),

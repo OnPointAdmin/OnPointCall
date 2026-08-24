@@ -16,7 +16,7 @@
         </div>
         <div>
             <p class="text-xs font-medium text-gray-500 dark:text-gray-400">Checked at</p>
-            <p>{{ $lead->qualification_checked_at?->format('M j, Y g:i A') ?: '—' }}</p>
+            <p>{{ \App\Support\CompanyTimezone::display($lead->qualification_checked_at, format: 'M j, Y g:i A T') ?: '—' }}</p>
         </div>
     </div>
 
