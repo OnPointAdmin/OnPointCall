@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureCanCall;
+use App\Http\Middleware\EnsurePasswordChanged;
 use App\Http\Middleware\SetCompanyContext;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Application;
@@ -35,6 +36,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'can.call' => EnsureCanCall::class,
             'company.context' => SetCompanyContext::class,
+            'password.changed' => EnsurePasswordChanged::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

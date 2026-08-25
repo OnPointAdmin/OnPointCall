@@ -2,9 +2,13 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Pages\Auth\EditProfile;
 use App\Filament\Pages\Dashboard;
+use App\Http\Middleware\EnsurePasswordChanged;
 use App\Http\Middleware\SetCompanyContext;
+use Filament\Actions\Action;
 use Filament\Http\Middleware\Authenticate;
+use Filament\Support\Icons\Heroicon;
 use Filament\Navigation\NavigationGroup;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -32,6 +36,12 @@ class AdminPanelProvider extends PanelProvider
             ->authGuard('web')
             ->login()
             ->passwordReset()
+            ->profile(EditProfile::class, isSimple: false)
+            ->userMenuItems([
+                'profile' => fn (Action $action): Action => $action
+                    ->label('Change password')
+                    ->icon(Heroicon::OutlinedKey),
+            ])
             ->brandLogo(function (): HtmlString {
                 return new HtmlString(
                     view('components.brand-mark', [
@@ -80,6 +90,7 @@ class AdminPanelProvider extends PanelProvider
             ->authMiddleware([
                 Authenticate::class,
                 SetCompanyContext::class,
+                EnsurePasswordChanged::class,
             ]);
     }
 }

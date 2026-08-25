@@ -19,7 +19,7 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
-#[Fillable(['company_id', 'name', 'email', 'role', 'active', 'google_id', 'microsoft_id', 'salesforce_id', 'password'])]
+#[Fillable(['company_id', 'name', 'email', 'role', 'active', 'google_id', 'microsoft_id', 'salesforce_id', 'password', 'must_change_password'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable implements FilamentUser
 {
@@ -33,7 +33,13 @@ class User extends Authenticatable implements FilamentUser
             'password' => 'hashed',
             'active' => 'boolean',
             'role' => UserRole::class,
+            'must_change_password' => 'boolean',
         ];
+    }
+
+    public function mustChangePassword(): bool
+    {
+        return (bool) $this->must_change_password;
     }
 
     public function canAccessPanel(Panel $panel): bool

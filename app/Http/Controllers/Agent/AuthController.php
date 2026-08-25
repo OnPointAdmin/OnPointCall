@@ -15,6 +15,12 @@ class AuthController extends Controller
     public function showLogin(): View|RedirectResponse
     {
         if (Auth::guard(self::GUARD)->check() && Auth::guard(self::GUARD)->user()->canCall()) {
+            $user = Auth::guard(self::GUARD)->user();
+
+            if ($user->mustChangePassword()) {
+                return redirect()->route('agent.password.change');
+            }
+
             return redirect()->route('agent.workspace');
         }
 
@@ -52,6 +58,10 @@ class AuthController extends Controller
             return back()
                 ->withInput($request->only('email'))
                 ->withErrors(['email' => 'You are not assigned to any calling lists.']);
+        }
+
+        if ($user->mustChangePassword()) {
+            return redirect()->route('agent.password.change');
         }
 
         return redirect()->intended(route('agent.workspace'));

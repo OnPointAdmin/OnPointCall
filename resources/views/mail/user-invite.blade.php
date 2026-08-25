@@ -7,7 +7,7 @@
 <body style="font-family: sans-serif; color: #1e293b; line-height: 1.5;">
     <h1 style="font-size: 20px;">You're invited to OnPoint Call</h1>
     <p>Hi {{ $user->name }},</p>
-    <p>An account has been created for you. Use these credentials to sign in:</p>
+    <p>An account has been created for you. Use these credentials to sign in, then choose a new password:</p>
     <ul>
         <li><strong>Email:</strong> {{ $user->email }}</li>
         <li><strong>Temporary password:</strong> {{ $plainPassword }}</li>

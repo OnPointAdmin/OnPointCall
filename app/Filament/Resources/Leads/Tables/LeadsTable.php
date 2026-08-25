@@ -34,153 +34,171 @@ use Illuminate\Support\Facades\Auth;
 
 class LeadsTable
 {
-    public static function configure(Table $table): Table
+    public static function configure(Table $table, bool $forCallingList = false): Table
     {
+        $columns = [
+            TextColumn::make('phone')
+                ->searchable(),
+            TextColumn::make('first_name')
+                ->searchable(),
+            TextColumn::make('last_name')
+                ->searchable(),
+            TextColumn::make('state')
+                ->searchable(),
+            TextColumn::make('status')
+                ->badge()
+                ->searchable(),
+            TextColumn::make('last_disposition')
+                ->label('Last Disp')
+                ->badge()
+                ->placeholder('—')
+                ->getStateUsing(function (Lead $record): ?string {
+                    $value = $record->latestDisposition?->payload['disposition'] ?? null;
+
+                    if (! is_string($value) || $value === '') {
+                        return null;
+                    }
+
+                    return Disposition::tryFrom($value)?->label() ?? $value;
+                }),
+            TextColumn::make('last_attempt_at')
+                ->label('Last Call Date')
+                ->dateTime()
+                ->sortable()
+                ->placeholder('—'),
+            TextColumn::make('attempt_count')
+                ->numeric()
+                ->sortable(),
+        ];
+
+        if (! $forCallingList) {
+            $columns[] = TextColumn::make('callingList.name')
+                ->label('List')
+                ->searchable();
+        }
+
+        $columns = [
+            ...$columns,
+            TextColumn::make('file_name')
+                ->label('Source file')
+                ->searchable()
+                ->toggleable(isToggledHiddenByDefault: true),
+            TextColumn::make('lead_type')
+                ->badge(),
+            TextColumn::make('soft_score_code')
+                ->label('Soft Score')
+                ->toggleable(),
+            TextColumn::make('soft_score_status')
+                ->label('Soft Score status')
+                ->badge()
+                ->formatStateUsing(fn (?SoftScoreStatus $state): ?string => $state?->label())
+                ->toggleable(),
+            TextColumn::make('soft_score_checked_at')
+                ->label('Soft Score last checked')
+                ->dateTime()
+                ->toggleable(isToggledHiddenByDefault: true),
+            TextColumn::make('qualification_status')
+                ->badge()
+                ->color(fn (?QualificationStatus $state): string => match ($state) {
+                    QualificationStatus::Qualified => 'success',
+                    QualificationStatus::NotQualified => 'warning',
+                    QualificationStatus::Error => 'danger',
+                    default => 'gray',
+                })
+                ->formatStateUsing(fn (?QualificationStatus $state): ?string => $state?->label())
+                ->tooltip(fn (Lead $record): ?string => $record->qualification_status
+                    ? 'View qualification response'
+                    : null)
+                ->action(ViewQualificationResultAction::make())
+                ->toggleable(),
+            TextColumn::make('dnc_status')
+                ->label('DNC')
+                ->badge()
+                ->color(fn (?DncStatus $state): string => match ($state) {
+                    DncStatus::Clear => 'success',
+                    DncStatus::Hit, DncStatus::Invalid => 'danger',
+                    DncStatus::Error => 'danger',
+                    default => 'gray',
+                })
+                ->formatStateUsing(fn (?DncStatus $state): ?string => $state?->label())
+                ->tooltip(fn (Lead $record): ?string => $record->dnc_status
+                    ? 'View DNC scrub result'
+                    : null)
+                ->action(ViewDncResultAction::make())
+                ->toggleable(),
+            TextColumn::make('callback_at')
+                ->dateTime()
+                ->sortable()
+                ->toggleable(isToggledHiddenByDefault: true),
+            TextColumn::make('imported_at')
+                ->dateTime()
+                ->sortable()
+                ->toggleable(isToggledHiddenByDefault: true),
+        ];
+
+        $filters = [
+            SelectFilter::make('status')
+                ->options(collect(LeadStatus::cases())->mapWithKeys(fn ($s) => [$s->value => $s->label()])),
+            SelectFilter::make('lead_type')
+                ->options(fn (): array => LeadTypeDefinition::allOptions()),
+        ];
+
+        if (! $forCallingList) {
+            $filters[] = SelectFilter::make('calling_list_id')
+                ->label('Calling list')
+                ->options(fn (): array => ['holding' => 'Holding'] + CallingList::query()->orderBy('name')->pluck('name', 'id')->all())
+                ->query(function (Builder $query, array $data): Builder {
+                    $value = $data['value'] ?? null;
+
+                    if ($value === null || $value === '') {
+                        return $query;
+                    }
+
+                    if ($value === 'holding') {
+                        return $query->whereNull('calling_list_id');
+                    }
+
+                    return $query->where('calling_list_id', $value);
+                });
+        }
+
+        $filters = [
+            ...$filters,
+            SelectFilter::make('last_disposition')
+                ->label('Last Disp')
+                ->options(fn (): array => ['none' => 'None'] + collect(Disposition::cases())
+                    ->mapWithKeys(fn (Disposition $disposition): array => [$disposition->value => $disposition->label()])
+                    ->all())
+                ->query(function (Builder $query, array $data): Builder {
+                    $value = $data['value'] ?? null;
+
+                    if ($value === null || $value === '') {
+                        return $query;
+                    }
+
+                    if ($value === 'none') {
+                        return $query->whereDoesntHave('history', function (Builder $history): void {
+                            $history->where('event_type', LeadHistoryType::Disposition->value);
+                        });
+                    }
+
+                    return $query->whereHas('latestDisposition', function (Builder $latest) use ($value): void {
+                        $latest->where('payload->disposition', $value);
+                    });
+                }),
+            SelectFilter::make('soft_score_status')
+                ->options(collect(SoftScoreStatus::cases())->mapWithKeys(fn ($s) => [$s->value => $s->label()])),
+            SelectFilter::make('qualification_status')
+                ->options(collect(QualificationStatus::cases())->mapWithKeys(fn ($s) => [$s->value => $s->label()])),
+            SelectFilter::make('dnc_status')
+                ->label('DNC')
+                ->options(collect(DncStatus::cases())->mapWithKeys(fn ($s) => [$s->value => $s->label()])),
+        ];
+
         return $table
             ->modifyQueryUsing(fn (Builder $query): Builder => $query->with('latestDisposition'))
-            ->columns([
-                TextColumn::make('phone')
-                    ->searchable(),
-                TextColumn::make('first_name')
-                    ->searchable(),
-                TextColumn::make('last_name')
-                    ->searchable(),
-                TextColumn::make('state')
-                    ->searchable(),
-                TextColumn::make('status')
-                    ->badge()
-                    ->searchable(),
-                TextColumn::make('last_disposition')
-                    ->label('Last Disp')
-                    ->badge()
-                    ->placeholder('—')
-                    ->getStateUsing(function (Lead $record): ?string {
-                        $value = $record->latestDisposition?->payload['disposition'] ?? null;
-
-                        if (! is_string($value) || $value === '') {
-                            return null;
-                        }
-
-                        return Disposition::tryFrom($value)?->label() ?? $value;
-                    }),
-                TextColumn::make('last_attempt_at')
-                    ->label('Last Call Date')
-                    ->dateTime()
-                    ->sortable()
-                    ->placeholder('—'),
-                TextColumn::make('attempt_count')
-                    ->numeric()
-                    ->sortable(),
-                TextColumn::make('callingList.name')
-                    ->label('List')
-                    ->searchable(),
-                TextColumn::make('file_name')
-                    ->label('Source file')
-                    ->searchable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-                TextColumn::make('lead_type')
-                    ->badge(),
-                TextColumn::make('soft_score_code')
-                    ->label('Soft Score')
-                    ->toggleable(),
-                TextColumn::make('soft_score_status')
-                    ->label('Soft Score status')
-                    ->badge()
-                    ->formatStateUsing(fn (?SoftScoreStatus $state): ?string => $state?->label())
-                    ->toggleable(),
-                TextColumn::make('soft_score_checked_at')
-                    ->label('Soft Score last checked')
-                    ->dateTime()
-                    ->toggleable(isToggledHiddenByDefault: true),
-                TextColumn::make('qualification_status')
-                    ->badge()
-                    ->color(fn (?QualificationStatus $state): string => match ($state) {
-                        QualificationStatus::Qualified => 'success',
-                        QualificationStatus::NotQualified => 'warning',
-                        QualificationStatus::Error => 'danger',
-                        default => 'gray',
-                    })
-                    ->formatStateUsing(fn (?QualificationStatus $state): ?string => $state?->label())
-                    ->tooltip(fn (Lead $record): ?string => $record->qualification_status
-                        ? 'View qualification response'
-                        : null)
-                    ->action(ViewQualificationResultAction::make())
-                    ->toggleable(),
-                TextColumn::make('dnc_status')
-                    ->label('DNC')
-                    ->badge()
-                    ->color(fn (?DncStatus $state): string => match ($state) {
-                        DncStatus::Clear => 'success',
-                        DncStatus::Hit, DncStatus::Invalid => 'danger',
-                        DncStatus::Error => 'danger',
-                        default => 'gray',
-                    })
-                    ->formatStateUsing(fn (?DncStatus $state): ?string => $state?->label())
-                    ->tooltip(fn (Lead $record): ?string => $record->dnc_status
-                        ? 'View DNC scrub result'
-                        : null)
-                    ->action(ViewDncResultAction::make())
-                    ->toggleable(),
-                TextColumn::make('callback_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-                TextColumn::make('imported_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-            ])
-            ->filters([
-                SelectFilter::make('status')
-                    ->options(collect(LeadStatus::cases())->mapWithKeys(fn ($s) => [$s->value => $s->label()])),
-                SelectFilter::make('lead_type')
-                    ->options(fn (): array => LeadTypeDefinition::allOptions()),
-                SelectFilter::make('calling_list_id')
-                    ->label('Calling list')
-                    ->options(fn (): array => ['holding' => 'Holding'] + CallingList::query()->orderBy('name')->pluck('name', 'id')->all())
-                    ->query(function (Builder $query, array $data): Builder {
-                        $value = $data['value'] ?? null;
-
-                        if ($value === null || $value === '') {
-                            return $query;
-                        }
-
-                        if ($value === 'holding') {
-                            return $query->whereNull('calling_list_id');
-                        }
-
-                        return $query->where('calling_list_id', $value);
-                    }),
-                SelectFilter::make('last_disposition')
-                    ->label('Last Disp')
-                    ->options(fn (): array => ['none' => 'None'] + collect(Disposition::cases())
-                        ->mapWithKeys(fn (Disposition $disposition): array => [$disposition->value => $disposition->label()])
-                        ->all())
-                    ->query(function (Builder $query, array $data): Builder {
-                        $value = $data['value'] ?? null;
-
-                        if ($value === null || $value === '') {
-                            return $query;
-                        }
-
-                        if ($value === 'none') {
-                            return $query->whereDoesntHave('history', function (Builder $history): void {
-                                $history->where('event_type', LeadHistoryType::Disposition->value);
-                            });
-                        }
-
-                        return $query->whereHas('latestDisposition', function (Builder $latest) use ($value): void {
-                            $latest->where('payload->disposition', $value);
-                        });
-                    }),
-                SelectFilter::make('soft_score_status')
-                    ->options(collect(SoftScoreStatus::cases())->mapWithKeys(fn ($s) => [$s->value => $s->label()])),
-                SelectFilter::make('qualification_status')
-                    ->options(collect(QualificationStatus::cases())->mapWithKeys(fn ($s) => [$s->value => $s->label()])),
-                SelectFilter::make('dnc_status')
-                    ->label('DNC')
-                    ->options(collect(DncStatus::cases())->mapWithKeys(fn ($s) => [$s->value => $s->label()])),
-            ])
+            ->columns($columns)
+            ->filters($filters)
             ->recordActions([
                 ViewAction::make(),
             ])

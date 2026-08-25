@@ -5,6 +5,9 @@ namespace App\Filament\Resources\CallingLists;
 use App\Filament\Resources\CallingLists\Pages\CreateCallingList;
 use App\Filament\Resources\CallingLists\Pages\EditCallingList;
 use App\Filament\Resources\CallingLists\Pages\ListCallingLists;
+use App\Filament\Resources\CallingLists\Pages\ViewCallingList;
+use App\Filament\Resources\CallingLists\RelationManagers\LeadsRelationManager;
+use App\Filament\Resources\CallingLists\RelationManagers\ListAssignmentHistoryRelationManager;
 use App\Filament\Resources\CallingLists\Schemas\CallingListForm;
 use App\Filament\Resources\CallingLists\Tables\CallingListsTable;
 use App\Models\CallingList;
@@ -39,7 +42,8 @@ class CallingListResource extends Resource
     public static function getRelations(): array
     {
         return [
-            //
+            ListAssignmentHistoryRelationManager::class,
+            LeadsRelationManager::class,
         ];
     }
 
@@ -48,6 +52,7 @@ class CallingListResource extends Resource
         return [
             'index' => ListCallingLists::route('/'),
             'create' => CreateCallingList::route('/create'),
+            'view' => ViewCallingList::route('/{record}'),
             'edit' => EditCallingList::route('/{record}/edit'),
         ];
     }

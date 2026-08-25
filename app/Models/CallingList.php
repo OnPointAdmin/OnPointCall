@@ -51,4 +51,9 @@ class CallingList extends Model
     {
         return $this->hasMany(ListAssignment::class);
     }
+
+    public function listAssignmentHistory(): HasMany
+    {
+        return $this->hasMany(ListAssignmentHistory::class);
+    }
 }

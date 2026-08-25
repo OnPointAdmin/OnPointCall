@@ -2,10 +2,12 @@
 
 namespace App\Providers;
 
+use App\Http\Controllers\Admin\FilamentLoginResponse;
 use App\Http\Controllers\Admin\FilamentLogoutController;
 use App\Services\Leads\DialableInventoryService;
 use App\Support\CompanyTimezone;
 use Filament\Auth\Http\Controllers\LogoutController as FilamentVendorLogoutController;
+use Filament\Auth\Http\Responses\Contracts\LoginResponse as FilamentLoginResponseContract;
 use Filament\Support\Facades\FilamentTimezone;
 use Illuminate\Console\Events\CommandStarting;
 use Illuminate\Support\Facades\Event;
@@ -21,6 +23,7 @@ class AppServiceProvider extends ServiceProvider
     {
         // Logout without wiping the agent guard session.
         $this->app->bind(FilamentVendorLogoutController::class, FilamentLogoutController::class);
+        $this->app->bind(FilamentLoginResponseContract::class, FilamentLoginResponse::class);
         $this->app->singleton(DialableInventoryService::class);
     }
 

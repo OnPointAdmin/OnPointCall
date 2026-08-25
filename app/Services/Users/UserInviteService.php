@@ -43,6 +43,7 @@ class UserInviteService
                 'role' => $role,
                 'active' => true,
                 'password' => $password,
+                'must_change_password' => true,
             ]);
 
             if ($salesforceId !== null) {
@@ -58,6 +59,7 @@ class UserInviteService
                 'role' => $role,
                 'active' => true,
                 'password' => $password,
+                'must_change_password' => true,
                 'salesforce_id' => $salesforceId,
                 'email_verified_at' => now(),
             ]);
@@ -100,6 +102,7 @@ class UserInviteService
     {
         $password = Str::password(12);
         $user->password = $password;
+        $user->must_change_password = true;
         $user->active = true;
         $user->save();
 
