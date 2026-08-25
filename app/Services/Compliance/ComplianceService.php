@@ -131,6 +131,10 @@ class ComplianceService
 
     public function isCadenceReady(Lead $lead, ?CarbonInterface $at = null): bool
     {
+        if ($lead->last_attempt_at === null) {
+            return true;
+        }
+
         return $this->attemptGapResolver->isGapSatisfied($lead, $at)
             && $this->dayPartResolver->matchesNextDayPart($lead, $at);
     }

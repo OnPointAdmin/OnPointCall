@@ -7,6 +7,7 @@ use App\Models\Company;
 use App\Models\Lead;
 use App\Models\StateRule;
 use App\Services\Compliance\ComplianceService;
+use App\Support\CadenceDefaults;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Support\CreatesCadences;
@@ -78,6 +79,72 @@ class ComplianceServiceTest extends TestCase
         $this->assertTrue($service->isWithinLegalWindow($lead));
         $this->assertTrue($service->canDialNow($lead));
         $this->assertFalse($service->isCadenceReady($lead));
+    }
+
+    public function test_never_dialed_here_lead_is_callable_between_day_part_windows(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-25 11:30:00', 'America/New_York'));
+
+        $company = Company::factory()->create();
+        $this->seedStateRule($company->id, 'NY');
+
+        $rows = CadenceDefaults::dayPartRows();
+        $rows[0]['window_end'] = '11:00';
+        $cadence = $this->createCadence($company->id, dayParts: $rows);
+        $list = $this->createCallingList($company->id, $cadence);
+
+        $lead = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045551234',
+            'state' => 'NY',
+            'timezone' => 'America/New_York',
+            'status' => LeadStatus::Callable,
+            'lead_type' => 'standard',
+            'calling_list_id' => $list->id,
+            'attempt_count' => 4,
+            'imported_at' => now(),
+            'queue_rank' => 1,
+        ])->load('callingList.cadence.dayParts', 'callingList.cadence.attemptGaps');
+
+        $service = app(ComplianceService::class);
+
+        $this->assertTrue($service->isWithinLegalWindow($lead));
+        $this->assertTrue($service->isCadenceReady($lead));
+        $this->assertTrue($service->canDialNow($lead));
+    }
+
+    public function test_retried_lead_still_waits_for_next_day_part(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-25 11:30:00', 'America/New_York'));
+
+        $company = Company::factory()->create();
+        $this->seedStateRule($company->id, 'NY');
+
+        $rows = CadenceDefaults::dayPartRows();
+        $rows[0]['window_end'] = '11:00';
+        $cadence = $this->createCadence($company->id, dayParts: $rows);
+        $list = $this->createCallingList($company->id, $cadence);
+
+        $lead = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045551234',
+            'state' => 'NY',
+            'timezone' => 'America/New_York',
+            'status' => LeadStatus::Callable,
+            'lead_type' => 'standard',
+            'calling_list_id' => $list->id,
+            'attempt_count' => 1,
+            'last_attempt_at' => now()->subHours(2),
+            'next_day_part' => 'afternoon',
+            'imported_at' => now(),
+            'queue_rank' => 1,
+        ])->load('callingList.cadence.dayParts', 'callingList.cadence.attemptGaps');
+
+        $service = app(ComplianceService::class);
+
+        $this->assertTrue($service->isWithinLegalWindow($lead));
+        $this->assertFalse($service->isCadenceReady($lead));
+        $this->assertFalse($service->canDialNow($lead));
     }
 
     private function seedStateRule(int $companyId, string $state): void

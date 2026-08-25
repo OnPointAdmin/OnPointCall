@@ -156,10 +156,12 @@ class DayPartResolver
     {
         $lead->loadMissing('callingList.cadence.dayParts');
 
-        return $lead->callingList?->cadence?->dayParts
-            ?->where('enabled', true)
+        $dayParts = $lead->callingList?->cadence?->dayParts ?? collect();
+
+        return $dayParts
+            ->where('enabled', true)
             ->sortBy('rotation_order')
-            ->values() ?? collect();
+            ->values();
     }
 
     private function isDialWaitSatisfied(Lead $lead, CarbonInterface $at): bool
@@ -174,13 +176,21 @@ class DayPartResolver
         $lead->loadMissing('callingList.cadence.dayParts');
 
         return $lead->callingList?->cadence?->dayParts
-            ->firstWhere('day_part', $dayPart);
+            ?->firstWhere('day_part', $dayPart);
     }
 
     private function formatTime(mixed $time): string
     {
-        $value = (string) $time;
+        if ($time instanceof \DateTimeInterface) {
+            return $time->format('H:i');
+        }
 
-        return strlen($value) >= 5 ? substr($value, 0, 5) : $value;
+        $value = trim((string) $time);
+
+        if (preg_match('/(\d{1,2}):(\d{2})/', $value, $matches) === 1) {
+            return sprintf('%02d:%02d', (int) $matches[1], (int) $matches[2]);
+        }
+
+        return $value;
     }
 }

@@ -189,7 +189,7 @@ class NextLeadService
     private function diagnoseEmptyQueue(User $user, array $listIds): EmptyQueueReason
     {
         $leads = Lead::withoutGlobalScopes()
-            ->with('callingList')
+            ->with(self::LEAD_RELATIONS)
             ->where('company_id', $user->company_id)
             ->whereIn('calling_list_id', $listIds)
             ->where(function ($query) use ($user): void {

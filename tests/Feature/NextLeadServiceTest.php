@@ -16,6 +16,7 @@ use App\Models\StateRule;
 use App\Models\User;
 use App\Services\Leads\DispositionService;
 use App\Services\Leads\NextLeadService;
+use App\Support\CadenceDefaults;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Support\CreatesCadences;
@@ -72,6 +73,24 @@ class NextLeadServiceTest extends TestCase
 
         $this->assertFalse($result->hasLead());
         $this->assertSame(EmptyQueueReason::NoneAvailable, $result->emptyReason);
+    }
+
+    public function test_migrated_lead_never_dialed_here_is_served_between_day_parts(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-25 11:30:00', 'America/New_York'));
+
+        $rows = CadenceDefaults::dayPartRows();
+        $rows[0]['window_end'] = '11:00';
+
+        [$user, $list] = $this->makeAgentWithList($rows);
+
+        $lead = $this->makeCallableLead($user->company_id, $list->id, '4045551401', 1, attemptCount: 4);
+
+        $result = app(NextLeadService::class)->getNext($user);
+
+        $this->assertTrue($result->hasLead());
+        $this->assertSame($lead->id, $result->lead?->id);
+        $this->assertNull($lead->fresh()->last_attempt_at);
     }
 
     public function test_prioritizes_never_dialed_leads_when_cadence_flag_enabled(): void
@@ -171,9 +190,10 @@ class NextLeadServiceTest extends TestCase
     }
 
     /**
+     * @param  list<array<string, mixed>>|null  $dayParts
      * @return array{0: User, 1: CallingList}
      */
-    private function makeAgentWithList(): array
+    private function makeAgentWithList(?array $dayParts = null): array
     {
         $company = Company::factory()->create();
 
@@ -192,7 +212,8 @@ class NextLeadServiceTest extends TestCase
             'claim_ttl_minutes' => 20,
         ]);
 
-        $list = $this->createCallingList($company->id);
+        $cadence = $dayParts === null ? null : $this->createCadence($company->id, dayParts: $dayParts);
+        $list = $this->createCallingList($company->id, $cadence);
 
         $user = User::factory()->create([
             'company_id' => $company->id,
