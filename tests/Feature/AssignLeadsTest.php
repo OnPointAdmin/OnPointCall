@@ -104,6 +104,29 @@ class AssignLeadsTest extends TestCase
         $this->assertSame($list->id, $newest->calling_list_id);
     }
 
+    public function test_null_qualification_holding_leads_are_included_by_default(): void
+    {
+        [$admin] = $this->setUpAssignPage();
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $admin->company_id,
+            'phone' => '4045558001',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'qualification_status' => null,
+            'imported_at' => now(),
+        ]);
+
+        Livewire::actingAs($admin)
+            ->test(AssignLeads::class)
+            ->assertSet('holdingCount', 1)
+            ->fillForm([
+                'qualification_status' => QualificationStatus::Qualified->value,
+            ], 'filterForm')
+            ->call('refreshCountAction')
+            ->assertSet('holdingCount', 0);
+    }
+
     public function test_attempt_count_filter_limits_matching_leads(): void
     {
         [$admin] = $this->setUpAssignPage();

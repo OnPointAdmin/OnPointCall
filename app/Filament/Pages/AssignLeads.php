@@ -56,7 +56,6 @@ class AssignLeads extends Page
         $this->filterForm->fill([
             'lead_type' => 'standard',
             'source_calling_list_id' => 'holding',
-            'qualification_status' => QualificationStatus::Qualified->value,
         ]);
 
         $this->releaseForm->fill([
@@ -139,6 +138,8 @@ class AssignLeads extends Page
                                 QualificationStatus::Qualified->value => QualificationStatus::Qualified->label(),
                                 QualificationStatus::NotQualified->value => QualificationStatus::NotQualified->label(),
                             ])
+                            ->nullable()
+                            ->placeholder('Any')
                             ->live(),
                     ])
                     ->columns(3),
