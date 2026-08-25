@@ -41,6 +41,16 @@ class LeadMasterMigrationService
         'tour no buy' => 'tnb',
     ];
 
+    /**
+     * Callback-only lists, keyed by lead type slug.
+     *
+     * @var array<string, string>
+     */
+    private const CALLBACK_LISTS = [
+        'standard' => 'Standard - List A',
+        'tnb' => 'TNB - List A',
+    ];
+
     public function __construct(
         private readonly PhoneNormalizer $phoneNormalizer,
         private readonly TimezoneResolver $timezoneResolver,
@@ -355,19 +365,33 @@ class LeadMasterMigrationService
     }
 
     /**
-     * @return array{standard: ?int, tnb: ?int}
+     * @return array{standard: int, tnb: int}
      */
     private function resolveCallingLists(int $companyId): array
     {
         $lists = CallingList::withoutGlobalScopes()
             ->where('company_id', $companyId)
-            ->whereIn('name', ['Standard', 'TNB'])
+            ->whereIn('name', array_values(self::CALLBACK_LISTS))
             ->get()
             ->keyBy('name');
 
+        $missing = [];
+
+        foreach (self::CALLBACK_LISTS as $name) {
+            if ($lists->get($name) === null) {
+                $missing[] = $name;
+            }
+        }
+
+        if ($missing !== []) {
+            throw new \RuntimeException(
+                'Missing calling lists required for callbacks: '.implode(', ', $missing)
+            );
+        }
+
         return [
-            'standard' => $lists->get('Standard')?->id,
-            'tnb' => $lists->get('TNB')?->id,
+            'standard' => (int) $lists->get(self::CALLBACK_LISTS['standard'])->id,
+            'tnb' => (int) $lists->get(self::CALLBACK_LISTS['tnb'])->id,
         ];
     }
 
@@ -404,7 +428,7 @@ class LeadMasterMigrationService
     }
 
     /**
-     * @param  array{standard: ?int, tnb: ?int}  $lists
+     * @param  array{standard: int, tnb: int}  $lists
      * @return array{0: LeadStatus, 1: ?int, 2: ?int, 3: ?Carbon}
      */
     private function resolveStatusAndList(
@@ -414,29 +438,23 @@ class LeadMasterMigrationService
         ?User $actor,
         array &$stats,
     ): array {
-        if ($disposition === null) {
+        if ($disposition !== Disposition::Callback) {
             return [LeadStatus::Holding, null, null, null];
         }
 
         $listId = $lists[$leadType] ?? null;
 
-        return match ($disposition) {
-            Disposition::NoAnswer, Disposition::LeftVm => [LeadStatus::Callable, $listId, null, null],
-            Disposition::Callback => $this->resolveCallback($listId, $actor, $stats),
-            Disposition::Booked => [LeadStatus::Booked, $listId, null, null],
-            Disposition::Dnc => [LeadStatus::Dnc, $listId, null, null],
-            Disposition::NotInterested,
-            Disposition::NotQualified,
-            Disposition::BadNumber,
-            Disposition::WrongNumber => [LeadStatus::Terminal, $listId, null, null],
-            default => [LeadStatus::Holding, null, null, null],
-        };
+        if ($listId === null) {
+            throw new \RuntimeException("No callback list mapped for lead type [{$leadType}].");
+        }
+
+        return $this->resolveCallback($listId, $actor, $stats);
     }
 
     /**
-     * @return array{0: LeadStatus, 1: ?int, 2: ?int, 3: Carbon}
+     * @return array{0: LeadStatus, 1: int, 2: ?int, 3: Carbon}
      */
-    private function resolveCallback(?int $listId, ?User $actor, array &$stats): array
+    private function resolveCallback(int $listId, ?User $actor, array &$stats): array
     {
         if ($actor === null) {
             $stats['callbacks_without_agent']++;
