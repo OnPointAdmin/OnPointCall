@@ -16,11 +16,12 @@ use App\Support\CompanyContext;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
+use Tests\Support\CreatesCadences;
 use Tests\TestCase;
 
 class LeadsTableTest extends TestCase
 {
-    use RefreshDatabase;
+    use CreatesCadences, RefreshDatabase;
 
     public function test_lead_list_shows_last_disposition_and_last_call_date(): void
     {
@@ -79,9 +80,105 @@ class LeadsTableTest extends TestCase
             ->assertSee('Last Disp')
             ->assertSee('Last Call Date')
             ->assertSee('Left VM')
-            ->assertDontSee('No Answer')
             ->assertSee('Aug 10, 2026')
             ->assertSee('11:00')
-            ->assertDontSee('18:00');
+            ->assertDontSee('18:00')
+            ->filterTable('last_disposition', Disposition::NoAnswer->value)
+            ->assertCanNotSeeTableRecords([$lead]);
+    }
+
+    public function test_lead_list_can_filter_by_last_disposition(): void
+    {
+        [$company, $admin] = $this->makeAdminCompany();
+
+        $leftVm = $this->makeLead($company->id, phone: '4045559001');
+        $noAnswer = $this->makeLead($company->id, phone: '4045559002');
+        $neverCalled = $this->makeLead($company->id, phone: '4045559003');
+
+        $this->makeDisposition($company->id, $leftVm->id, $admin->id, Disposition::LeftVm);
+        $this->makeDisposition($company->id, $noAnswer->id, $admin->id, Disposition::NoAnswer);
+
+        CompanyContext::set($company->id);
+
+        Livewire::actingAs($admin)
+            ->test(ListLeads::class)
+            ->assertCanSeeTableRecords([$leftVm, $noAnswer, $neverCalled])
+            ->filterTable('last_disposition', Disposition::LeftVm->value)
+            ->assertCanSeeTableRecords([$leftVm])
+            ->assertCanNotSeeTableRecords([$noAnswer, $neverCalled])
+            ->filterTable('last_disposition', 'none')
+            ->assertCanSeeTableRecords([$neverCalled])
+            ->assertCanNotSeeTableRecords([$leftVm, $noAnswer]);
+    }
+
+    public function test_lead_list_can_filter_calling_list_including_holding(): void
+    {
+        [$company, $admin] = $this->makeAdminCompany();
+        $list = $this->createCallingList($company->id, overrides: ['name' => 'Standard']);
+
+        $holding = $this->makeLead($company->id, phone: '4045559001');
+        $onList = $this->makeLead($company->id, callingListId: $list->id, phone: '4045559002');
+
+        CompanyContext::set($company->id);
+
+        Livewire::actingAs($admin)
+            ->test(ListLeads::class)
+            ->assertCanSeeTableRecords([$holding, $onList])
+            ->filterTable('calling_list_id', 'holding')
+            ->assertCanSeeTableRecords([$holding])
+            ->assertCanNotSeeTableRecords([$onList])
+            ->filterTable('calling_list_id', $list->id)
+            ->assertCanSeeTableRecords([$onList])
+            ->assertCanNotSeeTableRecords([$holding]);
+    }
+
+    /**
+     * @return array{0: Company, 1: User}
+     */
+    private function makeAdminCompany(): array
+    {
+        $company = Company::factory()->create();
+        $admin = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Admin,
+            'active' => true,
+        ]);
+
+        AppSetting::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'max_attempts' => 6,
+            'claim_ttl_minutes' => 20,
+            'dashboard_email_timezone' => 'America/Los_Angeles',
+        ]);
+
+        return [$company, $admin];
+    }
+
+    private function makeLead(int $companyId, ?int $callingListId = null, string $phone = '4045559001'): Lead
+    {
+        return Lead::withoutGlobalScopes()->create([
+            'company_id' => $companyId,
+            'calling_list_id' => $callingListId,
+            'phone' => $phone,
+            'first_name' => 'Pat',
+            'last_name' => 'Callahan',
+            'state' => 'NY',
+            'timezone' => 'America/New_York',
+            'status' => LeadStatus::Callable,
+            'lead_type' => 'standard',
+            'imported_at' => now(),
+        ]);
+    }
+
+    private function makeDisposition(int $companyId, int $leadId, int $actorId, Disposition $disposition): void
+    {
+        LeadHistory::withoutGlobalScopes()->create([
+            'company_id' => $companyId,
+            'lead_id' => $leadId,
+            'actor_id' => $actorId,
+            'event_type' => LeadHistoryType::Disposition,
+            'occurred_at' => now(),
+            'payload' => ['disposition' => $disposition->value],
+        ]);
     }
 }

@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Leads\Tables;
 
 use App\Enums\Disposition;
 use App\Enums\DncStatus;
+use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
 use App\Enums\QualificationStatus;
 use App\Enums\SoftScoreStatus;
@@ -136,7 +137,42 @@ class LeadsTable
                     ->options(fn (): array => LeadTypeDefinition::allOptions()),
                 SelectFilter::make('calling_list_id')
                     ->label('Calling list')
-                    ->options(fn (): array => CallingList::query()->orderBy('name')->pluck('name', 'id')->all()),
+                    ->options(fn (): array => ['holding' => 'Holding'] + CallingList::query()->orderBy('name')->pluck('name', 'id')->all())
+                    ->query(function (Builder $query, array $data): Builder {
+                        $value = $data['value'] ?? null;
+
+                        if ($value === null || $value === '') {
+                            return $query;
+                        }
+
+                        if ($value === 'holding') {
+                            return $query->whereNull('calling_list_id');
+                        }
+
+                        return $query->where('calling_list_id', $value);
+                    }),
+                SelectFilter::make('last_disposition')
+                    ->label('Last Disp')
+                    ->options(fn (): array => ['none' => 'None'] + collect(Disposition::cases())
+                        ->mapWithKeys(fn (Disposition $disposition): array => [$disposition->value => $disposition->label()])
+                        ->all())
+                    ->query(function (Builder $query, array $data): Builder {
+                        $value = $data['value'] ?? null;
+
+                        if ($value === null || $value === '') {
+                            return $query;
+                        }
+
+                        if ($value === 'none') {
+                            return $query->whereDoesntHave('history', function (Builder $history): void {
+                                $history->where('event_type', LeadHistoryType::Disposition->value);
+                            });
+                        }
+
+                        return $query->whereHas('latestDisposition', function (Builder $latest) use ($value): void {
+                            $latest->where('payload->disposition', $value);
+                        });
+                    }),
                 SelectFilter::make('soft_score_status')
                     ->options(collect(SoftScoreStatus::cases())->mapWithKeys(fn ($s) => [$s->value => $s->label()])),
                 SelectFilter::make('qualification_status')
