@@ -80,6 +80,8 @@ class ViewCallingListTest extends TestCase
             ->assertSee('Edit')
             ->assertDontSee('Save changes')
             ->assertSee('Show leads')
+            ->assertSee('Total')
+            ->assertSee('Booked')
             ->assertDontSee('4045559001')
             ->assertActionExists('edit');
 

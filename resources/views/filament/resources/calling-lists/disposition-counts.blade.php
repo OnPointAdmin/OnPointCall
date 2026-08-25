@@ -1,8 +1,8 @@
-<div class="flex flex-wrap gap-2">
+<div style="display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;gap:0.5rem;width:100%;">
     @foreach ($items as $item)
-        <div class="flex items-center gap-2 rounded-lg bg-gray-50 px-3 py-2 dark:bg-white/5">
-            <span class="text-sm text-gray-500 dark:text-gray-400">{{ $item['label'] }}</span>
-            <span class="text-sm font-semibold text-gray-950 dark:text-white">{{ $item['count'] }}</span>
+        <div style="display:inline-flex;align-items:center;gap:0.5rem;border-radius:0.5rem;padding:0.5rem 0.75rem;background:rgba(128,128,128,0.14);white-space:nowrap;">
+            <span style="font-size:0.875rem;opacity:0.7;">{{ $item['label'] }}</span>
+            <span style="font-size:0.875rem;font-weight:600;">{{ number_format($item['count']) }}</span>
         </div>
     @endforeach
 </div>

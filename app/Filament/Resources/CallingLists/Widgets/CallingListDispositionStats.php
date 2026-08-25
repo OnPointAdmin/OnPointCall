@@ -12,7 +12,7 @@ class CallingListDispositionStats extends Widget
 
     protected static bool $isLazy = false;
 
-    protected int | string | array $columnSpan = 'full';
+    protected int|string|array $columnSpan = 'full';
 
     protected string $view = 'filament.resources.calling-lists.disposition-counts';
 

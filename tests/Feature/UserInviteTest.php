@@ -45,6 +45,7 @@ class UserInviteTest extends TestCase
         $this->assertSame(UserRole::Admin, $user->role);
         $this->assertSame('005000000000001AAA', $user->salesforce_id);
         $this->assertTrue($user->active);
+        $this->assertTrue($user->must_change_password);
         $this->assertNotEmpty($result['password']);
 
         $this->assertTrue(
@@ -112,6 +113,7 @@ class UserInviteTest extends TestCase
         $password = app(UserInviteService::class)->resend($user);
 
         $this->assertNotEmpty($password);
+        $this->assertTrue($user->fresh()->must_change_password);
 
         Mail::assertSent(UserInviteMail::class, function (UserInviteMail $mail) use ($user, $password): bool {
             return $mail->hasTo($user->email) && $mail->plainPassword === $password;
@@ -137,6 +139,7 @@ class UserInviteTest extends TestCase
 
         $this->assertFalse($mail->canAccessAdmin);
         $this->assertStringContainsString('/agent/login', $html);
+        $this->assertStringContainsString('choose a new password', $html);
         $this->assertStringNotContainsString('/admin', $html);
     }
 

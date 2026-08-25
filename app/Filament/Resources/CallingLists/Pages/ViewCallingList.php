@@ -5,15 +5,17 @@ namespace App\Filament\Resources\CallingLists\Pages;
 use App\Filament\Resources\CallingLists\CallingListResource;
 use App\Filament\Resources\CallingLists\RelationManagers\LeadsRelationManager;
 use App\Filament\Resources\CallingLists\RelationManagers\ListAssignmentHistoryRelationManager;
-use App\Filament\Resources\CallingLists\Widgets\CallingListDispositionStats;
+use App\Services\CallingLists\CallingListDispositionCountService;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Schemas\Components\Component;
 use Filament\Schemas\Components\Group;
+use Filament\Schemas\Components\Html;
 use Filament\Schemas\Components\Livewire;
-use Filament\Widgets\WidgetConfiguration;
+use Filament\Schemas\Schema;
+use Illuminate\Support\HtmlString;
 
 class ViewCallingList extends ViewRecord
 {
@@ -36,29 +38,18 @@ class ViewCallingList extends ViewRecord
         ];
     }
 
-    /**
-     * @return array<class-string<CallingListDispositionStats> | WidgetConfiguration>
-     */
-    protected function getHeaderWidgets(): array
+    public function content(Schema $schema): Schema
     {
-        return [
-            CallingListDispositionStats::class,
-        ];
-    }
-
-    public function getHeaderWidgetsColumns(): int | array
-    {
-        return 1;
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    public function getWidgetData(): array
-    {
-        return [
-            'record' => $this->getRecord(),
-        ];
+        return $schema
+            ->components([
+                Html::make(function (): HtmlString {
+                    return new HtmlString(view('filament.resources.calling-lists.disposition-counts', [
+                        'items' => app(CallingListDispositionCountService::class)->forList($this->getRecord()),
+                    ])->render());
+                })->columnSpanFull(),
+                $this->getFormContentComponent(),
+                $this->getRelationManagersContentComponent(),
+            ]);
     }
 
     /**
