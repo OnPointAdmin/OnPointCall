@@ -38,8 +38,9 @@ class HoldingReleaseService
     public function queryHolding(int $companyId, HoldingFilter $filter): Builder
     {
         $query = Lead::withoutGlobalScopes()
-            ->where('company_id', $companyId)
-            ->where('status', LeadStatus::Holding);
+            ->where('company_id', $companyId);
+
+        $this->applySourceScope($query, $filter->sourceCallingListId);
 
         if ($filter->leadType) {
             $query->where('lead_type', $filter->leadType);
@@ -93,6 +94,11 @@ class HoldingReleaseService
             $query->where('qualification_status', $filter->qualificationStatus);
         }
 
+        if ($filter->attemptCount !== null) {
+            $query->where('attempt_count', $filter->attemptCount);
+        }
+
+        $this->applyLastDispositionFilter($query, $filter->lastDispositions);
         $this->applyAssignableScopes($query);
 
         return $query;
@@ -101,13 +107,17 @@ class HoldingReleaseService
     /**
      * @return array<string, string>
      */
-    public function distinctHoldingColumn(int $companyId, ?string $leadType, string $column): array
-    {
+    public function distinctHoldingColumn(
+        int $companyId,
+        ?string $leadType,
+        string $column,
+        ?int $sourceCallingListId = null,
+    ): array {
         if (! in_array($column, self::DISTINCT_COLUMNS, true)) {
             throw new InvalidArgumentException("Unsupported holding filter column: {$column}");
         }
 
-        $values = $this->holdingBaseQuery($companyId, $leadType)
+        $values = $this->assignableBaseQuery($companyId, $leadType, $sourceCallingListId)
             ->whereNotNull($column)
             ->where($column, '!=', '')
             ->distinct()
@@ -126,9 +136,12 @@ class HoldingReleaseService
     /**
      * @return array<string, string>
      */
-    public function distinctHoldingPartners(int $companyId, ?string $leadType): array
-    {
-        $partnerLists = $this->holdingBaseQuery($companyId, $leadType)
+    public function distinctHoldingPartners(
+        int $companyId,
+        ?string $leadType,
+        ?int $sourceCallingListId = null,
+    ): array {
+        $partnerLists = $this->assignableBaseQuery($companyId, $leadType, $sourceCallingListId)
             ->whereNotNull('partner_list')
             ->where('partner_list', '!=', '')
             ->pluck('partner_list');
@@ -174,17 +187,61 @@ class HoldingReleaseService
         return $this->release($companyId, $filter, $callingListId, $count, $actorId);
     }
 
-    private function holdingBaseQuery(int $companyId, ?string $leadType): Builder
+    private function assignableBaseQuery(int $companyId, ?string $leadType, ?int $sourceCallingListId): Builder
     {
         $query = Lead::withoutGlobalScopes()
-            ->where('company_id', $companyId)
-            ->where('status', LeadStatus::Holding);
+            ->where('company_id', $companyId);
+
+        $this->applySourceScope($query, $sourceCallingListId);
 
         if ($leadType) {
             $query->where('lead_type', $leadType);
         }
 
         return $query;
+    }
+
+    private function applySourceScope(Builder $query, ?int $sourceCallingListId): void
+    {
+        if ($sourceCallingListId === null) {
+            $query->where('status', LeadStatus::Holding);
+
+            return;
+        }
+
+        $query
+            ->where('calling_list_id', $sourceCallingListId)
+            ->whereIn('status', [LeadStatus::Callable, LeadStatus::Callback]);
+    }
+
+    /**
+     * @param  list<string>|null  $lastDispositions
+     */
+    private function applyLastDispositionFilter(Builder $query, ?array $lastDispositions): void
+    {
+        if ($lastDispositions === null || $lastDispositions === []) {
+            return;
+        }
+
+        $hasNone = in_array('none', $lastDispositions, true);
+        $dispositions = array_values(array_filter(
+            $lastDispositions,
+            static fn (string $item): bool => $item !== 'none',
+        ));
+
+        $query->where(function (Builder $group) use ($hasNone, $dispositions): void {
+            if ($hasNone) {
+                $group->orWhereDoesntHave('history', function (Builder $history): void {
+                    $history->where('event_type', LeadHistoryType::Disposition->value);
+                });
+            }
+
+            if ($dispositions !== []) {
+                $group->orWhereHas('latestDisposition', function (Builder $latest) use ($dispositions): void {
+                    $latest->whereIn('payload->disposition', $dispositions);
+                });
+            }
+        });
     }
 
     private function release(
@@ -194,15 +251,41 @@ class HoldingReleaseService
         ?int $freshCount,
         ?int $actorId,
     ): int {
+        if ($filter->sourceCallingListId !== null && $filter->sourceCallingListId === $callingListId) {
+            throw HoldingReleaseException::sameSourceAndTarget();
+        }
+
         $callingList = CallingList::withoutGlobalScopes()
             ->where('company_id', $companyId)
             ->findOrFail($callingListId);
+
+        $sourceList = null;
+
+        if ($filter->sourceCallingListId !== null) {
+            $sourceList = CallingList::withoutGlobalScopes()
+                ->where('company_id', $companyId)
+                ->findOrFail($filter->sourceCallingListId);
+
+            if ($filter->leadType && $sourceList->lead_type !== $filter->leadType) {
+                throw HoldingReleaseException::leadTypeMismatch();
+            }
+        }
 
         if ($filter->leadType && $callingList->lead_type !== $filter->leadType) {
             throw HoldingReleaseException::leadTypeMismatch();
         }
 
-        return DB::transaction(function () use ($companyId, $filter, $callingList, $freshCount, $actorId): int {
+        $isListToList = $filter->sourceCallingListId !== null;
+
+        return DB::transaction(function () use (
+            $companyId,
+            $filter,
+            $callingList,
+            $sourceList,
+            $freshCount,
+            $actorId,
+            $isListToList,
+        ): int {
             $query = $this->queryHolding($companyId, $filter)
                 ->lockForUpdate();
 
@@ -241,24 +324,45 @@ class HoldingReleaseService
 
                 $maxRank++;
 
-                $lead->update([
-                    'calling_list_id' => $callingList->id,
-                    'status' => LeadStatus::Callable,
-                    'lead_type' => $callingList->lead_type,
-                    'queue_rank' => $maxRank,
-                ]);
-
-                LeadHistory::withoutGlobalScopes()->create([
-                    'company_id' => $companyId,
-                    'lead_id' => $lead->id,
-                    'actor_id' => $actorId,
-                    'event_type' => LeadHistoryType::Release,
-                    'occurred_at' => $now,
-                    'payload' => [
+                if ($isListToList) {
+                    $lead->update([
                         'calling_list_id' => $callingList->id,
-                        'calling_list_name' => $callingList->name,
-                    ],
-                ]);
+                        'queue_rank' => $maxRank,
+                    ]);
+
+                    LeadHistory::withoutGlobalScopes()->create([
+                        'company_id' => $companyId,
+                        'lead_id' => $lead->id,
+                        'actor_id' => $actorId,
+                        'event_type' => LeadHistoryType::Assign,
+                        'occurred_at' => $now,
+                        'payload' => [
+                            'from_calling_list_id' => $sourceList?->id,
+                            'from_calling_list_name' => $sourceList?->name,
+                            'to_calling_list_id' => $callingList->id,
+                            'to_calling_list_name' => $callingList->name,
+                        ],
+                    ]);
+                } else {
+                    $lead->update([
+                        'calling_list_id' => $callingList->id,
+                        'status' => LeadStatus::Callable,
+                        'lead_type' => $callingList->lead_type,
+                        'queue_rank' => $maxRank,
+                    ]);
+
+                    LeadHistory::withoutGlobalScopes()->create([
+                        'company_id' => $companyId,
+                        'lead_id' => $lead->id,
+                        'actor_id' => $actorId,
+                        'event_type' => LeadHistoryType::Release,
+                        'occurred_at' => $now,
+                        'payload' => [
+                            'calling_list_id' => $callingList->id,
+                            'calling_list_name' => $callingList->name,
+                        ],
+                    ]);
+                }
 
                 $released++;
             }

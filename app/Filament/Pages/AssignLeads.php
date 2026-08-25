@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\DataTransferObjects\HoldingFilter;
+use App\Enums\Disposition;
 use App\Enums\QualificationStatus;
 use App\Exceptions\HoldingReleaseException;
 use App\Filament\Support\LeadTypeSelect;
@@ -54,6 +55,7 @@ class AssignLeads extends Page
     {
         $this->filterForm->fill([
             'lead_type' => 'standard',
+            'source_calling_list_id' => 'holding',
             'qualification_status' => QualificationStatus::Qualified->value,
         ]);
 
@@ -71,6 +73,11 @@ class AssignLeads extends Page
                 Section::make('Import')
                     ->schema([
                         LeadTypeSelect::make(allowCreate: true)->live(),
+                        Select::make('source_calling_list_id')
+                            ->label('Source')
+                            ->options(fn (): array => $this->sourceOptions())
+                            ->default('holding')
+                            ->live(),
                         Select::make('import_batch_id')
                             ->label('Import batch')
                             ->options(fn () => ImportBatch::query()->orderByDesc('imported_at')->pluck('source_filename', 'id'))
@@ -93,6 +100,7 @@ class AssignLeads extends Page
                             ->options(fn () => app(HoldingReleaseService::class)->distinctHoldingPartners(
                                 auth()->user()->company_id,
                                 $this->selectedLeadType(),
+                                $this->selectedSourceCallingListId(),
                             ))
                             ->multiple()
                             ->searchable()
@@ -112,6 +120,19 @@ class AssignLeads extends Page
                             ->maxLength(10)
                             ->live(debounce: 500),
                         $this->holdingSelect('soft_score_code', 'Soft score code'),
+                        Select::make('last_dispositions')
+                            ->label('Last Disp')
+                            ->options($this->lastDispositionOptions())
+                            ->multiple()
+                            ->searchable()
+                            ->live(),
+                        TextInput::make('attempt_count')
+                            ->label('Attempts')
+                            ->numeric()
+                            ->integer()
+                            ->minValue(0)
+                            ->nullable()
+                            ->live(debounce: 500),
                         Select::make('qualification_status')
                             ->label('Qualification Status')
                             ->options([
@@ -144,11 +165,16 @@ class AssignLeads extends Page
                             ->label('Target calling list')
                             ->options(function (): array {
                                 $leadType = $this->filterData['lead_type'] ?? null;
+                                $sourceCallingListId = $this->selectedSourceCallingListId();
 
                                 $query = CallingList::query()->where('active', true);
 
                                 if ($leadType) {
                                     $query->where('lead_type', $leadType);
+                                }
+
+                                if ($sourceCallingListId !== null) {
+                                    $query->where('id', '!=', $sourceCallingListId);
                                 }
 
                                 return $query->orderBy('name')->pluck('name', 'id')->all();
@@ -252,6 +278,7 @@ class AssignLeads extends Page
                 auth()->user()->company_id,
                 $this->selectedLeadType(),
                 $column,
+                $this->selectedSourceCallingListId(),
             ))
             ->multiple()
             ->searchable()
@@ -279,6 +306,52 @@ class AssignLeads extends Page
         return $leadType !== null && $leadType !== '' ? (string) $leadType : null;
     }
 
+    private function selectedSourceCallingListId(): ?int
+    {
+        $source = $this->filterData['source_calling_list_id'] ?? 'holding';
+
+        if ($source === null || $source === '' || $source === 'holding') {
+            return null;
+        }
+
+        return (int) $source;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function sourceOptions(): array
+    {
+        $options = ['holding' => 'Holding'];
+        $leadType = $this->filterData['lead_type'] ?? null;
+
+        $query = CallingList::query()->where('active', true);
+
+        if ($leadType) {
+            $query->where('lead_type', $leadType);
+        }
+
+        foreach ($query->orderBy('name')->get() as $list) {
+            $options[(string) $list->id] = $list->name;
+        }
+
+        return $options;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function lastDispositionOptions(): array
+    {
+        $options = ['none' => 'None'];
+
+        foreach (Disposition::cases() as $disposition) {
+            $options[$disposition->value] = $disposition->label();
+        }
+
+        return $options;
+    }
+
     private function refreshCount(HoldingReleaseService $releaseService): void
     {
         $this->holdingCount = $releaseService->countHolding(
@@ -295,6 +368,7 @@ class AssignLeads extends Page
             leadType: isset($data['lead_type']) && $data['lead_type'] !== ''
                 ? (string) $data['lead_type']
                 : null,
+            sourceCallingListId: $this->selectedSourceCallingListId(),
             state: $this->selectedList($data['state'] ?? null),
             venue: $this->selectedList($data['venue'] ?? null),
             event: $this->selectedList($data['event'] ?? null),
@@ -316,6 +390,10 @@ class AssignLeads extends Page
             tourResult: $this->selectedList($data['tour_result'] ?? null),
             qualificationStatus: isset($data['qualification_status']) && $data['qualification_status'] !== ''
                 ? (string) $data['qualification_status']
+                : null,
+            lastDispositions: $this->selectedList($data['last_dispositions'] ?? null),
+            attemptCount: isset($data['attempt_count']) && $data['attempt_count'] !== ''
+                ? (int) $data['attempt_count']
                 : null,
         );
     }

@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\DataTransferObjects\HoldingFilter;
+use App\Enums\Disposition;
+use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
 use App\Enums\QualificationStatus;
 use App\Enums\RndStatus;
@@ -11,6 +13,7 @@ use App\Exceptions\HoldingReleaseException;
 use App\Models\CallingList;
 use App\Models\Company;
 use App\Models\Lead;
+use App\Models\LeadHistory;
 use App\Services\Import\HoldingReleaseService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use InvalidArgumentException;
@@ -665,6 +668,259 @@ class HoldingReleaseServiceTest extends TestCase
             new HoldingFilter(leadType: 'standard'),
             $list->id,
             0,
+        );
+    }
+
+    public function test_query_holding_filters_by_exact_attempt_count(): void
+    {
+        $company = Company::factory()->create();
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045552001',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'attempt_count' => 0,
+            'imported_at' => now(),
+        ]);
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045552002',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'attempt_count' => 2,
+            'imported_at' => now(),
+        ]);
+
+        $service = app(HoldingReleaseService::class);
+
+        $this->assertSame(
+            1,
+            $service->countHolding($company->id, new HoldingFilter(
+                leadType: 'standard',
+                attemptCount: 2,
+            )),
+        );
+    }
+
+    public function test_query_holding_filters_by_last_disposition_none(): void
+    {
+        $company = Company::factory()->create();
+
+        $withoutDisposition = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045553001',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'imported_at' => now(),
+        ]);
+
+        $withDisposition = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045553002',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'imported_at' => now(),
+        ]);
+
+        LeadHistory::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'lead_id' => $withDisposition->id,
+            'event_type' => LeadHistoryType::Disposition,
+            'occurred_at' => now(),
+            'payload' => ['disposition' => Disposition::NoAnswer->value],
+        ]);
+
+        $service = app(HoldingReleaseService::class);
+
+        $this->assertSame(
+            1,
+            $service->countHolding($company->id, new HoldingFilter(
+                leadType: 'standard',
+                lastDispositions: ['none'],
+            )),
+        );
+
+        $this->assertSame($withoutDisposition->id, $service->queryHolding(
+            $company->id,
+            new HoldingFilter(leadType: 'standard', lastDispositions: ['none']),
+        )->value('id'));
+    }
+
+    public function test_query_holding_filters_by_latest_disposition_only(): void
+    {
+        $company = Company::factory()->create();
+
+        $lead = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045554001',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'imported_at' => now(),
+        ]);
+
+        LeadHistory::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'lead_id' => $lead->id,
+            'event_type' => LeadHistoryType::Disposition,
+            'occurred_at' => now()->subDay(),
+            'payload' => ['disposition' => Disposition::NoAnswer->value],
+        ]);
+
+        LeadHistory::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'lead_id' => $lead->id,
+            'event_type' => LeadHistoryType::Disposition,
+            'occurred_at' => now(),
+            'payload' => ['disposition' => Disposition::LeftVm->value],
+        ]);
+
+        $service = app(HoldingReleaseService::class);
+
+        $this->assertSame(
+            1,
+            $service->countHolding($company->id, new HoldingFilter(
+                leadType: 'standard',
+                lastDispositions: [Disposition::LeftVm->value],
+            )),
+        );
+
+        $this->assertSame(
+            0,
+            $service->countHolding($company->id, new HoldingFilter(
+                leadType: 'standard',
+                lastDispositions: [Disposition::NoAnswer->value],
+            )),
+        );
+    }
+
+    public function test_release_moves_callable_leads_between_lists(): void
+    {
+        $company = Company::factory()->create();
+
+        $sourceList = CallingList::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'name' => 'Source List',
+            'lead_type' => 'standard',
+            'cadence_id' => $this->createCadence($company->id)->id,
+            'active' => true,
+        ]);
+
+        $targetList = CallingList::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'name' => 'Target List',
+            'lead_type' => 'standard',
+            'cadence_id' => $this->createCadence($company->id)->id,
+            'active' => true,
+        ]);
+
+        $lead = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045555001',
+            'status' => LeadStatus::Callable,
+            'lead_type' => 'standard',
+            'calling_list_id' => $sourceList->id,
+            'queue_rank' => 1,
+            'imported_at' => now(),
+        ]);
+
+        $service = app(HoldingReleaseService::class);
+
+        $released = $service->releaseAll(
+            $company->id,
+            new HoldingFilter(
+                leadType: 'standard',
+                sourceCallingListId: $sourceList->id,
+            ),
+            $targetList->id,
+        );
+
+        $this->assertSame(1, $released);
+
+        $lead->refresh();
+
+        $this->assertSame($targetList->id, $lead->calling_list_id);
+        $this->assertSame(LeadStatus::Callable, $lead->status);
+        $this->assertSame(1, $lead->queue_rank);
+
+        $this->assertDatabaseHas('lead_history', [
+            'lead_id' => $lead->id,
+            'event_type' => LeadHistoryType::Assign->value,
+        ]);
+    }
+
+    public function test_release_rejects_same_source_and_target_list(): void
+    {
+        $company = Company::factory()->create();
+
+        $list = CallingList::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'name' => 'Standard List',
+            'lead_type' => 'standard',
+            'cadence_id' => $this->createCadence($company->id)->id,
+            'active' => true,
+        ]);
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045556001',
+            'status' => LeadStatus::Callable,
+            'lead_type' => 'standard',
+            'calling_list_id' => $list->id,
+            'imported_at' => now(),
+        ]);
+
+        $service = app(HoldingReleaseService::class);
+
+        $this->expectException(HoldingReleaseException::class);
+
+        $service->releaseAll(
+            $company->id,
+            new HoldingFilter(
+                leadType: 'standard',
+                sourceCallingListId: $list->id,
+            ),
+            $list->id,
+        );
+    }
+
+    public function test_distinct_holding_column_uses_list_source(): void
+    {
+        $company = Company::factory()->create();
+
+        $sourceList = CallingList::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'name' => 'Source List',
+            'lead_type' => 'standard',
+            'cadence_id' => $this->createCadence($company->id)->id,
+            'active' => true,
+        ]);
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045557001',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'state' => 'GA',
+            'imported_at' => now(),
+        ]);
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045557002',
+            'status' => LeadStatus::Callable,
+            'lead_type' => 'standard',
+            'calling_list_id' => $sourceList->id,
+            'state' => 'FL',
+            'imported_at' => now(),
+        ]);
+
+        $service = app(HoldingReleaseService::class);
+
+        $this->assertSame(
+            ['FL' => 'FL'],
+            $service->distinctHoldingColumn($company->id, 'standard', 'state', $sourceList->id),
         );
     }
 }

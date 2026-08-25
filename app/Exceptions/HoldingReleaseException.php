@@ -15,4 +15,9 @@ class HoldingReleaseException extends RuntimeException
     {
         return new self('Release count must be at least 1.');
     }
+
+    public static function sameSourceAndTarget(): self
+    {
+        return new self('Source and target calling list must be different.');
+    }
 }
