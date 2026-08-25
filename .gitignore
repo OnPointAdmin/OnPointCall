@@ -22,5 +22,6 @@ Thumbs.db
 NUL
 .idea/
 .vscode/
+.sf/
 *.swp
 *.swo
