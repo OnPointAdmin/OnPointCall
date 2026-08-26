@@ -14,7 +14,7 @@
     x-init="$watch('dark', v => { localStorage.setItem('opc-theme', v ? 'dark' : 'light'); document.documentElement.classList.toggle('dark', v); }); document.documentElement.classList.toggle('dark', dark);"
     class="min-h-screen bg-slate-100 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100"
 >
-    <header class="border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+    <header class="relative z-50 border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <div class="mx-auto flex max-w-[1440px] items-center justify-between gap-4 px-6 py-3">
             <x-brand-mark size="sm" />
             <div class="flex items-center gap-3.5 text-sm">
@@ -35,16 +35,9 @@
                         x-cloak
                         x-show="userMenuOpen"
                         x-transition
-                        class="absolute right-0 z-20 mt-1 w-48 overflow-hidden rounded-md border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
+                        class="absolute right-0 z-50 mt-1 w-48 overflow-hidden rounded-md border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
                         role="menu"
                     >
-                        <a
-                            href="{{ route('agent.password.change') }}"
-                            class="block px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
-                            role="menuitem"
-                        >
-                            Change password
-                        </a>
                         <form method="POST" action="{{ route('agent.logout') }}">
                             @csrf
                             <button
@@ -55,6 +48,13 @@
                                 Sign out
                             </button>
                         </form>
+                        <a
+                            href="{{ route('agent.password.change') }}"
+                            class="block px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
+                            role="menuitem"
+                        >
+                            Change password
+                        </a>
                     </div>
                 </div>
                 <div class="flex items-center gap-1 rounded-lg bg-slate-100 p-0.5 dark:bg-slate-950">
@@ -91,5 +91,48 @@
     </main>
 
     @livewireScripts
+    <script>
+        window.opcCopyPhone = async function (phone, manualDialOnly, hint) {
+            if (! phone) {
+                return false;
+            }
+            if (window.innerWidth < 768 && ! manualDialOnly) {
+                return false;
+            }
+
+            const fallbackCopy = () => {
+                const textarea = document.createElement('textarea');
+                textarea.value = phone;
+                textarea.setAttribute('readonly', '');
+                textarea.style.position = 'fixed';
+                textarea.style.left = '-9999px';
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                textarea.remove();
+            };
+
+            try {
+                if (navigator.clipboard && window.isSecureContext) {
+                    await navigator.clipboard.writeText(phone);
+                } else {
+                    fallbackCopy();
+                }
+            } catch (error) {
+                fallbackCopy();
+            }
+
+            if (hint) {
+                const original = hint.dataset.originalText || hint.textContent;
+                hint.dataset.originalText = original;
+                hint.textContent = 'Copied!';
+                setTimeout(() => {
+                    hint.textContent = original;
+                }, 2000);
+            }
+
+            return true;
+        };
+    </script>
 </body>
 </html>

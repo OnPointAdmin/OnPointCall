@@ -21,6 +21,7 @@ class ListAssignmentHistoryRelationManager extends RelationManager
     public function table(Table $table): Table
     {
         return $table
+            ->heading(null)
             ->defaultSort('occurred_at', 'desc')
             ->columns([
                 TextColumn::make('occurred_at')

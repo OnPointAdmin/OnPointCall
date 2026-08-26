@@ -10,6 +10,7 @@ use App\Enums\QualificationStatus;
 use App\Enums\SoftScoreStatus;
 use App\Filament\Actions\ViewDncResultAction;
 use App\Filament\Actions\ViewQualificationResultAction;
+use App\Filament\Resources\Leads\Schemas\LeadForm;
 use App\Jobs\DncScrubJob;
 use App\Jobs\QualifyLeadJob;
 use App\Jobs\RndLeadJob;
@@ -25,6 +26,8 @@ use Filament\Actions\BulkActionGroup;
 use Filament\Actions\ViewAction;
 use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
+use Filament\Schemas\Schema;
+use Filament\Support\Enums\Width;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
@@ -39,6 +42,10 @@ class LeadsTable
         $columns = [
             TextColumn::make('phone')
                 ->searchable(),
+            TextColumn::make('external_lead_id')
+                ->label('External ID')
+                ->searchable()
+                ->placeholder('—'),
             TextColumn::make('first_name')
                 ->searchable(),
             TextColumn::make('last_name')
@@ -200,7 +207,12 @@ class LeadsTable
             ->columns($columns)
             ->filters($filters)
             ->recordActions([
-                ViewAction::make(),
+                $forCallingList
+                    ? ViewAction::make()
+                        ->slideOver()
+                        ->modalWidth(Width::Full)
+                        ->schema(fn (Schema $schema): Schema => LeadForm::configure($schema, withHistory: true)->columns(2))
+                    : ViewAction::make(),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([

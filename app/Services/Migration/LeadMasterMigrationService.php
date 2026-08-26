@@ -10,6 +10,7 @@ use App\Models\Company;
 use App\Models\Lead;
 use App\Models\LeadHistory;
 use App\Models\User;
+use App\Support\CsvHeader;
 use App\Support\PhoneNormalizer;
 use App\Support\TimezoneResolver;
 use Carbon\Carbon;
@@ -269,6 +270,116 @@ class LeadMasterMigrationService
         }
 
         ksort($stats['unmatched_agents']);
+
+        return $stats;
+    }
+
+    /**
+     * Fill blank external_lead_id values from a LeadMaster CSV, matching by phone.
+     *
+     * @return array{csv_rows: int, updated: int, already_set: int, skipped_missing_lead: int, skipped_conflict: int, skipped_no_id: int, skipped_invalid_phone: int}
+     */
+    public function backfillExternalLeadIds(Company $company, string $filePath): array
+    {
+        $file = new SplFileObject($filePath, 'r');
+        $file->setFlags(SplFileObject::READ_CSV | SplFileObject::SKIP_EMPTY | SplFileObject::DROP_NEW_LINE);
+
+        $headers = $file->fgetcsv();
+
+        if (! is_array($headers) || $headers === []) {
+            throw new \RuntimeException('CSV file has no header row.');
+        }
+
+        $headers = array_map(fn (mixed $header): string => trim((string) $header), $headers);
+        $headerIndex = $this->buildHeaderIndex($headers);
+
+        $stats = [
+            'csv_rows' => 0,
+            'updated' => 0,
+            'already_set' => 0,
+            'skipped_missing_lead' => 0,
+            'skipped_conflict' => 0,
+            'skipped_no_id' => 0,
+            'skipped_invalid_phone' => 0,
+        ];
+
+        $idsByPhone = [];
+
+        while (! $file->eof()) {
+            $row = $file->fgetcsv();
+
+            if (! is_array($row) || $this->isBlankRow($row)) {
+                continue;
+            }
+
+            $stats['csv_rows']++;
+            $phone = $this->phoneNormalizer->normalize($this->value($row, $headerIndex, 'Phone') ?? '');
+
+            if ($phone === null) {
+                $stats['skipped_invalid_phone']++;
+
+                continue;
+            }
+
+            $externalId = trim($this->value($row, $headerIndex, 'Lead ID') ?? '');
+
+            if ($externalId === '') {
+                $stats['skipped_no_id']++;
+
+                continue;
+            }
+
+            $idsByPhone[$phone] = $externalId;
+        }
+
+        if ($idsByPhone === []) {
+            return $stats;
+        }
+
+        $leadsByPhone = Lead::withoutGlobalScopes()
+            ->where('company_id', $company->id)
+            ->whereIn('phone', array_keys($idsByPhone))
+            ->get()
+            ->keyBy('phone');
+
+        $takenIds = Lead::withoutGlobalScopes()
+            ->where('company_id', $company->id)
+            ->whereNotNull('external_lead_id')
+            ->pluck('id', 'external_lead_id');
+
+        foreach ($idsByPhone as $phone => $externalId) {
+            $lead = $leadsByPhone->get($phone);
+
+            if ($lead === null) {
+                $stats['skipped_missing_lead']++;
+
+                continue;
+            }
+
+            if ($lead->external_lead_id === $externalId) {
+                $stats['already_set']++;
+
+                continue;
+            }
+
+            if ($lead->external_lead_id) {
+                $stats['already_set']++;
+
+                continue;
+            }
+
+            $ownerLeadId = $takenIds[$externalId] ?? null;
+
+            if ($ownerLeadId !== null && (int) $ownerLeadId !== (int) $lead->id) {
+                $stats['skipped_conflict']++;
+
+                continue;
+            }
+
+            $lead->update(['external_lead_id' => $externalId]);
+            $takenIds[$externalId] = $lead->id;
+            $stats['updated']++;
+        }
 
         return $stats;
     }
@@ -552,7 +663,7 @@ class LeadMasterMigrationService
 
     private function normalizeHeader(string $header): string
     {
-        return strtolower(trim($header));
+        return CsvHeader::normalize($header);
     }
 
     /**

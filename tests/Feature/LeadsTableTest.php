@@ -44,6 +44,7 @@ class LeadsTableTest extends TestCase
         $lead = Lead::withoutGlobalScopes()->create([
             'company_id' => $company->id,
             'phone' => '4045559001',
+            'external_lead_id' => 'CRM-9001',
             'first_name' => 'Pat',
             'last_name' => 'Callahan',
             'state' => 'NY',
@@ -77,6 +78,8 @@ class LeadsTableTest extends TestCase
         Livewire::actingAs($admin)
             ->test(ListLeads::class)
             ->assertOk()
+            ->assertSee('External ID')
+            ->assertSee('CRM-9001')
             ->assertSee('Last Disp')
             ->assertSee('Last Call Date')
             ->assertSee('Left VM')

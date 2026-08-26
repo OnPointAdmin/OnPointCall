@@ -49,7 +49,10 @@ class ChangePasswordTest extends TestCase
 
     public function test_first_login_password_change_unlocks_workspace(): void
     {
-        $user = $this->assignedAgent(['must_change_password' => true]);
+        $user = $this->assignedAgent([
+            'must_change_password' => true,
+            'email_verified_at' => null,
+        ]);
 
         $this->actingAs($user, 'agent');
 
@@ -62,6 +65,7 @@ class ChangePasswordTest extends TestCase
 
         $this->assertFalse($user->must_change_password);
         $this->assertTrue(Hash::check('new-password-123', $user->password));
+        $this->assertNotNull($user->email_verified_at);
 
         $this->get(route('agent.workspace'))
             ->assertOk()
@@ -175,7 +179,10 @@ class ChangePasswordTest extends TestCase
             'role' => UserRole::Admin,
             'password' => 'password',
             'must_change_password' => true,
+            'email_verified_at' => now()->subDay(),
         ]);
+
+        $verifiedAt = $user->email_verified_at;
 
         $this->actingAs($user, 'web');
 
@@ -185,12 +192,15 @@ class ChangePasswordTest extends TestCase
                 'passwordConfirmation' => 'new-password-123',
             ])
             ->call('save')
-            ->assertHasNoFormErrors();
+            ->assertHasNoFormErrors()
+            ->assertRedirect(url('/admin'));
 
         $user->refresh();
 
         $this->assertFalse($user->must_change_password);
         $this->assertTrue(Hash::check('new-password-123', $user->password));
+        $this->assertNotNull($user->email_verified_at);
+        $this->assertTrue($user->email_verified_at->equalTo($verifiedAt));
     }
 
     /**

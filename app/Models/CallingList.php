@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Casts\AssociativeJsonMap;
 use App\Enums\LeadStatus;
 use App\Models\Concerns\BelongsToCompany;
 use App\Models\Concerns\RecordsSettingsChanges;
@@ -27,7 +28,7 @@ class CallingList extends Model
     protected function casts(): array
     {
         return [
-            'booking_param_map' => 'array',
+            'booking_param_map' => AssociativeJsonMap::class,
             'active' => 'boolean',
         ];
     }

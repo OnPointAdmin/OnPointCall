@@ -19,7 +19,7 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
-#[Fillable(['company_id', 'name', 'email', 'role', 'active', 'google_id', 'microsoft_id', 'salesforce_id', 'password', 'must_change_password'])]
+#[Fillable(['company_id', 'name', 'email', 'role', 'active', 'google_id', 'microsoft_id', 'salesforce_id', 'password', 'must_change_password', 'email_verified_at'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable implements FilamentUser
 {

@@ -46,8 +46,12 @@ class ChangePasswordController extends Controller
 
         $user->password = $validated['password'];
         $user->must_change_password = false;
+        if ($forced && $user->email_verified_at === null) {
+            $user->email_verified_at = now();
+        }
         $user->save();
 
+        $request->session()->forget('url.intended');
         $request->session()->put([
             'password_hash_'.self::GUARD => $user->getAuthPassword(),
         ]);

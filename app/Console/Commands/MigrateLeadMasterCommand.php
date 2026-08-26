@@ -14,7 +14,8 @@ class MigrateLeadMasterCommand extends Command
         {--company= : Company ID}
         {--dry-run : Validate and report without writing}
         {--force : Insert even when phone or Lead ID already exists in the database}
-        {--backfill-dates : Update occurred_at on existing leadmaster_migration disposition rows from Batch Date}';
+        {--backfill-dates : Update occurred_at on existing leadmaster_migration disposition rows from Batch Date}
+        {--backfill-ids : Fill blank external_lead_id values from the Lead ID column, matching by phone}';
 
     protected $description = 'One-time migration from LeadMaster Google Sheet export';
 
@@ -33,6 +34,25 @@ class MigrateLeadMasterCommand extends Command
 
         $dryRun = (bool) $this->option('dry-run');
         $skipExisting = ! (bool) $this->option('force');
+
+        if ($this->option('backfill-ids')) {
+            try {
+                $stats = $migration->backfillExternalLeadIds($company, $path);
+            } finally {
+                CompanyContext::clear();
+            }
+
+            $this->info('LeadMaster external lead ID backfill');
+            $this->line("CSV rows: {$stats['csv_rows']}");
+            $this->line("Updated: {$stats['updated']}");
+            $this->line("Already set: {$stats['already_set']}");
+            $this->line("Skipped (no matching lead): {$stats['skipped_missing_lead']}");
+            $this->line("Skipped (ID already on another lead): {$stats['skipped_conflict']}");
+            $this->line("Skipped (no Lead ID in CSV): {$stats['skipped_no_id']}");
+            $this->line("Skipped (invalid phone): {$stats['skipped_invalid_phone']}");
+
+            return self::SUCCESS;
+        }
 
         if ($this->option('backfill-dates')) {
             try {

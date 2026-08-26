@@ -49,7 +49,9 @@ class CallingListDispositionCountServiceTest extends TestCase
         $this->assertSame(2, $items[Disposition::Booked->value]);
         $this->assertSame(1, $items[Disposition::NoAnswer->value]);
         $this->assertSame(1, $items['none']);
-        $this->assertArrayNotHasKey(Disposition::LeftVm->value, $items->all());
+        $this->assertSame(0, $items[Disposition::LeftVm->value]);
+        $this->assertSame(50.0, collect(app(CallingListDispositionCountService::class)->forList($list))
+            ->firstWhere('key', Disposition::Booked->value)['percent']);
     }
 
     private function makeLead(int $companyId, int $listId, string $phone): Lead

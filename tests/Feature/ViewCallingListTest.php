@@ -79,11 +79,13 @@ class ViewCallingListTest extends TestCase
             ->assertSee('Standard')
             ->assertSee('Edit')
             ->assertDontSee('Save changes')
-            ->assertSee('Show leads')
+            ->assertSee('Disposition counts')
             ->assertSee('Total')
             ->assertSee('Booked')
-            ->assertDontSee('4045559001')
-            ->assertActionExists('edit');
+            ->assertSee('Assignment history')
+            ->assertSee('Leads in this list')
+            ->assertActionExists('edit')
+            ->assertActionDoesNotExist('toggleLeads');
 
         Livewire::actingAs($admin)
             ->test(CallingListDispositionStats::class, ['record' => $list])
@@ -107,7 +109,7 @@ class ViewCallingListTest extends TestCase
         $admin = $this->makeAdmin();
         $list = $this->createCallingList($admin->company_id, overrides: ['name' => 'Standard']);
         $otherList = $this->createCallingList($admin->company_id, overrides: ['name' => 'Other']);
-        $onList = $this->makeLead($admin->company_id, $list->id, '4045552001');
+        $onList = $this->makeLead($admin->company_id, $list->id, '4045552001', 'CRM-2001');
         $this->makeLead($admin->company_id, $otherList->id, '4045552002');
 
         CompanyContext::set($admin->company_id);
@@ -115,9 +117,7 @@ class ViewCallingListTest extends TestCase
         Livewire::actingAs($admin)
             ->test(ViewCallingList::class, ['record' => $list->getRouteKey()])
             ->assertOk()
-            ->assertDontSee('4045552001')
-            ->callAction('toggleLeads')
-            ->assertSee('Hide leads');
+            ->assertSee('Leads in this list');
 
         Livewire::actingAs($admin)
             ->test(LeadsRelationManager::class, [
@@ -125,8 +125,62 @@ class ViewCallingListTest extends TestCase
                 'pageClass' => ViewCallingList::class,
             ])
             ->assertOk()
+            ->assertSee('External ID')
+            ->assertSee('CRM-2001')
             ->assertCanSeeTableRecords([$onList])
             ->assertDontSee('4045552002');
+    }
+
+    public function test_list_lead_view_opens_slide_over_with_full_record_and_history(): void
+    {
+        $admin = $this->makeAdmin();
+        $list = $this->createCallingList($admin->company_id, overrides: ['name' => 'Standard']);
+        $lead = $this->makeLead($admin->company_id, $list->id, '4045552001', 'CRM-2001');
+        $lead->update([
+            'email' => 'pat@example.com',
+            'address' => '1291 E Strawberry Drive',
+            'city' => 'Gilbert',
+        ]);
+
+        LeadHistory::withoutGlobalScopes()->create([
+            'company_id' => $admin->company_id,
+            'lead_id' => $lead->id,
+            'actor_id' => $admin->id,
+            'event_type' => LeadHistoryType::Disposition,
+            'occurred_at' => now(),
+            'payload' => [
+                'disposition' => Disposition::LeftVm->value,
+                'note' => 'Left a voicemail about the tour.',
+            ],
+        ]);
+
+        CompanyContext::set($admin->company_id);
+
+        $component = Livewire::actingAs($admin)
+            ->test(LeadsRelationManager::class, [
+                'ownerRecord' => $list,
+                'pageClass' => ViewCallingList::class,
+            ])
+            ->assertOk()
+            ->mountTableAction('view', $lead)
+            ->assertTableActionDataSet([
+                'phone' => '4045552001',
+                'external_lead_id' => 'CRM-2001',
+                'email' => 'pat@example.com',
+                'address' => '1291 E Strawberry Drive',
+                'city' => 'Gilbert',
+            ]);
+
+        $this->assertNull($component->instance()->getMountedAction()?->getUrl());
+
+        $schemaHtml = $component->instance()
+            ->getSchema($component->instance()->getMountedActionSchemaName())
+            ?->toHtml() ?? '';
+
+        $this->assertStringContainsString('History', $schemaHtml);
+        $this->assertStringContainsString('Left VM', $schemaHtml);
+        $this->assertStringContainsString($admin->name, $schemaHtml);
+        $this->assertStringContainsString('Left a voicemail about the tour.', $schemaHtml);
     }
 
     public function test_edit_page_can_save_and_return_to_view(): void
@@ -159,11 +213,12 @@ class ViewCallingListTest extends TestCase
         ]);
     }
 
-    private function makeLead(int $companyId, int $listId, string $phone): Lead
+    private function makeLead(int $companyId, int $listId, string $phone, ?string $externalLeadId = null): Lead
     {
         return Lead::withoutGlobalScopes()->create([
             'company_id' => $companyId,
             'phone' => $phone,
+            'external_lead_id' => $externalLeadId,
             'first_name' => 'Pat',
             'last_name' => 'Callahan',
             'state' => 'NY',

@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\AppSettings\Schemas;
 
 use App\Support\CompanyTimezone;
+use Filament\Forms\Components\KeyValue;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -18,7 +19,12 @@ class AppSettingForm
             ->components([
                 Textarea::make('booking_url_template')
                     ->columnSpanFull(),
-                TextInput::make('booking_param_map'),
+                KeyValue::make('booking_param_map')
+                    ->label('Booking URL parameters')
+                    ->keyLabel('Form field')
+                    ->valueLabel('Lead field')
+                    ->helperText('Map booking form fields to lead columns, e.g. 2ff7-7114-0d49 → external_lead_id. Leave empty to send id=external_lead_id.')
+                    ->columnSpanFull(),
                 TextInput::make('max_attempts')
                     ->required()
                     ->numeric()

@@ -36,7 +36,7 @@ class AdminPanelProvider extends PanelProvider
             ->authGuard('web')
             ->login()
             ->passwordReset()
-            ->profile(EditProfile::class, isSimple: false)
+            ->profile(EditProfile::class, isSimple: true)
             ->userMenuItems([
                 'profile' => fn (Action $action): Action => $action
                     ->label('Change password')

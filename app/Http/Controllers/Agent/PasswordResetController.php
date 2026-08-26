@@ -80,6 +80,7 @@ class PasswordResetController extends Controller
                     'password' => Hash::make($password),
                     'remember_token' => Str::random(60),
                     'must_change_password' => false,
+                    'email_verified_at' => $user->email_verified_at ?? now(),
                 ])->save();
 
                 event(new PasswordReset($user));

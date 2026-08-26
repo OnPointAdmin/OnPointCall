@@ -12,13 +12,19 @@
         type="button"
         id="phone-copy-btn"
         data-phone="{{ $phone }}"
-        class="block w-full border-none bg-transparent p-0 font-extrabold leading-tight tracking-tight text-slate-900 hover:text-blue-700 dark:text-slate-100 dark:hover:text-blue-400"
+        data-manual-dial-only="{{ $manualDialOnly ? '1' : '0' }}"
+        class="block w-full cursor-pointer border-none bg-transparent p-0 font-extrabold leading-tight tracking-tight text-slate-900 hover:text-blue-700 dark:text-slate-100 dark:hover:text-blue-400"
         style="font-size: clamp(34px, 8vw, 56px);"
-        onclick="copyPhone('{{ $phone }}')"
+        aria-label="Copy phone number {{ $displayPhone }}"
+        x-on:click="window.opcCopyPhone($el.dataset.phone, $el.dataset.manualDialOnly === '1', document.getElementById('phone-copy-hint'))"
     >
         {{ $displayPhone }}
     </button>
-    <p class="m-0 mt-2 hidden text-sm text-slate-400 dark:text-slate-500 md:block" id="phone-copy-hint">Click to copy phone number</p>
+    <p
+        class="m-0 mt-2 hidden text-sm text-slate-400 dark:text-slate-500 md:block"
+        id="phone-copy-hint"
+        aria-live="polite"
+    >Click to copy phone number</p>
 
     @if (! $manualDialOnly)
         <a
@@ -56,18 +62,3 @@
         </p>
     @endif
 </div>
-
-<script>
-    function copyPhone(phone) {
-        if (window.innerWidth < 768 && !{{ $manualDialOnly ? 'true' : 'false' }}) {
-            return;
-        }
-        navigator.clipboard.writeText(phone).then(() => {
-            const hint = document.getElementById('phone-copy-hint');
-            if (hint) {
-                hint.textContent = 'Copied!';
-                setTimeout(() => hint.textContent = 'Click to copy phone number', 2000);
-            }
-        });
-    }
-</script>

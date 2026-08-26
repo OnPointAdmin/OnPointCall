@@ -204,6 +204,39 @@ class LeadImportServiceTest extends TestCase
         $this->assertSame('Show', $lead->tour_or_no_show);
     }
 
+    public function test_maps_lead_id_when_csv_has_utf8_bom(): void
+    {
+        $company = Company::factory()->create();
+        CompanyContext::set($company->id);
+
+        $csv = "\xEF\xBB\xBFLead ID,Phone,First Name\n00QVr00000yVxNpMAK,3102480441,Maria\n";
+        $path = storage_path('app/imports/leadmaster-bom-import.csv');
+        if (! is_dir(dirname($path))) {
+            mkdir(dirname($path), 0777, true);
+        }
+        file_put_contents($path, $csv);
+
+        $service = app(LeadImportService::class);
+        $batch = $service->createBatch($company->id, 'leadmaster-bom-import.csv', 'standard', false);
+
+        $result = $service->process($batch, $path, [
+            'phone' => 'Phone',
+            'external_lead_id' => 'Lead ID',
+            'first_name' => 'First Name',
+        ], 'standard');
+
+        CompanyContext::clear();
+
+        $this->assertSame(1, $result['inserted_count']);
+
+        $lead = Lead::withoutGlobalScopes()
+            ->where('company_id', $company->id)
+            ->where('phone', '3102480441')
+            ->first();
+
+        $this->assertSame('00QVr00000yVxNpMAK', $lead?->external_lead_id);
+    }
+
     public function test_ssis_mapping_imports_standard_demographic_columns(): void
     {
         $company = Company::factory()->create();

@@ -15,6 +15,7 @@ class LeadsRelationManager extends RelationManager
     public function table(Table $table): Table
     {
         return LeadsTable::configure($table, forCallingList: true)
-            ->recordTitleAttribute('phone');
+            ->recordTitleAttribute('phone')
+            ->heading(null);
     }
 }

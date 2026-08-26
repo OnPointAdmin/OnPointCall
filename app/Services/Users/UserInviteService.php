@@ -44,6 +44,7 @@ class UserInviteService
                 'active' => true,
                 'password' => $password,
                 'must_change_password' => true,
+                'email_verified_at' => null,
             ]);
 
             if ($salesforceId !== null) {
@@ -61,7 +62,7 @@ class UserInviteService
                 'password' => $password,
                 'must_change_password' => true,
                 'salesforce_id' => $salesforceId,
-                'email_verified_at' => now(),
+                'email_verified_at' => null,
             ]);
             $user->save();
         }
@@ -104,6 +105,7 @@ class UserInviteService
         $user->password = $password;
         $user->must_change_password = true;
         $user->active = true;
+        $user->email_verified_at = null;
         $user->save();
 
         Mail::to($user->email)->send(new UserInviteMail($user, $password));

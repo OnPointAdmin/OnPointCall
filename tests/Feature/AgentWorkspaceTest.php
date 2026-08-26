@@ -586,6 +586,27 @@ class AgentWorkspaceTest extends TestCase
         Carbon::setTestNow();
     }
 
+    public function test_phone_number_button_wires_copy_handler(): void
+    {
+        [$user, $lead] = $this->makeWorkableLead([
+            'phone' => '4045555100',
+        ]);
+        $this->actingAs($user, 'agent');
+
+        Livewire::test(Workspace::class)
+            ->assertSee('Click to copy phone number')
+            ->assertSeeHtml('id="phone-copy-btn"')
+            ->assertSeeHtml('data-phone="'.$lead->phone.'"')
+            ->assertSeeHtml('window.opcCopyPhone')
+            ->assertDontSeeHtml('onclick="copyPhone');
+
+        $this->get(route('agent.workspace'))
+            ->assertOk()
+            ->assertSee('window.opcCopyPhone', false)
+            ->assertSee('id="phone-copy-btn"', false)
+            ->assertSee('data-phone="'.$lead->phone.'"', false);
+    }
+
     public function test_lead_panel_shows_tnb_fields_and_hides_partners(): void
     {
         [$user] = $this->makeWorkableLead([

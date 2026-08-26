@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Casts\AssociativeJsonMap;
 use App\Models\Concerns\BelongsToCompany;
 use App\Models\Concerns\RecordsSettingsChanges;
 use Illuminate\Database\Eloquent\Model;
@@ -26,7 +27,7 @@ class AppSetting extends Model
     protected function casts(): array
     {
         return [
-            'booking_param_map' => 'array',
+            'booking_param_map' => AssociativeJsonMap::class,
             'dashboard_email_enabled' => 'boolean',
         ];
     }

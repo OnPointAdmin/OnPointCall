@@ -46,6 +46,7 @@ class UserInviteTest extends TestCase
         $this->assertSame('005000000000001AAA', $user->salesforce_id);
         $this->assertTrue($user->active);
         $this->assertTrue($user->must_change_password);
+        $this->assertNull($user->email_verified_at);
         $this->assertNotEmpty($result['password']);
 
         $this->assertTrue(
@@ -108,12 +109,14 @@ class UserInviteTest extends TestCase
             'company_id' => $company->id,
             'email' => 'jasonpaine1@gmail.com',
             'role' => UserRole::Agent,
+            'email_verified_at' => null,
         ]);
 
         $password = app(UserInviteService::class)->resend($user);
 
         $this->assertNotEmpty($password);
         $this->assertTrue($user->fresh()->must_change_password);
+        $this->assertNull($user->fresh()->email_verified_at);
 
         Mail::assertSent(UserInviteMail::class, function (UserInviteMail $mail) use ($user, $password): bool {
             return $mail->hasTo($user->email) && $mail->plainPassword === $password;

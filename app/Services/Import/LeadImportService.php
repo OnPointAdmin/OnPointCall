@@ -18,6 +18,7 @@ use App\Models\ImportBatchSkippedRow;
 use App\Models\ImportMapping;
 use App\Models\Lead;
 use App\Services\SoftScore\SoftScoreService;
+use App\Support\CsvHeader;
 use App\Support\PhoneNormalizer;
 use App\Support\TimezoneResolver;
 use Carbon\Carbon;
@@ -487,7 +488,7 @@ class LeadImportService
 
     private function normalizeHeader(string $header): string
     {
-        return strtolower(trim($header));
+        return CsvHeader::normalize($header);
     }
 
     /**

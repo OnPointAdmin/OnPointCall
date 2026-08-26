@@ -13,7 +13,7 @@ class CallingListDispositionCountService
     /**
      * Last disposition of leads currently on the list (same meaning as Leads "Last Disp").
      *
-     * @return list<array{key: string, label: string, count: int}>
+     * @return list<array{key: string, label: string, count: int, percent: ?float}>
      */
     public function forList(CallingList $list): array
     {
@@ -56,37 +56,37 @@ class CallingListDispositionCountService
             }
         }
 
+        $none = $total - $withDisposition;
+        $percent = fn (int $count): ?float => $total > 0
+            ? round(100 * $count / $total, 1)
+            : null;
+
         $items = [
             [
                 'key' => 'total',
                 'label' => 'Total',
                 'count' => $total,
+                'percent' => $total > 0 ? 100.0 : null,
             ],
         ];
 
         foreach (Disposition::cases() as $disposition) {
             $count = $counts[$disposition->value];
 
-            if ($count === 0) {
-                continue;
-            }
-
             $items[] = [
                 'key' => $disposition->value,
                 'label' => $disposition->label(),
                 'count' => $count,
+                'percent' => $percent($count),
             ];
         }
 
-        $none = $total - $withDisposition;
-
-        if ($none > 0) {
-            $items[] = [
-                'key' => 'none',
-                'label' => 'None',
-                'count' => $none,
-            ];
-        }
+        $items[] = [
+            'key' => 'none',
+            'label' => 'None',
+            'count' => $none,
+            'percent' => $percent($none),
+        ];
 
         return $items;
     }

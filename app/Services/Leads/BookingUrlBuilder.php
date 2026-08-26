@@ -2,6 +2,7 @@
 
 namespace App\Services\Leads;
 
+use App\Casts\AssociativeJsonMap;
 use App\Models\AppSetting;
 use App\Models\Lead;
 
@@ -22,9 +23,9 @@ class BookingUrlBuilder
             return null;
         }
 
-        $paramMap = $lead->callingList?->booking_param_map
-            ?? $settings?->booking_param_map
-            ?? [];
+        $listMap = AssociativeJsonMap::normalize($lead->callingList?->booking_param_map);
+        $settingsMap = AssociativeJsonMap::normalize($settings?->booking_param_map);
+        $paramMap = $listMap !== [] ? $listMap : $settingsMap;
 
         if ($paramMap === []) {
             $paramMap = ['id' => 'external_lead_id'];
@@ -32,12 +33,9 @@ class BookingUrlBuilder
 
         $params = $this->buildParams($lead, $paramMap);
 
-        if ($params === [] && $lead->external_lead_id) {
-            $params['id'] = $lead->external_lead_id;
-        }
-
         if ($params === []) {
-            return $template;
+            $formParam = array_key_first($paramMap) ?: 'id';
+            $params[$formParam] = (string) ($lead->external_lead_id ?: $lead->id);
         }
 
         $separator = str_contains($template, '?') ? '&' : '?';
