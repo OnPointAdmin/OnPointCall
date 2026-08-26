@@ -92,8 +92,8 @@ class Workspace extends Component
 
     public string $lookupQuery = '';
 
-    /** @var Collection<int, Lead> */
-    public Collection $lookupResults;
+    /** @var list<array{id: int, name: string, phone: ?string, status: string}> */
+    public array $lookupResults = [];
 
     public ?int $lookupLeadId = null;
 
@@ -113,7 +113,7 @@ class Workspace extends Component
 
     public function mount(): void
     {
-        $this->lookupResults = collect();
+        $this->lookupResults = [];
 
         $claim = app(LeadClaimService::class)->activeClaimForUser(Auth::guard('agent')->user());
 
@@ -418,7 +418,15 @@ class Workspace extends Component
     public function searchLeads(): void
     {
         $this->lookupResults = app(LeadLookupService::class)
-            ->search(Auth::guard('agent')->user()->company_id, $this->lookupQuery);
+            ->search(Auth::guard('agent')->user()->company_id, $this->lookupQuery)
+            ->map(fn (Lead $lead): array => [
+                'id' => $lead->id,
+                'name' => $lead->fullName() ?: 'Unknown',
+                'phone' => $lead->phone,
+                'status' => $lead->status->label(),
+            ])
+            ->values()
+            ->all();
 
         $this->lookupLeadId = null;
         $this->lookupReadOnly = false;
@@ -426,6 +434,8 @@ class Workspace extends Component
 
     public function selectLookupLead(int $leadId): void
     {
+        $user = Auth::guard('agent')->user();
+
         $lead = Lead::withoutGlobalScopes()
             ->with([
                 'callingList',
@@ -433,40 +443,50 @@ class Workspace extends Component
                 'callbackOwner',
                 'history' => fn ($q) => $this->callHistoryQuery($q),
             ])
-            ->where('company_id', Auth::guard('agent')->user()->company_id)
+            ->where('company_id', $user->company_id)
             ->find($leadId);
 
         if (! $lead) {
             return;
         }
 
-        $lookup = app(LeadLookupService::class);
-        $this->lookupReadOnly = $lookup->isReadOnly($lead, Auth::guard('agent')->user());
+        $this->resetDispositionFields();
+        $this->editable = [];
+        $this->lookupLeadId = null;
+        $this->lookupReadOnly = false;
+        $this->softScoreMessage = '';
+        $this->qualificationMessage = '';
+        $this->showSoftScoreRecentModal = false;
+        $this->emptyMessage = null;
 
-        if ($lookup->canWorkImmediately($lead, Auth::guard('agent')->user())) {
-            app(LeadClaimService::class)->claimForLookup($lead, Auth::guard('agent')->user());
+        if ($lead->status === LeadStatus::Dnc) {
+            $this->leadReadOnly = true;
+            $this->leadReadOnlyMessage = 'DNC — this lead cannot be worked';
+            $this->loadLead($lead);
 
+            return;
+        }
+
+        $claim = app(LeadClaimService::class)->claimForLookup($lead, $user);
+
+        if ($claim) {
             LeadHistory::withoutGlobalScopes()->create([
                 'company_id' => $lead->company_id,
                 'lead_id' => $lead->id,
-                'actor_id' => Auth::guard('agent')->id(),
+                'actor_id' => $user->id,
                 'event_type' => LeadHistoryType::Claim,
                 'occurred_at' => now(),
                 'payload' => ['source' => 'lookup'],
             ]);
-
-            $this->leadReadOnly = false;
-            $this->leadReadOnlyMessage = '';
-            $this->loadLead($lead->fresh([
-                'callingList',
-                'claim',
-                'history' => fn ($q) => $this->callHistoryQuery($q),
-            ]));
-            $this->lookupLeadId = null;
-            $this->emptyMessage = null;
-        } else {
-            $this->lookupLeadId = $leadId;
         }
+
+        $this->leadReadOnly = false;
+        $this->leadReadOnlyMessage = '';
+        $this->loadLead($lead->fresh([
+            'callingList',
+            'claim',
+            'history' => fn ($q) => $this->callHistoryQuery($q),
+        ]));
     }
 
     public function openCallback(int $leadId): void

@@ -707,6 +707,63 @@ class AgentWorkspaceTest extends TestCase
             ->assertDontSee('Run Qualification');
     }
 
+    public function test_lookup_opens_callable_lead_without_calling_list(): void
+    {
+        [$user, $lead] = $this->makeLookupLead([
+            'phone' => '3057208602',
+            'first_name' => 'Francisco',
+            'last_name' => 'Bedoya',
+            'state' => 'FL',
+            'status' => LeadStatus::Callable,
+            'calling_list_id' => null,
+        ]);
+        $this->actingAs($user, 'agent');
+
+        Livewire::test(Workspace::class)
+            ->set('lookupQuery', '3057208602')
+            ->call('searchLeads')
+            ->assertSee('Francisco')
+            ->call('selectLookupLead', $lead->id)
+            ->assertSet('leadId', $lead->id)
+            ->assertSet('leadReadOnly', false)
+            ->assertSee('Francisco Bedoya');
+
+        $this->assertDatabaseHas('lead_claims', [
+            'lead_id' => $lead->id,
+            'user_id' => $user->id,
+        ]);
+    }
+
+    public function test_lookup_opens_holding_lead(): void
+    {
+        [$user, $lead] = $this->makeLookupLead([
+            'status' => LeadStatus::Holding,
+            'calling_list_id' => null,
+        ]);
+        $this->actingAs($user, 'agent');
+
+        Livewire::test(Workspace::class)
+            ->call('selectLookupLead', $lead->id)
+            ->assertSet('leadId', $lead->id)
+            ->assertSet('leadReadOnly', false);
+    }
+
+    public function test_lookup_opens_dnc_lead_read_only_with_message(): void
+    {
+        [$user, $lead] = $this->makeLookupLead([
+            'status' => LeadStatus::Dnc,
+        ]);
+        $this->actingAs($user, 'agent');
+
+        Livewire::test(Workspace::class)
+            ->call('selectLookupLead', $lead->id)
+            ->assertSet('leadId', $lead->id)
+            ->assertSet('leadReadOnly', true)
+            ->assertSee('DNC — this lead cannot be worked');
+
+        $this->assertDatabaseMissing('lead_claims', ['lead_id' => $lead->id]);
+    }
+
     /**
      * @param  array<string, mixed>  $overrides
      * @return array{0: User, 1: Lead}
@@ -755,6 +812,39 @@ class AgentWorkspaceTest extends TestCase
             'claimed_at' => now(),
             'expires_at' => now()->addMinutes(20),
         ]);
+
+        return [$user, $lead];
+    }
+
+    /**
+     * @param  array<string, mixed>  $overrides
+     * @return array{0: User, 1: Lead}
+     */
+    private function makeLookupLead(array $overrides = []): array
+    {
+        $company = Company::factory()->create();
+        $user = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Agent,
+        ]);
+
+        $lead = Lead::withoutGlobalScopes()->create(array_merge([
+            'company_id' => $company->id,
+            'phone' => '4045556100',
+            'first_name' => 'Pat',
+            'last_name' => 'Lee',
+            'city' => 'Atlanta',
+            'state' => 'GA',
+            'timezone' => 'America/New_York',
+            'status' => LeadStatus::Callable,
+            'lead_type' => 'standard',
+            'imported_at' => now(),
+            'soft_score_status' => SoftScoreStatus::Complete,
+            'soft_score_code' => 'A',
+            'soft_score_checked_at' => now(),
+            'qualification_status' => QualificationStatus::Qualified,
+            'qualification_checked_at' => now(),
+        ], $overrides));
 
         return [$user, $lead];
     }

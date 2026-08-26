@@ -88,6 +88,8 @@
     border: 1px solid #e2e8f0;
     border-radius: 0.75rem;
     box-shadow: 0 1px 2px rgb(15 23 42 / 0.05);
+    color: #0f172a;
+    color-scheme: light;
 }
 
 .dashboard-filters {
@@ -311,6 +313,32 @@
     border-color: #cbd5e1;
     border-radius: 0.5rem;
     background: #fff;
+    color: #0f172a;
+    color-scheme: light;
+}
+
+.dashboard-report .dashboard-filter-form .fi-input,
+.dashboard-report .dashboard-filter-form .fi-select-input,
+.dashboard-report .dashboard-filter-form .fi-select-input-btn,
+.dashboard-report .dashboard-filter-form .fi-select-input-value,
+.dashboard-report .dashboard-filter-form .fi-select-input-value-label {
+    color: #0f172a;
+    -webkit-text-fill-color: #0f172a;
+}
+
+.dashboard-report .dashboard-filter-form .fi-select-input-placeholder {
+    color: #64748b;
+    -webkit-text-fill-color: #64748b;
+}
+
+.dashboard-report .dashboard-filter-form input[type="date"]::-webkit-datetime-edit,
+.dashboard-report .dashboard-filter-form input[type="date"]::-webkit-datetime-edit-fields-wrapper,
+.dashboard-report .dashboard-filter-form input[type="date"]::-webkit-datetime-edit-text,
+.dashboard-report .dashboard-filter-form input[type="date"]::-webkit-datetime-edit-month-field,
+.dashboard-report .dashboard-filter-form input[type="date"]::-webkit-datetime-edit-day-field,
+.dashboard-report .dashboard-filter-form input[type="date"]::-webkit-datetime-edit-year-field {
+    color: #0f172a;
+    -webkit-text-fill-color: #0f172a;
 }
 
 .dashboard-report .dashboard-filter-form .fi-form-actions {

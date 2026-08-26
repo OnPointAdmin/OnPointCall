@@ -306,28 +306,23 @@
                         </button>
                     </div>
 
-                    @if ($lookupResults->isNotEmpty())
+                    @if ($lookupResults !== [])
                         <ul class="m-0 mt-2.5 flex list-none flex-col gap-1.5 p-0">
                             @foreach ($lookupResults as $result)
                                 <li>
                                     <button
                                         type="button"
-                                        wire:click="selectLookupLead({{ $result->id }})"
+                                        wire:key="lookup-{{ $result['id'] }}"
+                                        wire:click="selectLookupLead({{ $result['id'] }})"
                                         class="w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-left text-sm hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-950 dark:hover:bg-slate-800"
                                     >
-                                        <span class="font-semibold text-slate-700 dark:text-slate-300">{{ $result->fullName() ?: 'Unknown' }}</span>
-                                        <span class="text-slate-500 dark:text-slate-400"> — {{ $result->phone }}</span>
-                                        <span class="ml-1.5 text-[11px] text-slate-400 dark:text-slate-500">{{ $result->status->label() }}</span>
+                                        <span class="font-semibold text-slate-700 dark:text-slate-300">{{ $result['name'] }}</span>
+                                        <span class="text-slate-500 dark:text-slate-400"> — {{ $result['phone'] }}</span>
+                                        <span class="ml-1.5 text-[11px] text-slate-400 dark:text-slate-500">{{ $result['status'] }}</span>
                                     </button>
                                 </li>
                             @endforeach
                         </ul>
-                    @endif
-
-                    @if ($this->lookupLead && $lookupReadOnly)
-                        <div class="mt-3 border-t border-slate-100 pt-3 dark:border-slate-800">
-                            @include('livewire.agent.partials.lead-readonly', ['lead' => $this->lookupLead])
-                        </div>
                     @endif
                 </div>
             </div>
