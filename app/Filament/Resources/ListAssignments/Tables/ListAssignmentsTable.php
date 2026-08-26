@@ -14,6 +14,7 @@ class ListAssignmentsTable
     public static function configure(Table $table): Table
     {
         return $table
+            ->defaultSort('callingList.name')
             ->columns([
                 TextColumn::make('company.name')
                     ->label('Company')

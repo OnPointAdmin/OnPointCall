@@ -77,6 +77,7 @@ class ListAssignmentsTableTest extends TestCase
 
         Livewire::actingAs($admin)
             ->test(ListListAssignments::class)
+            ->assertCanSeeTableRecords([$amyAlpha, $zoeZebra], inOrder: true)
             ->sortTable('user.name')
             ->assertCanSeeTableRecords([$amyAlpha, $zoeZebra], inOrder: true)
             ->sortTable('user.name', 'desc')
