@@ -54,6 +54,47 @@ class DialableInventoryServiceTest extends TestCase
 
         $this->assertSame(0, $inventory->readyNow);
         $this->assertSame(1, $inventory->waiting);
+        $this->assertSame(1, $inventory->waitingCadence);
+        $this->assertSame(0, $inventory->waitingHours);
+        $this->assertSame(0, $inventory->claimed);
+    }
+
+    public function test_cadence_wait_splits_by_next_day_part(): void
+    {
+        $company = $this->makeCompany();
+        $list = $this->createCallingList($company->id, $this->createCadenceWithDayParts($company->id));
+        $this->makeCallableLead(
+            $company->id,
+            $list->id,
+            '4045551001',
+            attemptCount: 1,
+            lastAttemptAt: now()->subMinutes(5),
+            nextDayPart: 'morning',
+        );
+
+        $inventory = app(DialableInventoryService::class)->forList($list);
+
+        $this->assertSame(0, $inventory->readyNow);
+        $this->assertSame(1, $inventory->waitingCadence);
+        $this->assertSame(1, $inventory->cadenceByDayPart['morning']);
+        $this->assertSame('1 morning', $inventory->cadenceDayPartDescription());
+        $this->assertNotNull($inventory->cadenceEarliestByPart['morning']);
+        $this->assertNotEmpty($inventory->cadenceWaitSlotRows());
+        $slots = $inventory->cadenceWaitSlotRows();
+        $this->assertCount(4, $slots);
+
+        $tomorrowMorning = collect($slots)->first(
+            fn (array $slot): bool => str_contains($slot['label'], 'Tomorrow') && str_contains($slot['label'], 'Morning'),
+        );
+        $this->assertNotNull($tomorrowMorning);
+        $this->assertSame(1, $tomorrowMorning['count']);
+
+        $this->assertNull(collect($slots)->first(
+            fn (array $slot): bool => str_contains($slot['label'], 'Today') && str_contains($slot['label'], 'Morning'),
+        ));
+        $this->assertNull(collect($slots)->first(
+            fn (array $slot): bool => str_contains($slot['label'], 'Today') && str_contains($slot['label'], 'Afternoon'),
+        ));
     }
 
     public function test_outside_legal_hours_counts_as_waiting(): void
@@ -68,6 +109,7 @@ class DialableInventoryServiceTest extends TestCase
 
         $this->assertSame(0, $inventory->readyNow);
         $this->assertSame(1, $inventory->waiting);
+        $this->assertSame(1, $inventory->waitingHours);
     }
 
     public function test_claimed_lead_counts_as_waiting(): void
@@ -92,6 +134,7 @@ class DialableInventoryServiceTest extends TestCase
 
         $this->assertSame(0, $inventory->readyNow);
         $this->assertSame(1, $inventory->waiting);
+        $this->assertSame(1, $inventory->claimed);
     }
 
     public function test_ignores_non_callable_and_exhausted_leads(): void
@@ -108,6 +151,35 @@ class DialableInventoryServiceTest extends TestCase
 
         $this->assertSame(1, $inventory->readyNow);
         $this->assertSame(0, $inventory->waiting);
+        $this->assertSame(1, $inventory->maxAttempts);
+        $this->assertSame(1, $inventory->callbacksScheduled);
+    }
+
+    public function test_due_callback_counts_separately_from_callable_pool(): void
+    {
+        $company = $this->makeCompany();
+        $list = $this->createCallingList($company->id);
+
+        $this->makeLead(
+            $company->id,
+            $list->id,
+            LeadStatus::Callback,
+            '4045551001',
+            callbackAt: now()->subHour(),
+        );
+        $this->makeLead(
+            $company->id,
+            $list->id,
+            LeadStatus::Callback,
+            '4045551002',
+            callbackAt: now()->addHour(),
+        );
+
+        $inventory = app(DialableInventoryService::class)->forList($list);
+
+        $this->assertSame(1, $inventory->callbacksDue);
+        $this->assertSame(1, $inventory->callbacksScheduled);
+        $this->assertSame(0, $inventory->readyNow);
     }
 
     public function test_counts_are_isolated_per_list(): void
@@ -165,6 +237,7 @@ class DialableInventoryServiceTest extends TestCase
         string $phone,
         int $attemptCount = 0,
         ?Carbon $lastAttemptAt = null,
+        ?string $nextDayPart = null,
     ): Lead {
         return $this->makeLead(
             $companyId,
@@ -173,6 +246,7 @@ class DialableInventoryServiceTest extends TestCase
             $phone,
             $attemptCount,
             $lastAttemptAt,
+            $nextDayPart,
         );
     }
 
@@ -183,6 +257,8 @@ class DialableInventoryServiceTest extends TestCase
         string $phone,
         int $attemptCount = 0,
         ?Carbon $lastAttemptAt = null,
+        ?string $nextDayPart = null,
+        ?Carbon $callbackAt = null,
     ): Lead {
         return Lead::withoutGlobalScopes()->create([
             'company_id' => $companyId,
@@ -194,6 +270,8 @@ class DialableInventoryServiceTest extends TestCase
             'calling_list_id' => $listId,
             'attempt_count' => $attemptCount,
             'last_attempt_at' => $lastAttemptAt,
+            'next_day_part' => $nextDayPart,
+            'callback_at' => $callbackAt,
             'imported_at' => now(),
         ]);
     }

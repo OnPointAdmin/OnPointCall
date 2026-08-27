@@ -36,8 +36,6 @@ class UsersTable
                     ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
-                TextColumn::make('company.name')
-                    ->searchable(),
                 TextColumn::make('role')
                     ->badge()
                     ->searchable(),

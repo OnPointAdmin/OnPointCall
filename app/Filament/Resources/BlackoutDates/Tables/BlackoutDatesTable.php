@@ -14,8 +14,6 @@ class BlackoutDatesTable
     {
         return $table
             ->columns([
-                TextColumn::make('company.name')
-                    ->searchable(),
                 TextColumn::make('date')
                     ->date()
                     ->sortable(),

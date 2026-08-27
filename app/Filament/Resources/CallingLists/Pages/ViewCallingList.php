@@ -40,17 +40,33 @@ class ViewCallingList extends ViewRecord
                 ])->schema([
                     $this->getFormContentComponent()
                         ->columnSpan(['lg' => 2]),
-                    Section::make('Disposition counts')
-                        ->compact()
-                        ->columnSpan(['lg' => 1])
-                        ->schema([
-                            Html::make(function (): HtmlString {
-                                return new HtmlString(view('filament.resources.calling-lists.disposition-counts', [
-                                    'items' => app(CallingListDispositionCountService::class)->forList($this->getRecord()),
-                                    'showHeading' => false,
-                                ])->render());
-                            }),
-                        ]),
+                    Group::make([
+                        Section::make('Queue status')
+                            ->compact()
+                            ->schema([
+                                Html::make(function (): HtmlString {
+                                    $inventory = app(\App\Services\Leads\DialableInventoryService::class)
+                                        ->forList($this->getRecord());
+
+                                    return new HtmlString(view('filament.resources.calling-lists.queue-status', [
+                                        'rows' => $inventory->queueStatusRows(),
+                                        'cadenceWaitSlots' => $inventory->cadenceWaitSlotRows(),
+                                        'timezone' => $inventory->timezone,
+                                        'showHeading' => false,
+                                    ])->render());
+                                }),
+                            ]),
+                        Section::make('Disposition counts')
+                            ->compact()
+                            ->schema([
+                                Html::make(function (): HtmlString {
+                                    return new HtmlString(view('filament.resources.calling-lists.disposition-counts', [
+                                        'items' => app(CallingListDispositionCountService::class)->forList($this->getRecord()),
+                                        'showHeading' => false,
+                                    ])->render());
+                                }),
+                            ]),
+                    ])->columnSpan(['lg' => 1]),
                 ]),
                 $this->getRelationManagersContentComponent(),
             ]);

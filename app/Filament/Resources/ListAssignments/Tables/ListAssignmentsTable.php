@@ -16,10 +16,6 @@ class ListAssignmentsTable
         return $table
             ->defaultSort('callingList.name')
             ->columns([
-                TextColumn::make('company.name')
-                    ->label('Company')
-                    ->searchable()
-                    ->sortable(),
                 TextColumn::make('user.name')
                     ->label('User')
                     ->searchable()

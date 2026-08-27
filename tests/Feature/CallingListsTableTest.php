@@ -67,7 +67,10 @@ class CallingListsTableTest extends TestCase
             ->assertOk()
             ->assertSee('Total leads')
             ->assertSee('Ready now')
-            ->assertSee('Waiting')
+            ->assertSee('Cadence wait')
+            ->assertSee('Hours wait')
+            ->assertSee('Max attempts')
+            ->assertSee('Due callbacks')
             ->assertSee('5')
             ->assertSee('2')
             ->assertSee('1');

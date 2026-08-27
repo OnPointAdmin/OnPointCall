@@ -15,8 +15,6 @@ class PartnersTable
     {
         return $table
             ->columns([
-                TextColumn::make('company.name')
-                    ->searchable(),
                 TextColumn::make('code')
                     ->searchable(),
                 TextColumn::make('name')

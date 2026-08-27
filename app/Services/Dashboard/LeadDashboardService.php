@@ -343,6 +343,11 @@ class LeadDashboardService
         return 'later';
     }
 
+    public function forecastBucketFor(?CarbonInterface $at, string $timezone): string
+    {
+        return $this->forecastBucket($at, $timezone);
+    }
+
     private function later(CarbonInterface $current, ?CarbonInterface $other): CarbonInterface
     {
         if ($other === null) {

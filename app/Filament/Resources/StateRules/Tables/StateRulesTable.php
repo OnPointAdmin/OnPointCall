@@ -15,8 +15,6 @@ class StateRulesTable
     {
         return $table
             ->columns([
-                TextColumn::make('company.name')
-                    ->searchable(),
                 TextColumn::make('state_code')
                     ->searchable(),
                 TextColumn::make('window_start')

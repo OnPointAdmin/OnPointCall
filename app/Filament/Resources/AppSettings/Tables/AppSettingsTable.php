@@ -15,8 +15,6 @@ class AppSettingsTable
     {
         return $table
             ->columns([
-                TextColumn::make('company.name')
-                    ->searchable(),
                 TextColumn::make('max_attempts')
                     ->numeric()
                     ->sortable(),
