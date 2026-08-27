@@ -2,9 +2,18 @@
 
 namespace Tests\Feature;
 
+use App\Enums\Disposition;
+use App\Enums\LeadHistoryType;
+use App\Enums\LeadStatus;
+use App\Enums\UserRole;
 use App\Filament\Pages\Dashboard;
+use App\Models\AppSetting;
+use App\Models\Company;
+use App\Models\Lead;
+use App\Models\LeadHistory;
 use App\Models\User;
 use App\Support\CompanyContext;
+use Carbon\Carbon;
 use Database\Seeders\DatabaseSeeder;
 use Database\Seeders\JasonPaineAdminSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -82,5 +91,67 @@ class AdminDashboardTest extends TestCase
         $this->assertSame($user->id, $retrieved->id);
 
         $this->actingAs($retrieved)->get('/admin')->assertOk();
+    }
+
+    public function test_today_preset_counts_company_local_calls_not_utc_yesterday(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-26 15:00:00', 'America/New_York'));
+
+        $company = Company::factory()->create();
+        $admin = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Admin,
+            'active' => true,
+        ]);
+        $agent = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Agent,
+            'active' => true,
+            'name' => 'Iranays Ferro',
+        ]);
+
+        AppSetting::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'max_attempts' => 6,
+            'claim_ttl_minutes' => 20,
+            'dashboard_email_timezone' => 'America/New_York',
+        ]);
+
+        $lead = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045559001',
+            'status' => LeadStatus::Callable,
+            'lead_type' => 'standard',
+            'imported_at' => now(),
+        ]);
+
+        LeadHistory::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'lead_id' => $lead->id,
+            'actor_id' => $agent->id,
+            'event_type' => LeadHistoryType::Disposition,
+            'occurred_at' => now(),
+            'payload' => ['disposition' => Disposition::NoAnswer->value],
+        ]);
+        LeadHistory::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'lead_id' => $lead->id,
+            'actor_id' => $agent->id,
+            'event_type' => LeadHistoryType::Disposition,
+            'occurred_at' => now()->subDay(),
+            'payload' => ['disposition' => Disposition::NotInterested->value],
+        ]);
+
+        CompanyContext::set($company->id);
+
+        Livewire::actingAs($admin)
+            ->test(Dashboard::class)
+            ->assertSet('datePreset', 'today')
+            ->assertSet('report.totals.total_leads_called.count', 1)
+            ->assertSet('report.totals.no_answer_vm.count', 1)
+            ->assertSet('report.totals.not_interested.count', 0)
+            ->assertSee('Iranays Ferro');
+
+        Carbon::setTestNow();
     }
 }

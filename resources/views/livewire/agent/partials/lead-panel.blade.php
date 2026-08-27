@@ -10,6 +10,8 @@
     $showSoftScoreRecentModal = $showSoftScoreRecentModal ?? false;
     $canRunSoftScore = $canRunSoftScore ?? false;
     $canRunQualification = $canRunQualification ?? false;
+    $softScoreRunning = $softScoreRunning ?? false;
+    $qualificationRunning = $qualificationRunning ?? false;
     $readOnlyMessage = $readOnlyMessage ?? null;
     $companyId = (int) $lead->company_id;
     $ageRangeOptions = LeadDemographicOptions::for('age_range', $companyId, $lead->age_range);
@@ -18,18 +20,32 @@
     $genderOptions = LeadDemographicOptions::for('gender', $companyId, $lead->gender);
     $homeownerOptions = LeadDemographicOptions::for('home_owner', $companyId, $lead->home_owner);
 
-    $hasTour = collect([
-        $lead->tour_location,
-        $lead->tour_date_start,
-        $lead->tour_date,
-        $lead->premiums,
-        $lead->tour_result,
-        $lead->tour_or_no_show,
-        $lead->original_lead_submit_date,
-        $lead->booking_id,
-    ])->filter(fn ($v) => $v !== null && $v !== '')->isNotEmpty();
+    $isTnb = $lead->lead_type === 'tnb';
+    $filled = fn ($value) => $value !== null && $value !== '';
 
-    $showTour = $lead->lead_type === 'tnb' || $hasTour;
+    $tourFields = collect([
+        ['label' => 'Tour location', 'value' => $lead->tour_location],
+        ['label' => 'Tour date start', 'value' => $lead->tour_date_start],
+        ['label' => 'Tour date', 'value' => $lead->tour_date],
+        ['label' => 'Premiums', 'value' => $lead->premiums],
+        ['label' => 'Tour result', 'value' => $lead->tour_result],
+        ['label' => 'Tour / no show', 'value' => $lead->tour_or_no_show],
+        ['label' => 'Booking ID', 'value' => $lead->booking_id],
+    ])->filter(fn (array $field) => $filled($field['value']));
+
+    if ($isTnb) {
+        foreach ($lead->extra_fields ?? [] as $key => $value) {
+            if (! $filled($value)) {
+                continue;
+            }
+            $tourFields->push([
+                'label' => ucwords(str_replace('_', ' ', (string) $key)),
+                'value' => is_array($value) ? json_encode($value) : (string) $value,
+            ]);
+        }
+    }
+
+    $showTour = $tourFields->isNotEmpty();
 
     $sectionedKeys = [
         'address', 'address_2', 'zip', 'email', 'age_range', 'annual_income', 'marital_status',
@@ -39,14 +55,16 @@
     ];
 
     $extraFields = collect();
-    foreach ($lead->extra_fields ?? [] as $key => $value) {
-        if ($value === null || $value === '') {
-            continue;
+    if (! $isTnb) {
+        foreach ($lead->extra_fields ?? [] as $key => $value) {
+            if (! $filled($value)) {
+                continue;
+            }
+            $extraFields->push([
+                'label' => ucwords(str_replace('_', ' ', (string) $key)),
+                'value' => is_array($value) ? json_encode($value) : (string) $value,
+            ]);
         }
-        $extraFields->push([
-            'label' => ucwords(str_replace('_', ' ', (string) $key)),
-            'value' => is_array($value) ? json_encode($value) : (string) $value,
-        ]);
     }
     foreach (LeadDisplayFields::AGENT_FIELD_LABELS as $attribute => $label) {
         if (in_array($attribute, $sectionedKeys, true)) {
@@ -79,7 +97,6 @@
         default => '—',
     };
 
-    $tourValue = fn ($value) => ($value !== null && $value !== '') ? $value : '—';
     $canPutBackCallback = $canPutBackCallback ?? false;
 
     $outcomePillClasses = function (?string $dispositionValue): string {
@@ -183,8 +200,21 @@
                     <span class="text-slate-900 dark:text-slate-100">{{ $lead->leadTypeName() }}</span>
                 </div>
             </div>
-            <p class="m-0 mt-0.5 text-sm font-bold text-slate-900 dark:text-slate-100">{{ $qualifiedToTourAt }}</p>
-            @if ($lead->qualification_status === QualificationStatus::Error && $lead->qualification_last_error)
+            <div class="mt-0.5">
+                <span wire:loading.remove wire:target="runQualification">
+                    @if ($qualificationRunning)
+                        <span data-score-check="qualification">
+                            @include('livewire.agent.partials.loading-spinner')
+                        </span>
+                    @else
+                        <p class="m-0 text-sm font-bold text-slate-900 dark:text-slate-100">{{ $qualifiedToTourAt }}</p>
+                    @endif
+                </span>
+                <span wire:loading wire:target="runQualification">
+                    @include('livewire.agent.partials.loading-spinner', ['label' => ''])
+                </span>
+            </div>
+            @if (! $qualificationRunning && $lead->qualification_status === QualificationStatus::Error && $lead->qualification_last_error)
                 <p class="m-0 mt-1 text-xs text-slate-600 dark:text-slate-400">{{ $lead->qualification_last_error }}</p>
             @endif
         </div>
@@ -319,8 +349,21 @@
                 </div>
                 <div>
                     <p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Soft Score</p>
-                    <p class="m-0 mt-0.5 select-none text-sm text-slate-900 dark:text-slate-100" oncopy="return false">{{ $softScoreDisplay }}</p>
-                    @if ($lead->soft_score_checked_at)
+                    <div class="mt-0.5">
+                        <span wire:loading.remove wire:target="runSoftScore">
+                            @if ($softScoreRunning)
+                                <span data-score-check="soft-score">
+                                    @include('livewire.agent.partials.loading-spinner')
+                                </span>
+                            @else
+                                <p class="m-0 select-none text-sm text-slate-900 dark:text-slate-100" oncopy="return false">{{ $softScoreDisplay }}</p>
+                            @endif
+                        </span>
+                        <span wire:loading wire:target="runSoftScore">
+                            @include('livewire.agent.partials.loading-spinner', ['label' => ''])
+                        </span>
+                    </div>
+                    @if ($lead->soft_score_checked_at && ! $softScoreRunning)
                         <p class="m-0 mt-0.5 text-xs text-slate-500 dark:text-slate-400">Last checked {{ \App\Support\CompanyTimezone::display($lead->soft_score_checked_at, format: 'M j, Y') }}</p>
                     @endif
                 </div>
@@ -328,7 +371,18 @@
             @unless ($isReadOnly)
                 @if ($canRunSoftScore)
                     <div class="mt-3">
-                        <button type="button" wire:click="runSoftScore" class="rounded-md border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">Run Soft Score</button>
+                        <button
+                            type="button"
+                            wire:click="runSoftScore"
+                            wire:loading.attr="disabled"
+                            wire:target="runSoftScore"
+                            class="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 disabled:opacity-60"
+                        >
+                            <span wire:loading wire:target="runSoftScore">
+                                @include('livewire.agent.partials.loading-spinner', ['label' => null])
+                            </span>
+                            Run Soft Score
+                        </button>
                     </div>
                 @endif
             @endunless
@@ -338,14 +392,12 @@
             <div class="mt-4 border-t border-slate-100 pt-4 dark:border-slate-800">
                 <h3 class="m-0 mb-2.5 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Tour / TNB</h3>
                 <div class="grid gap-x-4 gap-y-3" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
-                    <div><p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Tour location</p><p class="m-0 mt-0.5 text-sm text-slate-900 dark:text-slate-100">{{ $tourValue($lead->tour_location) }}</p></div>
-                    <div><p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Tour date start</p><p class="m-0 mt-0.5 text-sm text-slate-900 dark:text-slate-100">{{ $tourValue($lead->tour_date_start) }}</p></div>
-                    <div><p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Tour date</p><p class="m-0 mt-0.5 text-sm text-slate-900 dark:text-slate-100">{{ $tourValue($lead->tour_date) }}</p></div>
-                    <div><p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Premiums</p><p class="m-0 mt-0.5 text-sm text-slate-900 dark:text-slate-100">{{ $tourValue($lead->premiums) }}</p></div>
-                    <div><p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Tour result</p><p class="m-0 mt-0.5 text-sm text-slate-900 dark:text-slate-100">{{ $tourValue($lead->tour_result) }}</p></div>
-                    <div><p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Tour / no show</p><p class="m-0 mt-0.5 text-sm text-slate-900 dark:text-slate-100">{{ $tourValue($lead->tour_or_no_show) }}</p></div>
-                    <div><p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Original submit date</p><p class="m-0 mt-0.5 text-sm text-slate-900 dark:text-slate-100">{{ $tourValue($lead->original_lead_submit_date) }}</p></div>
-                    <div><p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Booking ID</p><p class="m-0 mt-0.5 text-sm text-slate-900 dark:text-slate-100">{{ $tourValue($lead->booking_id) }}</p></div>
+                    @foreach ($tourFields as $field)
+                        <div>
+                            <p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">{{ $field['label'] }}</p>
+                            <p class="m-0 mt-0.5 text-sm text-slate-900 dark:text-slate-100">{{ $field['value'] }}</p>
+                        </div>
+                    @endforeach
                 </div>
             </div>
         @endif
@@ -365,6 +417,12 @@
                     <p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Lead ID</p>
                     <p class="m-0 mt-0.5 text-sm text-slate-900 dark:text-slate-100">{{ $lead->external_lead_id ?: $lead->id }}</p>
                 </div>
+                @if ($lead->original_lead_submit_date)
+                    <div>
+                        <p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Original submit date</p>
+                        <p class="m-0 mt-0.5 text-sm text-slate-900 dark:text-slate-100">{{ $lead->original_lead_submit_date }}</p>
+                    </div>
+                @endif
             </div>
         </div>
 
@@ -394,7 +452,18 @@
         @unless ($isReadOnly)
             @if ($canRunQualification)
                 <div class="mt-4 flex flex-wrap items-center gap-2.5 border-t border-slate-100 pt-4 dark:border-slate-800">
-                    <button type="button" wire:click="runQualification" class="rounded-md border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">Run Qualification</button>
+                    <button
+                        type="button"
+                        wire:click="runQualification"
+                        wire:loading.attr="disabled"
+                        wire:target="runQualification"
+                        class="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 disabled:opacity-60"
+                    >
+                        <span wire:loading wire:target="runQualification">
+                            @include('livewire.agent.partials.loading-spinner', ['label' => null])
+                        </span>
+                        Run Qualification
+                    </button>
                 </div>
             @endif
         @endunless

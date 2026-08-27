@@ -164,8 +164,8 @@ class ManagerDashboardService
     public function dateRange(int $companyId, Carbon $startDate, Carbon $endDate): array
     {
         $timezone = $this->companyTimezone($companyId);
-        $start = $startDate->copy()->timezone($timezone)->startOfDay()->utc();
-        $end = $endDate->copy()->timezone($timezone)->endOfDay()->utc();
+        $start = Carbon::parse($startDate->toDateString(), $timezone)->startOfDay()->utc();
+        $end = Carbon::parse($endDate->toDateString(), $timezone)->endOfDay()->utc();
 
         return ['start' => $start, 'end' => $end];
     }

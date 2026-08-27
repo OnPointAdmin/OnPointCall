@@ -198,9 +198,10 @@ class Dashboard extends BaseDashboard implements HasSchemas
     {
         $companyId = (int) auth()->user()->company_id;
         $data = $this->filterForm->getState();
+        $timezone = $dashboardService->companyTimezone($companyId);
 
-        $startDate = Carbon::parse((string) $data['start_date']);
-        $endDate = Carbon::parse((string) $data['end_date']);
+        $startDate = Carbon::parse((string) $data['start_date'], $timezone);
+        $endDate = Carbon::parse((string) $data['end_date'], $timezone);
 
         if ($endDate->lessThan($startDate)) {
             [$startDate, $endDate] = [$endDate, $startDate];
@@ -224,7 +225,6 @@ class Dashboard extends BaseDashboard implements HasSchemas
             $range['end'],
         );
 
-        $timezone = $dashboardService->companyTimezone($companyId);
         $this->runAt = Carbon::now($timezone)->format('M j, Y g:i A');
         $this->datePreset = $this->matchingPreset(
             $dashboardService,

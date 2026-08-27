@@ -6,6 +6,7 @@ use App\Enums\Disposition;
 use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
 use App\Enums\UserRole;
+use App\Models\AppSetting;
 use App\Models\Company;
 use App\Models\Lead;
 use App\Models\LeadHistory;
@@ -173,6 +174,68 @@ class ManagerDashboardServiceTest extends TestCase
         $this->assertSame('2026-08-19', $ytd['end']->toDateString());
     }
 
+    public function test_date_range_treats_utc_parsed_picker_dates_as_company_local_days(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-26 15:00:00', 'America/New_York'));
+
+        $company = Company::factory()->create();
+        $this->createSettings($company->id);
+
+        $service = app(ManagerDashboardService::class);
+        $range = $service->dateRange(
+            $company->id,
+            Carbon::parse('2026-08-26'),
+            Carbon::parse('2026-08-26'),
+        );
+
+        $this->assertTrue(
+            $range['start']->equalTo(Carbon::parse('2026-08-26 00:00:00', 'America/New_York')->startOfDay()->utc()),
+            $range['start']->toIso8601String(),
+        );
+        $this->assertTrue(
+            $range['end']->equalTo(Carbon::parse('2026-08-26 00:00:00', 'America/New_York')->endOfDay()->utc()),
+            $range['end']->toIso8601String(),
+        );
+
+        Carbon::setTestNow();
+    }
+
+    public function test_report_for_picker_today_counts_company_local_today_not_utc_yesterday(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-26 15:00:00', 'America/New_York'));
+
+        $company = Company::factory()->create();
+        $this->createSettings($company->id);
+        $agent = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Agent,
+        ]);
+        $lead = $this->createLead($company->id, 'standard');
+
+        $this->createDisposition($company->id, $lead->id, $agent->id, Disposition::NoAnswer, now());
+        $this->createDisposition(
+            $company->id,
+            $lead->id,
+            $agent->id,
+            Disposition::NotInterested,
+            now()->subDay(),
+        );
+
+        $service = app(ManagerDashboardService::class);
+        $range = $service->dateRange(
+            $company->id,
+            Carbon::parse('2026-08-26'),
+            Carbon::parse('2026-08-26'),
+        );
+        $report = $service->report($company->id, null, null, $range['start'], $range['end']);
+
+        $this->assertSame(1, $report['totals']['total_leads_called']['count']);
+        $this->assertSame(1, $report['totals']['no_answer_vm']['count']);
+        $this->assertSame(0, $report['totals']['not_interested']['count']);
+
+        Carbon::setTestNow();
+    }
+
     private function createLead(int $companyId, string $leadType): Lead
     {
         return Lead::withoutGlobalScopes()->create([
@@ -184,14 +247,29 @@ class ManagerDashboardServiceTest extends TestCase
         ]);
     }
 
-    private function createDisposition(int $companyId, int $leadId, int $actorId, Disposition $disposition): void
+    private function createSettings(int $companyId): void
     {
+        AppSetting::withoutGlobalScopes()->create([
+            'company_id' => $companyId,
+            'max_attempts' => 6,
+            'claim_ttl_minutes' => 20,
+            'dashboard_email_timezone' => 'America/New_York',
+        ]);
+    }
+
+    private function createDisposition(
+        int $companyId,
+        int $leadId,
+        int $actorId,
+        Disposition $disposition,
+        ?Carbon $occurredAt = null,
+    ): void {
         LeadHistory::withoutGlobalScopes()->create([
             'company_id' => $companyId,
             'lead_id' => $leadId,
             'actor_id' => $actorId,
             'event_type' => LeadHistoryType::Disposition,
-            'occurred_at' => now(),
+            'occurred_at' => $occurredAt ?? now(),
             'payload' => ['disposition' => $disposition->value],
         ]);
     }

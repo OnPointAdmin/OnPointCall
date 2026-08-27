@@ -1,12 +1,21 @@
 @php
     $secondaryTabs = ['scoreboard' => 'Scoreboard', 'leaderboard' => 'Leaderboard', 'callbacks' => 'Callbacks', 'lookup' => 'Lookup'];
+    $softScoreRunning = $softScoreRunning ?? false;
+    $qualificationRunning = $qualificationRunning ?? false;
     $leadIsWorkable = $lead && ! $leadReadOnly && ! in_array($lead->status->value, ['booked', 'terminal', 'dnc'], true);
     $canPutBackCallback = $lead
         && $lead->status->value === 'callback'
         && $lead->callback_owner_id === auth('agent')->id();
 @endphp
 
-<div class="grid grid-cols-1 items-start gap-5 md:grid-cols-[1fr_320px]" wire:poll.10s>
+<div
+    class="grid grid-cols-1 items-start gap-5 md:grid-cols-[1fr_320px]"
+    @if ($softScoreRunning || $qualificationRunning)
+        wire:poll.2s
+    @else
+        wire:poll.10s
+    @endif
+>
 
     {{-- ACTIVE LEAD WORKSPACE (dominant) --}}
     <div>
@@ -39,6 +48,8 @@
                 'readOnlyMessage' => $leadReadOnlyMessage,
                 'canRunSoftScore' => $canRunSoftScore,
                 'canRunQualification' => $canRunQualification,
+                'softScoreRunning' => $softScoreRunning,
+                'qualificationRunning' => $qualificationRunning,
                 'softScoreMessage' => $softScoreMessage,
                 'qualificationMessage' => $qualificationMessage,
                 'showSoftScoreRecentModal' => $showSoftScoreRecentModal,

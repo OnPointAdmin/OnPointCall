@@ -3,7 +3,6 @@
 namespace App\Filament\Resources\LeadHistories\Pages;
 
 use App\Filament\Resources\LeadHistories\LeadHistoryResource;
-use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
 
 class ListLeadHistories extends ListRecords
@@ -12,8 +11,6 @@ class ListLeadHistories extends ListRecords
 
     protected function getHeaderActions(): array
     {
-        return [
-            CreateAction::make(),
-        ];
+        return [];
     }
 }

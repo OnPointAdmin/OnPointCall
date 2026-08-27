@@ -611,6 +611,10 @@ class AgentWorkspaceTest extends TestCase
     {
         [$user] = $this->makeWorkableLead([
             'lead_type' => 'tnb',
+            'tour_location' => 'Orlando',
+            'tour_date_start' => '2026-08-01',
+            'booking_id' => 'BK-100',
+            'extra_fields' => ['gift' => 'Show tickets'],
             'soft_score_status' => SoftScoreStatus::Complete,
             'soft_score_code' => 'A',
             'soft_score_checked_at' => now(),
@@ -623,10 +627,54 @@ class AgentWorkspaceTest extends TestCase
             ->assertSee('Qualified to Tour At')
             ->assertSee('Source Information')
             ->assertSee('Lead type')
+            ->assertSee('Tour / TNB')
             ->assertSee('Tour location')
+            ->assertSee('Orlando')
             ->assertSee('Tour date start')
             ->assertSee('Booking ID')
+            ->assertSee('BK-100')
+            ->assertSee('Gift')
+            ->assertSee('Show tickets')
+            ->assertDontSee('Tour result')
+            ->assertDontSee('Extra fields')
             ->assertDontSeeHtml('>Partners</p>');
+    }
+
+    public function test_lead_panel_hides_empty_tour_section_on_tnb(): void
+    {
+        [$user] = $this->makeWorkableLead([
+            'lead_type' => 'tnb',
+            'soft_score_status' => SoftScoreStatus::Complete,
+            'soft_score_code' => 'A',
+            'soft_score_checked_at' => now(),
+            'qualification_status' => QualificationStatus::Qualified,
+            'qualification_checked_at' => now(),
+        ]);
+        $this->actingAs($user, 'agent');
+
+        Livewire::test(Workspace::class)
+            ->assertSee('Lead type')
+            ->assertDontSee('Tour / TNB')
+            ->assertDontSee('Tour location');
+    }
+
+    public function test_lead_panel_hides_empty_tour_section_on_standard_leads(): void
+    {
+        [$user] = $this->makeWorkableLead([
+            'original_lead_submit_date' => '2026-05-13',
+            'soft_score_status' => SoftScoreStatus::Complete,
+            'soft_score_code' => 'A',
+            'soft_score_checked_at' => now(),
+            'qualification_status' => QualificationStatus::Qualified,
+            'qualification_checked_at' => now(),
+        ]);
+        $this->actingAs($user, 'agent');
+
+        Livewire::test(Workspace::class)
+            ->assertSee('Original submit date')
+            ->assertSee('2026-05-13')
+            ->assertDontSee('Tour / TNB')
+            ->assertDontSee('Tour location');
     }
 
     public function test_refresh_does_not_requeue_blank_soft_score(): void
@@ -658,7 +706,10 @@ class AgentWorkspaceTest extends TestCase
         Livewire::test(Workspace::class)
             ->call('startEdit')
             ->set('editable.first_name', 'Patricia')
-            ->call('saveLeadEdits');
+            ->call('saveLeadEdits')
+            ->assertSeeHtml('data-score-check="soft-score"')
+            ->assertSeeHtml('data-score-check="qualification"')
+            ->assertSeeHtml('wire:poll.2s');
 
         Queue::assertPushed(SoftScoreLeadJob::class, 1);
         Queue::assertPushed(
@@ -682,13 +733,75 @@ class AgentWorkspaceTest extends TestCase
         Livewire::test(Workspace::class)
             ->call('startEdit')
             ->set('editable.age_range', '55-64')
-            ->call('saveLeadEdits');
+            ->call('saveLeadEdits')
+            ->assertDontSeeHtml('data-score-check="soft-score"')
+            ->assertSeeHtml('data-score-check="qualification"')
+            ->assertSeeHtml('wire:poll.2s');
 
         Queue::assertNotPushed(SoftScoreLeadJob::class);
         Queue::assertPushed(
             QualifyLeadJob::class,
             fn (QualifyLeadJob $job): bool => $job->force === true,
         );
+    }
+
+    public function test_saving_email_does_not_show_score_spinners(): void
+    {
+        [$user] = $this->makeWorkableLead([
+            'email' => 'old@example.com',
+            'soft_score_status' => SoftScoreStatus::Complete,
+            'soft_score_code' => 'A',
+            'soft_score_checked_at' => now()->subDay(),
+            'qualification_status' => QualificationStatus::Qualified,
+            'qualification_checked_at' => now()->subDay(),
+        ]);
+        $this->actingAs($user, 'agent');
+
+        Livewire::test(Workspace::class)
+            ->call('startEdit')
+            ->set('editable.email', 'new@example.com')
+            ->call('saveLeadEdits')
+            ->assertDontSeeHtml('data-score-check="soft-score"')
+            ->assertDontSeeHtml('data-score-check="qualification"')
+            ->assertSeeHtml('wire:poll.10s');
+
+        Queue::assertNotPushed(SoftScoreLeadJob::class);
+        Queue::assertNotPushed(QualifyLeadJob::class);
+    }
+
+    public function test_score_spinners_clear_after_checks_complete(): void
+    {
+        [$user, $lead] = $this->makeWorkableLead([
+            'first_name' => 'Pat',
+            'soft_score_status' => SoftScoreStatus::Complete,
+            'soft_score_code' => 'A',
+            'soft_score_checked_at' => now()->subDay(),
+            'qualification_status' => QualificationStatus::Qualified,
+            'qualification_checked_at' => now()->subDay(),
+        ]);
+        $this->actingAs($user, 'agent');
+
+        $component = Livewire::test(Workspace::class)
+            ->call('startEdit')
+            ->set('editable.first_name', 'Patricia')
+            ->call('saveLeadEdits')
+            ->assertSeeHtml('data-score-check="soft-score"')
+            ->assertSeeHtml('data-score-check="qualification"');
+
+        $lead->refresh();
+        $lead->update([
+            'soft_score_status' => SoftScoreStatus::Complete,
+            'soft_score_code' => 'B2',
+            'soft_score_checked_at' => now()->addSecond(),
+            'qualification_status' => QualificationStatus::Qualified,
+            'qualification_checked_at' => now()->addSecond(),
+        ]);
+
+        $component->call('$refresh')
+            ->assertDontSeeHtml('data-score-check="soft-score"')
+            ->assertDontSeeHtml('data-score-check="qualification"')
+            ->assertSee('B2')
+            ->assertSeeHtml('wire:poll.10s');
     }
 
     public function test_run_buttons_hidden_when_checked_within_fifteen_days(): void

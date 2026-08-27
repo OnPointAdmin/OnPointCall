@@ -111,6 +111,10 @@ class Workspace extends Component
 
     public string $scoreboardPreset = 'today';
 
+    public ?int $softScoreQueuedAt = null;
+
+    public ?int $qualificationQueuedAt = null;
+
     public function mount(): void
     {
         $this->lookupResults = [];
@@ -691,6 +695,8 @@ class Workspace extends Component
         $this->softScoreMessage = '';
         $this->qualificationMessage = '';
         $this->showSoftScoreRecentModal = false;
+        $this->softScoreQueuedAt = null;
+        $this->qualificationQueuedAt = null;
 
         $needSoftScore = app(SoftScoreService::class)->isBlank($lead);
         $needQualification = app(QualificationService::class)->isBlank($lead);
@@ -705,6 +711,7 @@ class Workspace extends Component
         }
 
         $actorId = Auth::guard('agent')->id();
+        $queuedAt = now()->getTimestamp();
 
         if ($runSoftScore && $runQualification) {
             $lead->update(['qualification_status' => QualificationStatus::Pending]);
@@ -713,6 +720,12 @@ class Workspace extends Component
         if ($runSoftScore) {
             if (! $force) {
                 $lead->update(['soft_score_status' => SoftScoreStatus::Pending]);
+            }
+
+            $this->softScoreQueuedAt = $queuedAt;
+
+            if ($runQualification) {
+                $this->qualificationQueuedAt = $queuedAt;
             }
 
             SoftScoreLeadJob::dispatch(
@@ -730,7 +743,58 @@ class Workspace extends Component
             $lead->update(['qualification_status' => QualificationStatus::Pending]);
         }
 
+        $this->qualificationQueuedAt = $queuedAt;
+
         QualifyLeadJob::dispatch($lead->id, $lead->import_batch_id, $actorId, $force);
+    }
+
+    private function isSoftScoreRunning(?Lead $lead): bool
+    {
+        if (! $lead) {
+            return false;
+        }
+
+        return $this->isCheckInFlight(
+            $lead->soft_score_status,
+            SoftScoreStatus::Pending,
+            $lead->soft_score_checked_at,
+            $this->softScoreQueuedAt,
+        );
+    }
+
+    private function isQualificationRunning(?Lead $lead): bool
+    {
+        if (! $lead) {
+            return false;
+        }
+
+        return $this->isCheckInFlight(
+            $lead->qualification_status,
+            QualificationStatus::Pending,
+            $lead->qualification_checked_at,
+            $this->qualificationQueuedAt,
+        );
+    }
+
+    private function isCheckInFlight(mixed $status, mixed $pendingStatus, mixed $checkedAt, ?int $queuedAt): bool
+    {
+        if ($status === $pendingStatus) {
+            return true;
+        }
+
+        if ($queuedAt === null) {
+            return false;
+        }
+
+        if ($checkedAt === null) {
+            return true;
+        }
+
+        $checkedTimestamp = $checkedAt instanceof \DateTimeInterface
+            ? $checkedAt->getTimestamp()
+            : strtotime((string) $checkedAt);
+
+        return $checkedTimestamp !== false && $checkedTimestamp < $queuedAt;
     }
 
     /**
@@ -775,14 +839,18 @@ class Workspace extends Component
     public function render()
     {
         $lead = $this->currentLead();
+        $softScoreRunning = $this->isSoftScoreRunning($lead);
+        $qualificationRunning = $this->isQualificationRunning($lead);
         $overdueCallbackCount = $this->callbacks
             ->filter(fn (Lead $callback) => $callback->callback_at?->isPast())
             ->count();
 
         return view('livewire.agent.workspace', [
             'lead' => $lead,
-            'canRunSoftScore' => $lead ? app(SoftScoreService::class)->shouldShowRunButton($lead) : false,
-            'canRunQualification' => $lead ? app(QualificationService::class)->shouldShowRunButton($lead) : false,
+            'softScoreRunning' => $softScoreRunning,
+            'qualificationRunning' => $qualificationRunning,
+            'canRunSoftScore' => $lead && ! $softScoreRunning && app(SoftScoreService::class)->shouldShowRunButton($lead),
+            'canRunQualification' => $lead && ! $qualificationRunning && app(QualificationService::class)->shouldShowRunButton($lead),
             'overdueCallbackCount' => $overdueCallbackCount,
             'defaultSecondaryTab' => $overdueCallbackCount > 0 ? 'callbacks' : 'scoreboard',
             'notInterestedReasons' => $this->reasonsFor(Disposition::NotInterested),
