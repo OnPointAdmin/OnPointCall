@@ -64,6 +64,19 @@ readonly class DialableInventory
         return implode(' · ', $this->cadenceDayPartSummary());
     }
 
+    public function cadenceWaitSlotDescription(): string
+    {
+        $parts = [];
+
+        foreach ($this->cadenceWaitSlots as $slot) {
+            if ($slot['count'] > 0) {
+                $parts[] = $slot['count'].' '.$slot['label'];
+            }
+        }
+
+        return implode(' · ', $parts);
+    }
+
     public function hasQueuePressure(): bool
     {
         return $this->readyNow === 0
@@ -82,19 +95,13 @@ readonly class DialableInventory
         if ($this->waitingCadence > 0) {
             $rows[] = ['label' => 'Waiting on cadence', 'count' => $this->waitingCadence, 'indent' => false, 'timing' => null];
 
-            foreach ($this->cadenceByDayPart as $part => $count) {
-                if ($count > 0) {
-                    $label = $part === 'other'
-                        ? 'Other'
-                        : CadenceDefaults::label($part);
-
-                    $rows[] = [
-                        'label' => $label,
-                        'count' => $count,
-                        'indent' => true,
-                        'timing' => $this->cadenceEarliestByPart[$part] ?? null,
-                    ];
-                }
+            foreach ($this->cadenceWaitSlots as $slot) {
+                $rows[] = [
+                    'label' => $slot['label'],
+                    'count' => $slot['count'],
+                    'indent' => true,
+                    'timing' => null,
+                ];
             }
         }
 

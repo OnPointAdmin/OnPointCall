@@ -50,7 +50,6 @@ class ViewCallingList extends ViewRecord
 
                                     return new HtmlString(view('filament.resources.calling-lists.queue-status', [
                                         'rows' => $inventory->queueStatusRows(),
-                                        'cadenceWaitSlots' => $inventory->cadenceWaitSlotRows(),
                                         'timezone' => $inventory->timezone,
                                         'showHeading' => false,
                                     ])->render());

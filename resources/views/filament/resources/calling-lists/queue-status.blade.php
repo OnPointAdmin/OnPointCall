@@ -28,25 +28,9 @@
         </tbody>
     </table>
 
-    @if (($cadenceWaitSlots ?? []) !== [])
-        <div style="font-size:0.8125rem;font-weight:600;margin:0.75rem 0 0.35rem;">When cadence-wait leads become callable</div>
-        <table style="width:100%;border-collapse:collapse;font-size:0.875rem;">
-            <tbody>
-                @foreach ($cadenceWaitSlots as $slot)
-                    <tr>
-                        <td style="padding:0.35rem 0.75rem;border-bottom:1px solid rgba(128,128,128,0.18);">{{ $slot['label'] }}</td>
-                        <td style="text-align:right;padding:0.35rem 0.75rem;border-bottom:1px solid rgba(128,128,128,0.18);">
-                            {{ number_format($slot['count']) }}
-                        </td>
-                    </tr>
-                @endforeach
-            </tbody>
-        </table>
-    @endif
-
     @if ($timezone ?? null)
         <p style="font-size:0.75rem;color:rgba(100,116,139,1);margin:0.5rem 0 0;">
-            Earliest times use {{ $timezone }}. Cadence timing follows each lead&apos;s local legal hours and day-part windows.
+            Times use {{ $timezone }}. Cadence timing follows each lead&apos;s local legal hours and day-part windows.
         </p>
     @endif
 </div>

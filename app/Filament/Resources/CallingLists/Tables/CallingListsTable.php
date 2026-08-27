@@ -102,7 +102,11 @@ class CallingListsTable
             return null;
         }
 
-        $description = $inventory->cadenceDayPartDescription();
+        $description = $inventory->cadenceWaitSlotDescription();
+
+        if ($description === '') {
+            $description = $inventory->cadenceDayPartDescription();
+        }
 
         return $description !== '' ? $description : null;
     }
