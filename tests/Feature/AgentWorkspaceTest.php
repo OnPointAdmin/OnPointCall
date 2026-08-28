@@ -607,6 +607,34 @@ class AgentWorkspaceTest extends TestCase
             ->assertSee('data-phone="'.$lead->phone.'"', false);
     }
 
+    public function test_lead_panel_shows_calling_list_in_source_information(): void
+    {
+        [$user, $lead] = $this->makeWorkableLead();
+        $lead->load('callingList');
+        $lead->callingList->update(['name' => 'TNB Recycle August']);
+        $this->actingAs($user, 'agent');
+
+        Livewire::test(Workspace::class)
+            ->assertSee('Source Information')
+            ->assertSeeHtml('>Calling List</p>')
+            ->assertSee('TNB Recycle August');
+    }
+
+    public function test_lead_panel_shows_holding_when_lead_has_no_calling_list(): void
+    {
+        [$user, $lead] = $this->makeLookupLead([
+            'status' => LeadStatus::Callable,
+            'calling_list_id' => null,
+        ]);
+        $this->actingAs($user, 'agent');
+
+        Livewire::test(Workspace::class)
+            ->call('selectLookupLead', $lead->id)
+            ->assertSee('Source Information')
+            ->assertSeeHtml('>Calling List</p>')
+            ->assertSeeHtml('>Holding</p>');
+    }
+
     public function test_lead_panel_shows_tnb_fields_and_hides_partners(): void
     {
         [$user] = $this->makeWorkableLead([

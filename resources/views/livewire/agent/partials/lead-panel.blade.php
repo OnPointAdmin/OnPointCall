@@ -406,6 +406,10 @@
             <h3 class="m-0 mb-2.5 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Source Information</h3>
             <div class="grid gap-x-4 gap-y-3" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
                 <div>
+                    <p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Calling List</p>
+                    <p class="m-0 mt-0.5 text-sm text-slate-900 dark:text-slate-100">{{ $lead->callingList?->name ?? 'Holding' }}</p>
+                </div>
+                <div>
                     <p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Venue / Event</p>
                     <p class="m-0 mt-0.5 select-none break-words text-sm text-slate-900 dark:text-slate-100" oncopy="return false">{{ collect([$lead->venue, $lead->event])->filter()->implode(' / ') ?: '—' }}</p>
                 </div>
