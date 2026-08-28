@@ -135,6 +135,28 @@ class LeadsTableTest extends TestCase
             ->assertCanNotSeeTableRecords([$holding]);
     }
 
+    public function test_lead_list_can_filter_by_venue_and_event(): void
+    {
+        [$company, $admin] = $this->makeAdminCompany();
+
+        $floridaPrime = $this->makeLead($company->id, phone: '4045559001', venue: 'Florida Event 1', event: 'Prime Expo');
+        $floridaSpring = $this->makeLead($company->id, phone: '4045559002', venue: 'Florida Event 1', event: 'Spring Show');
+        $georgiaPrime = $this->makeLead($company->id, phone: '4045559003', venue: 'Georgia Event 2', event: 'Prime Expo');
+        $unlabeled = $this->makeLead($company->id, phone: '4045559004');
+
+        CompanyContext::set($company->id);
+
+        Livewire::actingAs($admin)
+            ->test(ListLeads::class)
+            ->assertCanSeeTableRecords([$floridaPrime, $floridaSpring, $georgiaPrime, $unlabeled])
+            ->filterTable('venue', 'Florida Event 1')
+            ->assertCanSeeTableRecords([$floridaPrime, $floridaSpring])
+            ->assertCanNotSeeTableRecords([$georgiaPrime, $unlabeled])
+            ->filterTable('event', 'Prime Expo')
+            ->assertCanSeeTableRecords([$floridaPrime])
+            ->assertCanNotSeeTableRecords([$floridaSpring, $georgiaPrime, $unlabeled]);
+    }
+
     /**
      * @return array{0: Company, 1: User}
      */
@@ -157,8 +179,13 @@ class LeadsTableTest extends TestCase
         return [$company, $admin];
     }
 
-    private function makeLead(int $companyId, ?int $callingListId = null, string $phone = '4045559001'): Lead
-    {
+    private function makeLead(
+        int $companyId,
+        ?int $callingListId = null,
+        string $phone = '4045559001',
+        ?string $venue = null,
+        ?string $event = null,
+    ): Lead {
         return Lead::withoutGlobalScopes()->create([
             'company_id' => $companyId,
             'calling_list_id' => $callingListId,
@@ -170,6 +197,8 @@ class LeadsTableTest extends TestCase
             'status' => LeadStatus::Callable,
             'lead_type' => 'standard',
             'imported_at' => now(),
+            'venue' => $venue,
+            'event' => $event,
         ]);
     }
 

@@ -171,6 +171,14 @@ class LeadsTable
 
         $filters = [
             ...$filters,
+            SelectFilter::make('venue')
+                ->label('Venue')
+                ->options(fn (): array => self::distinctLeadValues('venue'))
+                ->searchable(),
+            SelectFilter::make('event')
+                ->label('Event')
+                ->options(fn (): array => self::distinctLeadValues('event'))
+                ->searchable(),
             SelectFilter::make('last_disposition')
                 ->label('Last Disp')
                 ->options(fn (): array => ['none' => 'None'] + collect(Disposition::cases())
@@ -375,5 +383,19 @@ class LeadsTable
                         }),
                 ]),
             ]);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private static function distinctLeadValues(string $column): array
+    {
+        return Lead::query()
+            ->whereNotNull($column)
+            ->where($column, '!=', '')
+            ->distinct()
+            ->orderBy($column)
+            ->pluck($column, $column)
+            ->all();
     }
 }
