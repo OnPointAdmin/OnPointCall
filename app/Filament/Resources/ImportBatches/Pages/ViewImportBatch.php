@@ -127,7 +127,7 @@ class ViewImportBatch extends ViewRecord
                 ->requiresConfirmation()
                 ->modalHeading('Run DNC.com check on this batch?')
                 ->modalDescription(fn (): string => $this->getRecord()->ignore_national_dnc
-                    ? 'This will scrub every unchecked lead. National DNC is recorded but will not block (this batch has prior express consent). Litigator, state, and internal DNC still flag.'
+                    ? 'This will scrub every unchecked lead. National and state DNC are recorded but will not block (this batch has TCPA consent). Litigator and internal DNC still flag.'
                     : 'This will scrub every unchecked lead. National DNC, state DNC, internal DNC, and litigators will all flag.')
                 ->visible(fn (): bool => ! $this->getRecord()->run_dnc_check
                     && $this->getRecord()->status === ImportBatchStatus::Completed)
@@ -157,6 +157,28 @@ class ViewImportBatch extends ViewRecord
 
                     Notification::make()
                         ->title($queued === 0 ? 'No DNC errors to retry' : "Queued {$queued} lead(s) for DNC retry")
+                        ->success()
+                        ->send();
+                }),
+            Action::make('reapplyDncConsent')
+                ->label('Re-apply DNC consent policy')
+                ->color('warning')
+                ->requiresConfirmation()
+                ->modalHeading('Apply TCPA consent to this batch?')
+                ->modalDescription('Uses stored DNC.com results (no new scrub). National and state DNC hits are released. Litigator and internal DNC stay flagged. Does not change leads an agent already marked DNC.')
+                ->visible(fn (): bool => $this->getRecord()->run_dnc_check
+                    && $this->getRecord()->status === ImportBatchStatus::Completed
+                    && (int) $this->getRecord()->dnc_hit > 0)
+                ->action(function (ImportBatchCheckRetryService $retryService): void {
+                    /** @var ImportBatch $batch */
+                    $batch = $this->getRecord();
+                    $result = $retryService->reapplyDncConsentPolicy($batch, Auth::id());
+
+                    $this->refreshRecord();
+
+                    Notification::make()
+                        ->title("Released {$result['released']} consented DNC lead(s)")
+                        ->body("{$result['remaining_hits']} remain DNC (litigator or internal). {$result['skipped']} skipped.")
                         ->success()
                         ->send();
                 }),

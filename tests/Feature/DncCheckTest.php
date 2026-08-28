@@ -15,9 +15,11 @@ use App\Jobs\SalesforceDncPushJob;
 use App\Models\Company;
 use App\Models\ImportBatch;
 use App\Models\Lead;
+use App\Models\LeadHistory;
 use App\Models\User;
 use App\Services\Dnc\DncService;
 use App\Services\Import\HoldingReleaseService;
+use App\Services\Import\ImportBatchCheckRetryService;
 use App\Services\Import\LeadImportService;
 use App\Services\Leads\DispositionService;
 use App\Support\CompanyContext;
@@ -285,7 +287,7 @@ class DncCheckTest extends TestCase
         ]);
     }
 
-    public function test_ignored_national_still_flags_state_dnc(): void
+    public function test_consent_ignores_state_dnc_as_well_as_national(): void
     {
         $this->configureDnc();
 
@@ -293,17 +295,18 @@ class DncCheckTest extends TestCase
 
         Http::fake([
             'www.dncscrub.com/app/main/rpc/scrub' => Http::response([
-                $this->scrubRow('4045551115', $lead->id.':phone', 'D', 'National (USA) 2003-06-01;Texas;;'),
+                $this->scrubRow('4045551115', $lead->id.':phone', 'D', 'National (USA) 2003-06-01;State (FL) 2003-12-10;;'),
             ]),
         ]);
 
         app(DncService::class)->checkLeads(collect([$lead]));
 
         $lead->refresh();
-        $this->assertSame(DncStatus::Hit, $lead->dnc_status);
-        $this->assertSame(LeadStatus::Dnc, $lead->status);
-        $this->assertSame('state', $lead->dnc_result['hit_reason']);
-        $this->assertSame(['national'], $lead->dnc_result['ignored_reasons']);
+        $this->assertSame(DncStatus::Clear, $lead->dnc_status);
+        $this->assertSame(LeadStatus::Holding, $lead->status);
+        $this->assertNull($lead->dnc_result['hit_reason']);
+        $this->assertEqualsCanonicalizing(['national', 'state'], $lead->dnc_result['ignored_reasons']);
+        $this->assertEqualsCanonicalizing(['national', 'state'], $lead->dnc_result['phones']['phone']['flags']);
     }
 
     public function test_ignored_national_still_flags_litigator_and_internal_dnc(): void
@@ -350,6 +353,69 @@ class DncCheckTest extends TestCase
         $this->assertSame('national', $lead->dnc_result['hit_reason']);
         $this->assertFalse($lead->dnc_result['ignore_national_dnc']);
         $this->assertSame([], $lead->dnc_result['ignored_reasons']);
+    }
+
+    public function test_reapply_releases_national_only_stored_hit(): void
+    {
+        $lead = $this->makeStoredHitLead('4045552001', 'National (USA) 2026-08-22;;;');
+        $batch = ImportBatch::withoutGlobalScopes()->findOrFail($lead->import_batch_id);
+        $batch->update(['dnc_hit' => 1, 'dnc_clear' => 0, 'ignore_national_dnc' => false]);
+
+        Http::fake();
+
+        $result = app(ImportBatchCheckRetryService::class)->reapplyDncConsentPolicy($batch);
+
+        $lead->refresh();
+        $batch->refresh();
+        $this->assertSame(1, $result['released']);
+        $this->assertSame(0, $result['remaining_hits']);
+        $this->assertSame(DncStatus::Clear, $lead->dnc_status);
+        $this->assertSame(LeadStatus::Holding, $lead->status);
+        $this->assertTrue($lead->dnc_result['ignore_national_dnc']);
+        $this->assertSame(['national'], $lead->dnc_result['ignored_reasons']);
+        $this->assertTrue($batch->ignore_national_dnc);
+        $this->assertSame(0, $batch->dnc_hit);
+        $this->assertSame(1, $batch->dnc_clear);
+        Http::assertNothingSent();
+    }
+
+    public function test_reapply_releases_florida_state_hit_when_consent_applies(): void
+    {
+        $lead = $this->makeStoredHitLead('4045552002', 'National (USA) 2003-06-01;State (FL) 2003-12-10;;');
+        $batch = ImportBatch::withoutGlobalScopes()->findOrFail($lead->import_batch_id);
+        $batch->update(['dnc_hit' => 1, 'dnc_clear' => 0]);
+
+        $result = app(ImportBatchCheckRetryService::class)->reapplyDncConsentPolicy($batch);
+
+        $lead->refresh();
+        $this->assertSame(1, $result['released']);
+        $this->assertSame(0, $result['remaining_hits']);
+        $this->assertSame(DncStatus::Clear, $lead->dnc_status);
+        $this->assertSame(LeadStatus::Holding, $lead->status);
+        $this->assertNull($lead->dnc_result['hit_reason']);
+        $this->assertEqualsCanonicalizing(['national', 'state'], $lead->dnc_result['ignored_reasons']);
+        $this->assertEqualsCanonicalizing(['national', 'state'], $lead->dnc_result['phones']['phone']['flags']);
+    }
+
+    public function test_reapply_skips_agent_marked_dnc(): void
+    {
+        $lead = $this->makeStoredHitLead('4045552003', 'National (USA) 2026-08-22;;;');
+        $batch = ImportBatch::withoutGlobalScopes()->findOrFail($lead->import_batch_id);
+
+        LeadHistory::withoutGlobalScopes()->create([
+            'company_id' => $lead->company_id,
+            'lead_id' => $lead->id,
+            'event_type' => LeadHistoryType::Disposition,
+            'occurred_at' => now(),
+            'payload' => ['disposition' => Disposition::Dnc->value],
+        ]);
+
+        $result = app(ImportBatchCheckRetryService::class)->reapplyDncConsentPolicy($batch);
+
+        $lead->refresh();
+        $this->assertSame(1, $result['skipped']);
+        $this->assertSame(DncStatus::Hit, $lead->dnc_status);
+        $this->assertSame(LeadStatus::Dnc, $lead->status);
     }
 
     public function test_phone_2_hit_scrubs_the_lead(): void
@@ -543,6 +609,31 @@ class DncCheckTest extends TestCase
             'company_id' => $company->id,
             'import_batch_id' => $batch->id,
         ], $overrides));
+    }
+
+    private function makeStoredHitLead(string $phone, string $reason): Lead
+    {
+        $lead = $this->makeLeadWithBatch($phone, ignoreNationalDnc: false);
+
+        $lead->update([
+            'status' => LeadStatus::Dnc,
+            'dnc_status' => DncStatus::Hit,
+            'dnc_result' => [
+                'status' => DncStatus::Hit->value,
+                'hit_reason' => 'national',
+                'phones' => [
+                    'phone' => [
+                        'field' => 'phone',
+                        'phone' => $phone,
+                        'result_code' => 'D',
+                        'reason' => $reason,
+                        'suppress' => 'national',
+                    ],
+                ],
+            ],
+        ]);
+
+        return $lead->refresh();
     }
 
     /**

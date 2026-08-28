@@ -132,8 +132,8 @@ class ImportLeads extends Page
                     helperText: 'Queues a DNC.com scrub (national DNC, state DNC, internal DNC, and litigators) for phone and phone 2. Hits are marked DNC; invalid area codes are marked Bad Number. Leads stay unassignable until checked.',
                 ),
                 Toggle::make('ignore_national_dnc')
-                    ->label('Leads have prior express consent (ignore national DNC)')
-                    ->helperText('Applies when DNC runs, including if you run it later from the batch. Still flags litigators, state DNC, and internal DNC. Turn this off for purchased lists.')
+                    ->label('Leads have TCPA / prior express consent')
+                    ->helperText('Applies when DNC runs, including if you run it later from the batch. National and state DNC hits are recorded but the lead stays callable. Litigators and internal DNC still flag. Turn this off for purchased lists without a consent checkbox.')
                     ->default(true),
             ]);
     }

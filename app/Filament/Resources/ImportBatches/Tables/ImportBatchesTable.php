@@ -79,7 +79,7 @@ class ImportBatchesTable
                 IconColumn::make('run_dnc_check')
                     ->boolean(),
                 IconColumn::make('ignore_national_dnc')
-                    ->label('Ignore nat. DNC')
+                    ->label('TCPA consent')
                     ->boolean()
                     ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('soft_score_pending')

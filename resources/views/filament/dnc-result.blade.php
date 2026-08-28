@@ -24,11 +24,11 @@
 
     @if ($ignoreNational || $ignoredReasons !== [])
         <div class="rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
-            <p class="text-xs font-semibold uppercase tracking-wide">National DNC ignored</p>
+            <p class="text-xs font-semibold uppercase tracking-wide">Registry DNC ignored</p>
             <p class="mt-1">
-                This batch has prior express consent. National DNC
-                {{ $ignoredReasons !== [] ? 'was recorded but did not block the lead' : 'would not block the lead' }}.
-                Litigator, state, and internal DNC still apply.
+                This batch has TCPA / prior express consent. National and state DNC
+                {{ $ignoredReasons !== [] ? 'were recorded but did not block the lead' : 'would not block the lead' }}.
+                Litigator and internal DNC still apply.
             </p>
         </div>
     @endif

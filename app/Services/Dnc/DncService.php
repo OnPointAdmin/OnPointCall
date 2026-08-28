@@ -4,6 +4,7 @@ namespace App\Services\Dnc;
 
 use App\DataTransferObjects\DncPhoneResult;
 use App\DataTransferObjects\DncResult;
+use App\Enums\Disposition;
 use App\Enums\DncStatus;
 use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
@@ -159,9 +160,10 @@ class DncService
      */
     public function combinePhoneResults(array $phones, bool $ignoreNationalDnc = false): DncResult
     {
-        $blockingReasons = ['litigator', 'state', 'idnc', 'dnc'];
+        $blockingReasons = ['litigator', 'idnc', 'dnc'];
 
         if (! $ignoreNationalDnc) {
+            array_splice($blockingReasons, 1, 0, ['state']);
             $blockingReasons[] = 'national';
         }
 
@@ -185,6 +187,10 @@ class DncService
 
             if ($ignoreNationalDnc && $this->phoneHasFlag($phone, 'national')) {
                 $ignoredReasons[] = 'national';
+            }
+
+            if ($ignoreNationalDnc && $this->phoneHasFlag($phone, 'state')) {
+                $ignoredReasons[] = 'state';
             }
         }
 
@@ -216,6 +222,63 @@ class DncService
             ignoreNationalDnc: $ignoreNationalDnc,
             ignoredReasons: $ignoredReasons,
         );
+    }
+
+    /**
+     * Re-apply consent policy from stored scrub details without calling DNC.com.
+     *
+     * @param  Collection<int, Lead>  $leads
+     * @return array{released: int, remaining_hits: int, skipped: int}
+     */
+    public function reapplyStoredResults(Collection $leads, bool $ignoreNationalDnc, ?int $actorId = null): array
+    {
+        $released = 0;
+        $remainingHits = 0;
+        $skipped = 0;
+
+        foreach ($leads as $lead) {
+            $outcome = $this->reapplyStoredResult($lead, $ignoreNationalDnc, $actorId);
+
+            if ($outcome === 'released') {
+                $released++;
+            } elseif ($outcome === 'hit') {
+                $remainingHits++;
+            } else {
+                $skipped++;
+            }
+        }
+
+        return [
+            'released' => $released,
+            'remaining_hits' => $remainingHits,
+            'skipped' => $skipped,
+        ];
+    }
+
+    /**
+     * @return 'released'|'hit'|'skipped'
+     */
+    public function reapplyStoredResult(Lead $lead, bool $ignoreNationalDnc, ?int $actorId = null): string
+    {
+        if ($lead->dnc_status !== DncStatus::Hit) {
+            return 'skipped';
+        }
+
+        if ($this->hasAgentDncDisposition($lead)) {
+            return 'skipped';
+        }
+
+        $phones = $this->phoneResultsFromStored($lead);
+
+        if ($phones === []) {
+            return 'skipped';
+        }
+
+        $previousDnc = $lead->dnc_status;
+        $result = $this->combinePhoneResults($phones, $ignoreNationalDnc);
+        $this->persistReappliedResult($lead, $result, $previousDnc, $actorId);
+
+        return $result->status === DncStatus::Clear ? 'released' : 'hit';
     }
 
     /**
@@ -384,6 +447,131 @@ class DncService
         };
     }
 
+    private function persistReappliedResult(Lead $lead, DncResult $result, DncStatus $previousDnc, ?int $actorId): void
+    {
+        DB::transaction(function () use ($lead, $result, $previousDnc, $actorId): void {
+            $previousLeadStatus = $lead->status;
+            $newLeadStatus = $this->leadStatusForReapply($result->status, $lead);
+
+            $updates = [
+                'dnc_status' => $result->status,
+                'dnc_last_error' => null,
+                'dnc_result' => $result->toArray(),
+            ];
+
+            if ($newLeadStatus !== null) {
+                $updates['status'] = $newLeadStatus;
+            }
+
+            $lead->update($updates);
+
+            LeadHistory::withoutGlobalScopes()->create([
+                'company_id' => $lead->company_id,
+                'lead_id' => $lead->id,
+                'actor_id' => $actorId,
+                'event_type' => LeadHistoryType::DncCheck,
+                'occurred_at' => now(),
+                'payload' => [
+                    'status' => $result->status->value,
+                    'hit_reason' => $result->hitReason,
+                    'ignore_national_dnc' => $result->ignoreNationalDnc,
+                    'ignored_reasons' => $result->ignoredReasons,
+                    'reapplied' => true,
+                    'phones' => $result->toArray()['phones'],
+                ],
+            ]);
+
+            if ($newLeadStatus !== null && $previousLeadStatus !== $newLeadStatus) {
+                LeadHistory::withoutGlobalScopes()->create([
+                    'company_id' => $lead->company_id,
+                    'lead_id' => $lead->id,
+                    'actor_id' => $actorId,
+                    'event_type' => LeadHistoryType::StatusChange,
+                    'occurred_at' => now(),
+                    'payload' => [
+                        'from' => $previousLeadStatus->value,
+                        'to' => $newLeadStatus->value,
+                        'reason' => $result->status === DncStatus::Clear
+                            ? 'dnc_ignore_national'
+                            : 'dnc_'.$result->hitReason,
+                    ],
+                ]);
+            }
+
+            if ($lead->import_batch_id && $previousDnc !== $result->status) {
+                $this->moveBatchCounter($lead->import_batch_id, $previousDnc, $result->status);
+            }
+        });
+    }
+
+    private function leadStatusForReapply(DncStatus $status, Lead $lead): ?LeadStatus
+    {
+        if ($status === DncStatus::Clear && $lead->status === LeadStatus::Dnc) {
+            return $lead->calling_list_id ? LeadStatus::Callable : LeadStatus::Holding;
+        }
+
+        if ($status === DncStatus::Hit && ! in_array($lead->status, [LeadStatus::Dnc, LeadStatus::Booked], true)) {
+            return LeadStatus::Dnc;
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array<string, DncPhoneResult>
+     */
+    private function phoneResultsFromStored(Lead $lead): array
+    {
+        $stored = $lead->dncPhones();
+        $phones = [];
+
+        foreach ($stored as $field => $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+
+            $fieldName = is_string($field) && $field !== '' ? $field : (string) ($row['field'] ?? 'phone');
+            $resultCode = isset($row['result_code']) ? (string) $row['result_code'] : null;
+            $reason = isset($row['reason']) ? (string) $row['reason'] : null;
+            $flags = $this->classifyFlags($resultCode, $reason);
+
+            if ($flags === [] && isset($row['suppress']) && is_string($row['suppress']) && $row['suppress'] !== '') {
+                $flags[] = $row['suppress'];
+            }
+
+            if ($flags === [] && ($resultCode === null || $resultCode === '') && ($reason === null || trim($reason) === '')) {
+                continue;
+            }
+
+            $phones[$fieldName] = new DncPhoneResult(
+                field: $fieldName,
+                phone: (string) ($row['phone'] ?? ''),
+                resultCode: $resultCode,
+                reason: $reason,
+                suppress: $this->primaryFlag($flags),
+                flags: $flags,
+                raw: [
+                    'RegionAbbrev' => $row['region'] ?? null,
+                    'Country' => $row['country'] ?? null,
+                    'Locale' => $row['locale'] ?? null,
+                    'CarrierInfo' => $row['carrier_info'] ?? null,
+                    'LineType' => $row['line_type'] ?? null,
+                ],
+            );
+        }
+
+        return $phones;
+    }
+
+    private function hasAgentDncDisposition(Lead $lead): bool
+    {
+        return LeadHistory::withoutGlobalScopes()
+            ->where('lead_id', $lead->id)
+            ->where('event_type', LeadHistoryType::Disposition)
+            ->where('payload->disposition', Disposition::Dnc->value)
+            ->exists();
+    }
+
     /**
      * @return array<string, string>
      */
@@ -520,5 +708,37 @@ class DncService
         };
 
         $batch->update($updates);
+    }
+
+    private function moveBatchCounter(int $batchId, DncStatus $from, DncStatus $to): void
+    {
+        if ($from === $to) {
+            return;
+        }
+
+        $batch = ImportBatch::withoutGlobalScopes()->lockForUpdate()->find($batchId);
+
+        if (! $batch) {
+            return;
+        }
+
+        $counts = [
+            DncStatus::Clear->value => (int) $batch->dnc_clear,
+            DncStatus::Hit->value => (int) $batch->dnc_hit,
+            DncStatus::Invalid->value => (int) $batch->dnc_invalid,
+            DncStatus::Error->value => (int) $batch->dnc_error,
+            DncStatus::Pending->value => (int) $batch->dnc_pending,
+        ];
+
+        $counts[$from->value] = max(0, $counts[$from->value] - 1);
+        $counts[$to->value]++;
+
+        $batch->update([
+            'dnc_clear' => $counts[DncStatus::Clear->value],
+            'dnc_hit' => $counts[DncStatus::Hit->value],
+            'dnc_invalid' => $counts[DncStatus::Invalid->value],
+            'dnc_error' => $counts[DncStatus::Error->value],
+            'dnc_pending' => $counts[DncStatus::Pending->value],
+        ]);
     }
 }

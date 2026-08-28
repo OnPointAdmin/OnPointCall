@@ -12,6 +12,7 @@ use App\Jobs\RndLeadJob;
 use App\Jobs\SoftScoreLeadJob;
 use App\Models\ImportBatch;
 use App\Models\Lead;
+use App\Services\Dnc\DncService;
 use Illuminate\Support\Facades\DB;
 
 class ImportBatchCheckRetryService
@@ -183,5 +184,21 @@ class ImportBatchCheckRetryService
         DncScrubJob::dispatchForLeadIds($leads->pluck('id')->all(), $batch->id, $actorId);
 
         return $leads->count();
+    }
+
+    /**
+     * @return array{released: int, remaining_hits: int, skipped: int}
+     */
+    public function reapplyDncConsentPolicy(ImportBatch $batch, ?int $actorId = null): array
+    {
+        $batch->update(['ignore_national_dnc' => true]);
+        $batch->ignore_national_dnc = true;
+
+        $leads = Lead::withoutGlobalScopes()
+            ->where('import_batch_id', $batch->id)
+            ->where('dnc_status', DncStatus::Hit)
+            ->get();
+
+        return app(DncService::class)->reapplyStoredResults($leads, true, $actorId);
     }
 }
