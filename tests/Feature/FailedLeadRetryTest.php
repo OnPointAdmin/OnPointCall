@@ -187,6 +187,41 @@ class FailedLeadRetryTest extends TestCase
         Queue::assertPushed(RndLeadJob::class, 1);
     }
 
+    public function test_soft_score_error_retry_requeues_qualification_when_batch_ran_it(): void
+    {
+        Queue::fake();
+
+        $company = Company::factory()->create();
+        $batch = ImportBatch::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'source_filename' => 'ss-qual-retry.csv',
+            'imported_at' => now(),
+            'lead_type' => 'tnb',
+            'status' => ImportBatchStatus::Completed,
+            'run_soft_score' => true,
+            'run_qualification' => true,
+            'soft_score_error' => 1,
+            'qualification_not_qualified' => 1,
+        ]);
+
+        $lead = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'import_batch_id' => $batch->id,
+            'phone' => '4045557004',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'tnb',
+            'imported_at' => now(),
+            'soft_score_status' => SoftScoreStatus::Error,
+            'qualification_status' => QualificationStatus::NotQualified,
+        ]);
+
+        $queued = app(ImportBatchCheckRetryService::class)->retrySoftScoreErrors($batch);
+
+        $this->assertSame(1, $queued);
+        Queue::assertPushed(SoftScoreLeadJob::class, fn (SoftScoreLeadJob $job) => $job->leadId === $lead->id
+            && $job->dispatchQualificationAfter === true);
+    }
+
     public function test_batch_retry_queues_qualification_error_jobs(): void
     {
         Queue::fake();

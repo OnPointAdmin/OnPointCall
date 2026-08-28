@@ -78,6 +78,10 @@ class ImportBatchesTable
                     ->boolean(),
                 IconColumn::make('run_dnc_check')
                     ->boolean(),
+                IconColumn::make('ignore_national_dnc')
+                    ->label('Ignore nat. DNC')
+                    ->boolean()
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('soft_score_pending')
                     ->numeric()
                     ->sortable(),

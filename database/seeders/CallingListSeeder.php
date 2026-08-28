@@ -27,7 +27,6 @@ class CallingListSeeder extends Seeder
                 'lead_type' => 'tnb',
                 'cadence_id' => $standardCadence->id,
                 'active' => true,
-                'booking_param_map' => [],
             ],
         ];
 

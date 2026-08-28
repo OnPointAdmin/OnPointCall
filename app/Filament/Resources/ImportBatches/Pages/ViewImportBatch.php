@@ -126,7 +126,9 @@ class ViewImportBatch extends ViewRecord
                 ->color('primary')
                 ->requiresConfirmation()
                 ->modalHeading('Run DNC.com check on this batch?')
-                ->modalDescription('This will queue a DNC.com scrub for every lead in this batch that has not been checked yet.')
+                ->modalDescription(fn (): string => $this->getRecord()->ignore_national_dnc
+                    ? 'This will scrub every unchecked lead. National DNC is recorded but will not block (this batch has prior express consent). Litigator, state, and internal DNC still flag.'
+                    : 'This will scrub every unchecked lead. National DNC, state DNC, internal DNC, and litigators will all flag.')
                 ->visible(fn (): bool => ! $this->getRecord()->run_dnc_check
                     && $this->getRecord()->status === ImportBatchStatus::Completed)
                 ->action(function (ImportBatchCheckRetryService $retryService): void {

@@ -5,6 +5,7 @@ namespace App\DataTransferObjects;
 readonly class DncPhoneResult
 {
     /**
+     * @param  list<string>  $flags
      * @param  array<string, mixed>  $raw
      */
     public function __construct(
@@ -13,6 +14,7 @@ readonly class DncPhoneResult
         public ?string $resultCode,
         public ?string $reason,
         public ?string $suppress,
+        public array $flags = [],
         public array $raw = [],
     ) {}
 
@@ -27,6 +29,7 @@ readonly class DncPhoneResult
             'result_code' => $this->resultCode,
             'reason' => $this->reason,
             'suppress' => $this->suppress,
+            'flags' => $this->flags,
             'region' => $this->raw['RegionAbbrev'] ?? null,
             'country' => $this->raw['Country'] ?? null,
             'locale' => $this->raw['Locale'] ?? null,

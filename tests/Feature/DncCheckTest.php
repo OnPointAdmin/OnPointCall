@@ -12,8 +12,8 @@ use App\Enums\UserRole;
 use App\Jobs\DncPushJob;
 use App\Jobs\DncScrubJob;
 use App\Jobs\SalesforceDncPushJob;
-use App\Models\CallingList;
 use App\Models\Company;
+use App\Models\ImportBatch;
 use App\Models\Lead;
 use App\Models\User;
 use App\Services\Dnc\DncService;
@@ -51,7 +51,7 @@ class DncCheckTest extends TestCase
         file_put_contents($path, $csv);
 
         $service = app(LeadImportService::class);
-        $batch = $service->createBatch($company->id, 'dnc-import.csv', 'standard', false, false, false, true);
+        $batch = $service->createBatch($company->id, 'dnc-import.csv', 'standard', false, false, false, true, true);
 
         $service->process($batch, $path, [
             'phone' => 'Phone',
@@ -62,6 +62,7 @@ class DncCheckTest extends TestCase
 
         $batch->refresh();
         $this->assertTrue($batch->run_dnc_check);
+        $this->assertTrue($batch->ignore_national_dnc);
         $this->assertSame(2, $batch->dnc_pending);
         $this->assertSame(ImportBatchStatus::Completed, $batch->status);
 
@@ -105,6 +106,7 @@ class DncCheckTest extends TestCase
         CompanyContext::clear();
 
         $this->assertFalse($batch->fresh()->run_dnc_check);
+        $this->assertFalse($batch->fresh()->ignore_national_dnc);
         Queue::assertNotPushed(DncScrubJob::class);
     }
 
@@ -213,6 +215,141 @@ class DncCheckTest extends TestCase
         $lead->refresh();
         $this->assertSame(DncStatus::Clear, $lead->dnc_status);
         $this->assertSame(LeadStatus::Holding, $lead->status);
+    }
+
+    public function test_state_dnc_marks_lead_dnc(): void
+    {
+        $this->configureDnc();
+
+        $lead = $this->makeLead('4045551112');
+
+        Http::fake([
+            'www.dncscrub.com/app/main/rpc/scrub' => Http::response([
+                $this->scrubRow('4045551112', $lead->id.':phone', 'D', ';Florida;;'),
+            ]),
+        ]);
+
+        app(DncService::class)->checkLeads(collect([$lead]));
+
+        $lead->refresh();
+        $this->assertSame(DncStatus::Hit, $lead->dnc_status);
+        $this->assertSame(LeadStatus::Dnc, $lead->status);
+        $this->assertSame('state', $lead->dnc_result['hit_reason']);
+        $this->assertContains('state', $lead->dnc_result['phones']['phone']['flags']);
+    }
+
+    public function test_national_and_state_hit_prefers_state_reason(): void
+    {
+        $this->configureDnc();
+
+        $lead = $this->makeLead('4045551113');
+
+        Http::fake([
+            'www.dncscrub.com/app/main/rpc/scrub' => Http::response([
+                $this->scrubRow('4045551113', $lead->id.':phone', 'D', 'National (USA) 2003-06-01;California;;'),
+            ]),
+        ]);
+
+        app(DncService::class)->checkLeads(collect([$lead]));
+
+        $lead->refresh();
+        $this->assertSame(DncStatus::Hit, $lead->dnc_status);
+        $this->assertSame('state', $lead->dnc_result['hit_reason']);
+        $this->assertEqualsCanonicalizing(['national', 'state'], $lead->dnc_result['phones']['phone']['flags']);
+    }
+
+    public function test_ignored_national_dnc_leaves_lead_clear(): void
+    {
+        $this->configureDnc();
+
+        $lead = $this->makeLeadWithBatch('4045551114', ignoreNationalDnc: true);
+
+        Http::fake([
+            'www.dncscrub.com/app/main/rpc/scrub' => Http::response([
+                $this->scrubRow('4045551114', $lead->id.':phone', 'D', 'National (USA) 2003-06-01;;;'),
+            ]),
+        ]);
+
+        app(DncService::class)->checkLeads(collect([$lead]));
+
+        $lead->refresh();
+        $this->assertSame(DncStatus::Clear, $lead->dnc_status);
+        $this->assertSame(LeadStatus::Holding, $lead->status);
+        $this->assertNull($lead->dnc_result['hit_reason']);
+        $this->assertTrue($lead->dnc_result['ignore_national_dnc']);
+        $this->assertSame(['national'], $lead->dnc_result['ignored_reasons']);
+        $this->assertSame('national', $lead->dnc_result['phones']['phone']['suppress']);
+        $this->assertDatabaseMissing('lead_history', [
+            'lead_id' => $lead->id,
+            'event_type' => LeadHistoryType::StatusChange->value,
+        ]);
+    }
+
+    public function test_ignored_national_still_flags_state_dnc(): void
+    {
+        $this->configureDnc();
+
+        $lead = $this->makeLeadWithBatch('4045551115', ignoreNationalDnc: true);
+
+        Http::fake([
+            'www.dncscrub.com/app/main/rpc/scrub' => Http::response([
+                $this->scrubRow('4045551115', $lead->id.':phone', 'D', 'National (USA) 2003-06-01;Texas;;'),
+            ]),
+        ]);
+
+        app(DncService::class)->checkLeads(collect([$lead]));
+
+        $lead->refresh();
+        $this->assertSame(DncStatus::Hit, $lead->dnc_status);
+        $this->assertSame(LeadStatus::Dnc, $lead->status);
+        $this->assertSame('state', $lead->dnc_result['hit_reason']);
+        $this->assertSame(['national'], $lead->dnc_result['ignored_reasons']);
+    }
+
+    public function test_ignored_national_still_flags_litigator_and_internal_dnc(): void
+    {
+        $this->configureDnc();
+
+        $litigator = $this->makeLeadWithBatch('5039367187', ignoreNationalDnc: true);
+        $internal = $this->makeLeadWithBatch('4045553333', ignoreNationalDnc: true);
+
+        Http::fake([
+            'www.dncscrub.com/app/main/rpc/scrub' => Http::response([
+                $this->scrubRow('5039367187', $litigator->id.':phone', 'D', 'Litigator'),
+                $this->scrubRow('4045553333', $internal->id.':phone', 'P', ''),
+            ]),
+        ]);
+
+        app(DncService::class)->checkLeads(collect([$litigator, $internal]));
+
+        $litigator->refresh();
+        $internal->refresh();
+        $this->assertSame(DncStatus::Hit, $litigator->dnc_status);
+        $this->assertSame('litigator', $litigator->dnc_result['hit_reason']);
+        $this->assertSame(DncStatus::Hit, $internal->dnc_status);
+        $this->assertSame('idnc', $internal->dnc_result['hit_reason']);
+    }
+
+    public function test_batch_without_ignore_still_flags_national_dnc(): void
+    {
+        $this->configureDnc();
+
+        $lead = $this->makeLeadWithBatch('4045551116', ignoreNationalDnc: false);
+
+        Http::fake([
+            'www.dncscrub.com/app/main/rpc/scrub' => Http::response([
+                $this->scrubRow('4045551116', $lead->id.':phone', 'D', 'National (USA) 2003-06-01;;;'),
+            ]),
+        ]);
+
+        app(DncService::class)->checkLeads(collect([$lead]));
+
+        $lead->refresh();
+        $this->assertSame(DncStatus::Hit, $lead->dnc_status);
+        $this->assertSame(LeadStatus::Dnc, $lead->status);
+        $this->assertSame('national', $lead->dnc_result['hit_reason']);
+        $this->assertFalse($lead->dnc_result['ignore_national_dnc']);
+        $this->assertSame([], $lead->dnc_result['ignored_reasons']);
     }
 
     public function test_phone_2_hit_scrubs_the_lead(): void
@@ -382,6 +519,29 @@ class DncCheckTest extends TestCase
             'lead_type' => 'standard',
             'imported_at' => now(),
             'dnc_status' => DncStatus::Pending,
+        ], $overrides));
+    }
+
+    /**
+     * @param  array<string, mixed>  $overrides
+     */
+    private function makeLeadWithBatch(string $phone, bool $ignoreNationalDnc, array $overrides = []): Lead
+    {
+        $company = Company::factory()->create();
+
+        $batch = ImportBatch::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'source_filename' => 'dnc.csv',
+            'imported_at' => now(),
+            'lead_type' => 'standard',
+            'status' => ImportBatchStatus::Completed,
+            'run_dnc_check' => true,
+            'ignore_national_dnc' => $ignoreNationalDnc,
+        ]);
+
+        return $this->makeLead($phone, array_merge([
+            'company_id' => $company->id,
+            'import_batch_id' => $batch->id,
         ], $overrides));
     }
 

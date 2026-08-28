@@ -8,12 +8,15 @@ readonly class DncResult
 {
     /**
      * @param  array<string, DncPhoneResult>  $phones
+     * @param  list<string>  $ignoredReasons
      */
     public function __construct(
         public DncStatus $status,
         public ?string $error = null,
         public array $phones = [],
         public ?string $hitReason = null,
+        public bool $ignoreNationalDnc = false,
+        public array $ignoredReasons = [],
     ) {}
 
     /**
@@ -30,6 +33,8 @@ readonly class DncResult
         return [
             'status' => $this->status->value,
             'hit_reason' => $this->hitReason,
+            'ignore_national_dnc' => $this->ignoreNationalDnc,
+            'ignored_reasons' => $this->ignoredReasons,
             'phones' => $phones,
         ];
     }

@@ -137,7 +137,8 @@ class ImportBatchCheckRetryService
                 $lead->id,
                 $batch->id,
                 $actorId,
-                $lead->qualification_status === QualificationStatus::Pending,
+                $batch->run_qualification
+                    || $lead->qualification_status === QualificationStatus::Pending,
             );
         }
 

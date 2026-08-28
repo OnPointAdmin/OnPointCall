@@ -52,6 +52,7 @@ class ImportLeads extends Page
             'run_rnd_check' => true,
             'run_qualification' => true,
             'run_dnc_check' => true,
+            'ignore_national_dnc' => true,
             'import_mapping_id' => $defaultMapping?->id,
         ]);
     }
@@ -128,8 +129,12 @@ class ImportLeads extends Page
                 $this->importCheckToggle(
                     field: 'run_dnc_check',
                     label: 'Run DNC check on import',
-                    helperText: 'Queues a DNC.com scrub (national DNC, internal DNC, and litigators) for phone and phone 2. Hits are marked DNC; invalid area codes are marked Bad Number. Leads stay unassignable until checked.',
+                    helperText: 'Queues a DNC.com scrub (national DNC, state DNC, internal DNC, and litigators) for phone and phone 2. Hits are marked DNC; invalid area codes are marked Bad Number. Leads stay unassignable until checked.',
                 ),
+                Toggle::make('ignore_national_dnc')
+                    ->label('Leads have prior express consent (ignore national DNC)')
+                    ->helperText('Applies when DNC runs, including if you run it later from the batch. Still flags litigators, state DNC, and internal DNC. Turn this off for purchased lists.')
+                    ->default(true),
             ]);
     }
 
@@ -227,6 +232,7 @@ class ImportLeads extends Page
             runRndCheck: (bool) ($data['run_rnd_check'] ?? true),
             runQualification: (bool) ($data['run_qualification'] ?? true),
             runDncCheck: (bool) ($data['run_dnc_check'] ?? true),
+            ignoreNationalDnc: (bool) ($data['ignore_national_dnc'] ?? true),
         );
 
         $batch->update([

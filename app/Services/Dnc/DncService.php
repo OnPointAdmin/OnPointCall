@@ -38,6 +38,7 @@ class DncService
         $entries = [];
         $leadsById = $leads->keyBy('id');
         $resultsByLeadId = [];
+        $ignoreNationalDncByLeadId = $this->ignoreNationalDncByLeadId($leads);
 
         foreach ($leads as $lead) {
             $phones = $this->leadPhones($lead);
@@ -98,7 +99,10 @@ class DncService
 
                     $phones = $existing->phones;
                     $phones[$entry['field']] = $phoneResult;
-                    $resultsByLeadId[$entry['lead_id']] = $this->combinePhoneResults($phones);
+                    $resultsByLeadId[$entry['lead_id']] = $this->combinePhoneResults(
+                        $phones,
+                        $ignoreNationalDncByLeadId[$entry['lead_id']] ?? false,
+                    );
                 }
             } catch (Throwable $exception) {
                 $chunkLeadIds = array_unique(array_column($chunk, 'lead_id'));
@@ -153,14 +157,21 @@ class DncService
     /**
      * @param  array<string, DncPhoneResult>  $phones
      */
-    public function combinePhoneResults(array $phones): DncResult
+    public function combinePhoneResults(array $phones, bool $ignoreNationalDnc = false): DncResult
     {
+        $blockingReasons = ['litigator', 'state', 'idnc', 'dnc'];
+
+        if (! $ignoreNationalDnc) {
+            $blockingReasons[] = 'national';
+        }
+
         $hitReason = null;
         $hasInvalid = false;
+        $ignoredReasons = [];
 
-        foreach (['litigator', 'national', 'idnc'] as $reason) {
+        foreach ($blockingReasons as $reason) {
             foreach ($phones as $phone) {
-                if ($phone->suppress === $reason) {
+                if ($this->phoneHasFlag($phone, $reason)) {
                     $hitReason = $reason;
                     break 2;
                 }
@@ -168,16 +179,24 @@ class DncService
         }
 
         foreach ($phones as $phone) {
-            if ($phone->suppress === 'invalid') {
+            if ($this->phoneHasFlag($phone, 'invalid')) {
                 $hasInvalid = true;
             }
+
+            if ($ignoreNationalDnc && $this->phoneHasFlag($phone, 'national')) {
+                $ignoredReasons[] = 'national';
+            }
         }
+
+        $ignoredReasons = array_values(array_unique($ignoredReasons));
 
         if ($hitReason !== null) {
             return new DncResult(
                 status: DncStatus::Hit,
                 phones: $phones,
                 hitReason: $hitReason,
+                ignoreNationalDnc: $ignoreNationalDnc,
+                ignoredReasons: $ignoredReasons,
             );
         }
 
@@ -186,12 +205,16 @@ class DncService
                 status: DncStatus::Invalid,
                 phones: $phones,
                 hitReason: 'invalid',
+                ignoreNationalDnc: $ignoreNationalDnc,
+                ignoredReasons: $ignoredReasons,
             );
         }
 
         return new DncResult(
             status: DncStatus::Clear,
             phones: $phones,
+            ignoreNationalDnc: $ignoreNationalDnc,
+            ignoredReasons: $ignoredReasons,
         );
     }
 
@@ -202,37 +225,72 @@ class DncService
     {
         $resultCode = isset($raw['ResultCode']) ? (string) $raw['ResultCode'] : null;
         $reason = isset($raw['Reason']) ? (string) $raw['Reason'] : null;
+        $flags = $this->classifyFlags($resultCode, $reason);
 
         return new DncPhoneResult(
             field: $field,
             phone: $phone,
             resultCode: $resultCode,
             reason: $reason,
-            suppress: $this->classify($resultCode, $reason),
+            suppress: $this->primaryFlag($flags),
+            flags: $flags,
             raw: $raw,
         );
     }
 
     public function classify(?string $resultCode, ?string $reason): ?string
     {
+        return $this->primaryFlag($this->classifyFlags($resultCode, $reason));
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function classifyFlags(?string $resultCode, ?string $reason): array
+    {
         $code = strtoupper(trim((string) $resultCode));
-        $reasonText = (string) $reason;
+        $reasonText = trim((string) $reason);
+        $flags = [];
 
         if ($code === 'P') {
-            return 'idnc';
+            $flags[] = 'idnc';
         }
 
         if ($code === 'I') {
-            return 'invalid';
+            $flags[] = 'invalid';
         }
 
-        if ($code === 'D') {
-            if (stripos($reasonText, 'Litigator') !== false) {
-                return 'litigator';
-            }
+        if (stripos($reasonText, 'Litigator') !== false) {
+            $flags[] = 'litigator';
+        }
 
-            if (str_starts_with(strtolower(ltrim($reasonText)), 'national')) {
-                return 'national';
+        $parts = array_map('trim', explode(';', $reasonText));
+        $nationalPart = $parts[0] ?? '';
+        $statePart = $parts[1] ?? '';
+
+        if ($nationalPart !== '' && str_starts_with(strtolower($nationalPart), 'national')) {
+            $flags[] = 'national';
+        }
+
+        if ($statePart !== '') {
+            $flags[] = 'state';
+        }
+
+        if ($code === 'D' && $flags === []) {
+            $flags[] = $nationalPart !== '' ? 'state' : 'dnc';
+        }
+
+        return array_values(array_unique($flags));
+    }
+
+    /**
+     * @param  list<string>  $flags
+     */
+    public function primaryFlag(array $flags): ?string
+    {
+        foreach (['litigator', 'state', 'idnc', 'dnc', 'national', 'invalid'] as $reason) {
+            if (in_array($reason, $flags, true)) {
+                return $reason;
             }
         }
 
@@ -285,6 +343,8 @@ class DncService
                 'payload' => [
                     'status' => $result->status->value,
                     'hit_reason' => $result->hitReason,
+                    'ignore_national_dnc' => $result->ignoreNationalDnc,
+                    'ignored_reasons' => $result->ignoredReasons,
                     'error' => $result->error,
                     'phones' => $result->toArray()['phones'],
                 ],
@@ -362,6 +422,39 @@ class DncService
         }
 
         return $indexed;
+    }
+
+    /**
+     * @param  Collection<int, Lead>  $leads
+     * @return array<int, bool>
+     */
+    private function ignoreNationalDncByLeadId(Collection $leads): array
+    {
+        $batchIds = $leads->pluck('import_batch_id')->filter()->unique()->all();
+        $ignoreByBatchId = [];
+
+        if ($batchIds !== []) {
+            $ignoreByBatchId = ImportBatch::withoutGlobalScopes()
+                ->whereIn('id', $batchIds)
+                ->get()
+                ->mapWithKeys(fn (ImportBatch $batch): array => [$batch->id => (bool) $batch->ignore_national_dnc])
+                ->all();
+        }
+
+        $ignoreByLeadId = [];
+
+        foreach ($leads as $lead) {
+            $batchId = $lead->import_batch_id;
+            $ignoreByLeadId[$lead->id] = $batchId !== null
+                && (bool) ($ignoreByBatchId[$batchId] ?? false);
+        }
+
+        return $ignoreByLeadId;
+    }
+
+    private function phoneHasFlag(DncPhoneResult $phone, string $reason): bool
+    {
+        return $phone->suppress === $reason || in_array($reason, $phone->flags, true);
     }
 
     /**

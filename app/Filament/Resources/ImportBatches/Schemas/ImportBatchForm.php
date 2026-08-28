@@ -26,6 +26,9 @@ class ImportBatchForm
                 Toggle::make('run_rnd_check'),
                 Toggle::make('run_qualification'),
                 Toggle::make('run_dnc_check'),
+                Toggle::make('ignore_national_dnc')
+                    ->label('Ignore national DNC')
+                    ->helperText('When DNC runs, national hits are recorded but do not mark the lead DNC. Litigator, state, and internal DNC still block.'),
                 TextInput::make('total_rows')->numeric(),
                 TextInput::make('inserted_count')->numeric(),
                 TextInput::make('updated_count')->numeric(),

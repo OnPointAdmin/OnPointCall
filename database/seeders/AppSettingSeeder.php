@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\AppSetting;
+use App\Support\BookingParamMap;
 use Illuminate\Database\Seeder;
 
 class AppSettingSeeder extends Seeder
@@ -21,8 +22,8 @@ class AppSettingSeeder extends Seeder
         );
 
         $settings->update([
-            'booking_url_template' => 'https://peoplereally.win/data/i_opma_call.html',
-            'booking_param_map' => ['2ff7-7114-0d49' => 'external_lead_id'],
+            'booking_url_template' => BookingParamMap::FORM_URL,
+            'booking_param_map' => BookingParamMap::all(),
         ]);
     }
 }

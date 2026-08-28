@@ -130,8 +130,24 @@ class LeadImportService
             }
 
             if ($dedupe['status'] === 'duplicate') {
+                $existing = $dedupe['lead'];
+
+                if ($existing && (int) $existing->import_batch_id === (int) $batch->id) {
+                    $insertedLeadIds[] = $existing->id;
+                    $this->requeuePendingChecks(
+                        $existing,
+                        $batch,
+                        $softScoreJobLeadIds,
+                        $rndJobLeadIds,
+                        $qualificationJobLeadIds,
+                        $dncJobLeadIds,
+                    );
+
+                    continue;
+                }
+
                 $duplicateCount++;
-                $this->recordSkippedRow($batch, $attributes, ImportSkipReason::Duplicate, $dedupe['lead']);
+                $this->recordSkippedRow($batch, $attributes, ImportSkipReason::Duplicate, $existing);
 
                 continue;
             }
@@ -459,7 +475,7 @@ class LeadImportService
             }
 
             $rows[] = array_map(
-                fn ($value) => is_string($value) ? trim($value) : (is_null($value) ? null : (string) $value),
+                fn ($value) => $this->toUtf8($value),
                 $row,
             );
         }
@@ -597,6 +613,20 @@ class LeadImportService
         ImportSkipReason $reason,
         ?Lead $existingLead = null,
     ): void {
+        $duplicateSkip = ImportBatchSkippedRow::query()
+            ->where('import_batch_id', $batch->id)
+            ->where('reason', $reason);
+
+        if (($attributes['phone'] ?? null) !== null) {
+            $duplicateSkip->where('phone', $attributes['phone']);
+        } elseif (($attributes['external_lead_id'] ?? null) !== null) {
+            $duplicateSkip->where('external_lead_id', $attributes['external_lead_id']);
+        }
+
+        if ($duplicateSkip->exists()) {
+            return;
+        }
+
         ImportBatchSkippedRow::query()->create([
             'import_batch_id' => $batch->id,
             'existing_lead_id' => $existingLead?->id,
@@ -607,6 +637,64 @@ class LeadImportService
             'last_name' => $attributes['last_name'] ?? null,
             'external_lead_id' => $attributes['external_lead_id'] ?? null,
         ]);
+    }
+
+    /**
+     * @param  list<int>  $softScoreJobLeadIds
+     * @param  list<int>  $rndJobLeadIds
+     * @param  list<int>  $qualificationJobLeadIds
+     * @param  list<int>  $dncJobLeadIds
+     */
+    private function requeuePendingChecks(
+        Lead $lead,
+        ImportBatch $batch,
+        array &$softScoreJobLeadIds,
+        array &$rndJobLeadIds,
+        array &$qualificationJobLeadIds,
+        array &$dncJobLeadIds,
+    ): void {
+        if ($batch->run_soft_score && $lead->soft_score_status === SoftScoreStatus::Pending) {
+            $softScoreJobLeadIds[] = $lead->id;
+        }
+
+        if ($batch->run_rnd_check && $lead->rnd_status === RndStatus::Pending) {
+            $rndJobLeadIds[] = $lead->id;
+        }
+
+        if ($batch->run_qualification && $lead->qualification_status === QualificationStatus::Pending) {
+            $qualificationJobLeadIds[] = $lead->id;
+        }
+
+        if ($batch->run_dnc_check && $lead->dnc_status === DncStatus::Pending) {
+            $dncJobLeadIds[] = $lead->id;
+        }
+    }
+
+    private function toUtf8(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $string = trim(is_string($value) ? $value : (string) $value);
+
+        if ($string === '') {
+            return $string;
+        }
+
+        if (mb_check_encoding($string, 'UTF-8')) {
+            return $string;
+        }
+
+        $converted = @mb_convert_encoding($string, 'UTF-8', 'Windows-1252');
+
+        if (is_string($converted) && $converted !== '' && mb_check_encoding($converted, 'UTF-8')) {
+            return trim($converted);
+        }
+
+        $ignored = @iconv('Windows-1252', 'UTF-8//IGNORE', $string);
+
+        return is_string($ignored) ? trim($ignored) : '';
     }
 
     /**
@@ -759,6 +847,96 @@ class LeadImportService
         return $created;
     }
 
+    /**
+     * Re-apply the batch column map to leads already in this batch (matched by
+     * phone) so a corrected mapping can fill fields the original import missed.
+     *
+     * @param  array<string, string>|null  $columnMap
+     */
+    public function refreshLeadFieldsFromSource(ImportBatch $batch, ?array $columnMap = null): int
+    {
+        if ($columnMap !== null && $columnMap !== []) {
+            $batch->update(['column_map' => $columnMap]);
+        }
+
+        $filePath = $this->resolveImportPath($batch);
+        $columnMap = $this->resolveColumnMap($batch);
+
+        if ($filePath === null || $columnMap === []) {
+            return 0;
+        }
+
+        $rows = $this->readCsv($filePath);
+        $headers = array_shift($rows) ?? [];
+
+        if ($headers === []) {
+            return 0;
+        }
+
+        $headerIndex = $this->buildHeaderIndex($headers);
+        $importedAt = $batch->imported_at ?? now();
+        $refreshable = [
+            'first_name',
+            'last_name',
+            'first_name_2',
+            'last_name_2',
+            'address',
+            'address_2',
+            'city',
+            'state',
+            'zip',
+            'email',
+            'venue',
+            'event',
+            'external_lead_id',
+            'partner_list',
+            'file_name',
+            'age_range',
+            'annual_income',
+            'marital_status',
+            'gender',
+            'home_owner',
+            'original_lead_submit_date',
+            'booking_id',
+            'phone_2',
+            'tour_location',
+            'tour_date_start',
+            'tour_date',
+            'premiums',
+            'tour_result',
+            'tour_or_no_show',
+            'extra_fields',
+            'timezone',
+        ];
+        $updated = 0;
+
+        foreach ($rows as $row) {
+            if ($this->isBlankRow($row)) {
+                continue;
+            }
+
+            $attributes = $this->mapRow($row, $headerIndex, $columnMap, $batch->lead_type, $importedAt);
+
+            if ($attributes['phone'] === null) {
+                continue;
+            }
+
+            $lead = Lead::withoutGlobalScopes()
+                ->where('import_batch_id', $batch->id)
+                ->where('phone', $attributes['phone'])
+                ->first();
+
+            if (! $lead) {
+                continue;
+            }
+
+            $lead->update(array_intersect_key($attributes, array_flip($refreshable)));
+            $updated++;
+        }
+
+        return $updated;
+    }
+
     private function resolveImportPath(ImportBatch $batch): ?string
     {
         $candidates = array_filter([
@@ -833,6 +1011,7 @@ class LeadImportService
         bool $runRndCheck = false,
         bool $runQualification = false,
         bool $runDncCheck = false,
+        bool $ignoreNationalDnc = false,
     ): ImportBatch {
         return ImportBatch::withoutGlobalScopes()->create([
             'company_id' => $companyId,
@@ -843,15 +1022,16 @@ class LeadImportService
             'run_rnd_check' => $runRndCheck,
             'run_qualification' => $runQualification,
             'run_dnc_check' => $runDncCheck,
+            'ignore_national_dnc' => $ignoreNationalDnc,
             'status' => ImportBatchStatus::Pending,
         ]);
     }
 
     public function markFailed(ImportBatch $batch, string $message): void
     {
-        $batch->update([
+        ImportBatch::withoutGlobalScopes()->whereKey($batch->id)->update([
             'status' => ImportBatchStatus::Failed,
-            'error_message' => $message,
+            'error_message' => $this->toUtf8($message) ?: $message,
         ]);
     }
 }

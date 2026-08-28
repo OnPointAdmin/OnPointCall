@@ -305,8 +305,8 @@ class LeadImportServiceTest extends TestCase
         $this->assertSame('tnb', $tnb->lead_type);
 
         $csv = implode("\n", [
-            'BookingId,Phone_2,FirstName,LastName,Address2,TourLocation,TourDate,Premiums,Tour_Result,TourOrNoShow',
-            'BK-100,(404) 555-3333,Sam,Smith,Unit 5,Orlando Resort,2026-09-15,2 Nights,Completed,Show',
+            'caller_id,first_name,last_name,address,city,state,zip,email,AgeRange,annual_income,Marital Status,Gender,HomeOwner,OP_Id,Venue,Event,original_lead_submit_date,PartnerList,File Name,BookingId,Phone_2,FirstName2,LastName2,Address2,TourLocation,TourDate,Premiums,Tour_Result,TourOrNoShow',
+            '4045551111,Sam,Smith,100 Main St,Atlanta,GA,30303,sam@example.com,35-44,75000,Married,M,Yes,OP-TNB-1,Resort,Open House,2026-08-01,PartnerA,tnb.csv,BK-100,(404) 555-3333,Pat,Jones,Unit 5,Orlando Resort,2026-09-15,2 Nights,Completed,Show',
         ]);
 
         $path = storage_path('app/imports/tnb-import.csv');
@@ -332,15 +332,86 @@ class LeadImportServiceTest extends TestCase
         $this->assertNotNull($lead);
         $this->assertSame('tnb', $lead->lead_type);
         $this->assertSame('BK-100', $lead->booking_id);
-        $this->assertSame('4045553333', $lead->phone_2);
+        $this->assertSame('4045551111', $lead->phone_2);
         $this->assertSame('Sam', $lead->first_name);
         $this->assertSame('Smith', $lead->last_name);
+        $this->assertSame('Pat', $lead->first_name_2);
+        $this->assertSame('Jones', $lead->last_name_2);
+        $this->assertSame('100 Main St', $lead->address);
+        $this->assertSame('Atlanta', $lead->city);
+        $this->assertSame('GA', $lead->state);
+        $this->assertSame('30303', $lead->zip);
+        $this->assertSame('sam@example.com', $lead->email);
+        $this->assertSame('OP-TNB-1', $lead->external_lead_id);
         $this->assertSame('Unit 5', $lead->address_2);
         $this->assertSame('Orlando Resort', $lead->tour_location);
         $this->assertSame('2026-09-15', $lead->tour_date);
         $this->assertSame('2 Nights', $lead->premiums);
         $this->assertSame('Completed', $lead->tour_result);
         $this->assertSame('Show', $lead->tour_or_no_show);
+    }
+
+    public function test_refresh_lead_fields_from_source_fills_fields_missed_by_original_map(): void
+    {
+        $company = Company::factory()->create();
+        CompanyContext::set($company->id);
+
+        $csv = implode("\n", [
+            'caller_id,first_name,last_name,address,city,state,zip,email,Phone_2,BookingId',
+            '4045551111,Sam,Smith,100 Main St,Atlanta,GA,30303,sam@example.com,4045553333,BK-100',
+        ]);
+
+        $path = storage_path('app/imports/tnb-refresh.csv');
+        if (! is_dir(dirname($path))) {
+            mkdir(dirname($path), 0777, true);
+        }
+        file_put_contents($path, $csv);
+
+        $service = app(LeadImportService::class);
+        $batch = $service->createBatch($company->id, 'tnb-refresh.csv', 'tnb', false);
+        $batch->update(['source_storage_path' => $path]);
+
+        $service->process($batch, $path, [
+            'phone' => 'Phone_2',
+            'booking_id' => 'BookingId',
+        ], 'tnb');
+
+        $lead = Lead::withoutGlobalScopes()
+            ->where('company_id', $company->id)
+            ->where('phone', '4045553333')
+            ->first();
+
+        $this->assertNotNull($lead);
+        $this->assertNull($lead->first_name);
+        $this->assertNull($lead->address);
+
+        $updated = $service->refreshLeadFieldsFromSource($batch->fresh(), [
+            'phone' => 'Phone_2',
+            'phone_2' => 'caller_id',
+            'first_name' => 'first_name',
+            'last_name' => 'last_name',
+            'address' => 'address',
+            'city' => 'city',
+            'state' => 'state',
+            'zip' => 'zip',
+            'email' => 'email',
+            'booking_id' => 'BookingId',
+        ]);
+
+        CompanyContext::clear();
+
+        $this->assertSame(1, $updated);
+        $lead->refresh();
+        $this->assertSame('Sam', $lead->first_name);
+        $this->assertSame('Smith', $lead->last_name);
+        $this->assertSame('100 Main St', $lead->address);
+        $this->assertSame('Atlanta', $lead->city);
+        $this->assertSame('GA', $lead->state);
+        $this->assertSame('30303', $lead->zip);
+        $this->assertSame('sam@example.com', $lead->email);
+        $this->assertSame('4045551111', $lead->phone_2);
+        $this->assertSame('BK-100', $lead->booking_id);
+        $this->assertSame('4045553333', $lead->phone);
     }
 
     public function test_import_marks_soft_score_pending_when_enabled(): void
@@ -453,5 +524,83 @@ class LeadImportServiceTest extends TestCase
             fn (SoftScoreLeadJob $job): bool => $job->leadId === $lead->id && $job->dispatchQualificationAfter === true,
         );
         Queue::assertNotPushed(QualifyLeadJob::class);
+    }
+
+    public function test_import_converts_windows1252_bytes_to_utf8(): void
+    {
+        $company = Company::factory()->create();
+        CompanyContext::set($company->id);
+
+        $csv = "Phone,First Name,Partner List\n4045557777,Jane,Acme\x96Co\n";
+        $path = storage_path('app/imports/cp1252-import.csv');
+        if (! is_dir(dirname($path))) {
+            mkdir(dirname($path), 0777, true);
+        }
+        file_put_contents($path, $csv);
+
+        $service = app(LeadImportService::class);
+        $batch = $service->createBatch($company->id, 'cp1252-import.csv', 'standard', false);
+
+        $result = $service->process($batch, $path, [
+            'phone' => 'Phone',
+            'first_name' => 'First Name',
+            'partner_list' => 'Partner List',
+        ], 'standard');
+
+        CompanyContext::clear();
+
+        $this->assertSame(1, $result['inserted_count']);
+        $this->assertSame(ImportBatchStatus::Completed, $batch->fresh()->status);
+
+        $lead = Lead::withoutGlobalScopes()->where('phone', '4045557777')->first();
+        $this->assertNotNull($lead);
+        $this->assertSame("Acme\u{2013}Co", $lead->partner_list);
+        $this->assertTrue(mb_check_encoding((string) $lead->partner_list, 'UTF-8'));
+    }
+
+    public function test_import_resumes_leads_already_inserted_in_the_same_batch(): void
+    {
+        Queue::fake();
+
+        $company = Company::factory()->create();
+        CompanyContext::set($company->id);
+
+        $service = app(LeadImportService::class);
+        $batch = $service->createBatch($company->id, 'resume-import.csv', 'standard', true);
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'import_batch_id' => $batch->id,
+            'phone' => '4045558888',
+            'first_name' => 'Pat',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'imported_at' => now(),
+            'soft_score_status' => SoftScoreStatus::Pending,
+        ]);
+
+        $csv = implode("\n", [
+            'Phone,First Name',
+            '4045558888,Pat',
+            '4045558889,Sam',
+        ]);
+        $path = storage_path('app/imports/resume-import.csv');
+        if (! is_dir(dirname($path))) {
+            mkdir(dirname($path), 0777, true);
+        }
+        file_put_contents($path, $csv);
+
+        $result = $service->process($batch, $path, [
+            'phone' => 'Phone',
+            'first_name' => 'First Name',
+        ], 'standard');
+
+        CompanyContext::clear();
+
+        $this->assertSame(2, $result['inserted_count']);
+        $this->assertSame(0, $result['duplicate_count']);
+        $this->assertSame(ImportBatchStatus::Completed, $batch->fresh()->status);
+        $this->assertSame(2, $batch->fresh()->soft_score_pending);
+        Queue::assertPushed(SoftScoreLeadJob::class, 2);
     }
 }

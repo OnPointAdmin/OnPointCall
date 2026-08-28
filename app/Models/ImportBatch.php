@@ -27,6 +27,7 @@ class ImportBatch extends Model
         'run_rnd_check',
         'run_qualification',
         'run_dnc_check',
+        'ignore_national_dnc',
         'soft_score_pending',
         'soft_score_qualified',
         'soft_score_not_qualified',
@@ -62,6 +63,7 @@ class ImportBatch extends Model
             'run_rnd_check' => 'boolean',
             'run_qualification' => 'boolean',
             'run_dnc_check' => 'boolean',
+            'ignore_national_dnc' => 'boolean',
             'status' => ImportBatchStatus::class,
         ];
     }
