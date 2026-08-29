@@ -99,6 +99,10 @@ class AssignLeads extends Page implements HasTable
                             ->label('Import start date'),
                         DatePicker::make('imported_to')
                             ->label('Import end date'),
+                        DatePicker::make('created_from')
+                            ->label('Start Create Date'),
+                        DatePicker::make('created_to')
+                            ->label('End Create Date'),
                     ])
                     ->columns(3),
                 Section::make('Venue & event')
@@ -508,6 +512,8 @@ class AssignLeads extends Page implements HasTable
             importBatchId: isset($data['import_batch_id']) ? (int) $data['import_batch_id'] : null,
             importedFrom: $data['imported_from'] ?? null,
             importedTo: $data['imported_to'] ?? null,
+            createdFrom: $data['created_from'] ?? null,
+            createdTo: $data['created_to'] ?? null,
             zip: $data['zip'] ?? null,
             partner: $this->selectedList($data['partner'] ?? null),
             fileName: $data['file_name'] ?? null,

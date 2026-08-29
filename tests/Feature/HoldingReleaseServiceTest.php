@@ -713,6 +713,65 @@ class HoldingReleaseServiceTest extends TestCase
         );
     }
 
+    public function test_query_holding_filters_by_original_submit_date_range(): void
+    {
+        $company = Company::factory()->create();
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045558001',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'original_lead_submit_date' => '2026-01-10',
+            'imported_at' => now(),
+        ]);
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045558002',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'original_lead_submit_date' => '2026-02-15',
+            'imported_at' => now(),
+        ]);
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045558003',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'original_lead_submit_date' => '2026-03-20',
+            'imported_at' => now(),
+        ]);
+
+        $service = app(HoldingReleaseService::class);
+
+        $this->assertSame(
+            1,
+            $service->countHolding($company->id, new HoldingFilter(
+                leadType: 'standard',
+                createdFrom: '2026-02-01',
+                createdTo: '2026-02-28',
+            )),
+        );
+
+        $this->assertSame(
+            2,
+            $service->countHolding($company->id, new HoldingFilter(
+                leadType: 'standard',
+                createdFrom: '2026-02-15',
+            )),
+        );
+
+        $this->assertSame(
+            2,
+            $service->countHolding($company->id, new HoldingFilter(
+                leadType: 'standard',
+                createdTo: '2026-02-15',
+            )),
+        );
+    }
+
     public function test_query_holding_filters_by_exact_attempt_count(): void
     {
         $company = Company::factory()->create();

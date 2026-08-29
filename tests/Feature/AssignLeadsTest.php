@@ -147,6 +147,29 @@ class AssignLeadsTest extends TestCase
             ->assertSet('holdingCount', 0);
     }
 
+    public function test_create_date_filters_limit_matching_leads(): void
+    {
+        [$admin] = $this->setUpAssignPage();
+
+        $inside = $this->makeHoldingLead($admin->company_id, '4045559001', now(), originalSubmitDate: '2026-06-15');
+        $before = $this->makeHoldingLead($admin->company_id, '4045559002', now(), originalSubmitDate: '2026-05-01');
+        $after = $this->makeHoldingLead($admin->company_id, '4045559003', now(), originalSubmitDate: '2026-07-01');
+
+        Livewire::actingAs($admin)
+            ->test(AssignLeads::class)
+            ->assertSet('holdingCount', 3)
+            ->assertFormFieldExists('created_from', 'filterForm')
+            ->assertFormFieldExists('created_to', 'filterForm')
+            ->fillForm([
+                'created_from' => '2026-06-01',
+                'created_to' => '2026-06-30',
+            ], 'filterForm')
+            ->call('refreshCountAction')
+            ->assertSet('holdingCount', 1)
+            ->assertCanSeeTableRecords([$inside])
+            ->assertCanNotSeeTableRecords([$before, $after]);
+    }
+
     public function test_attempt_count_filter_limits_matching_leads(): void
     {
         [$admin] = $this->setUpAssignPage();
@@ -264,8 +287,13 @@ class AssignLeadsTest extends TestCase
         return [$admin, $list];
     }
 
-    private function makeHoldingLead(int $companyId, string $phone, mixed $importedAt, int $attemptCount = 0): Lead
-    {
+    private function makeHoldingLead(
+        int $companyId,
+        string $phone,
+        mixed $importedAt,
+        int $attemptCount = 0,
+        ?string $originalSubmitDate = null,
+    ): Lead {
         return Lead::withoutGlobalScopes()->create([
             'company_id' => $companyId,
             'phone' => $phone,
@@ -274,6 +302,7 @@ class AssignLeadsTest extends TestCase
             'qualification_status' => QualificationStatus::Qualified,
             'imported_at' => $importedAt,
             'attempt_count' => $attemptCount,
+            'original_lead_submit_date' => $originalSubmitDate,
         ]);
     }
 

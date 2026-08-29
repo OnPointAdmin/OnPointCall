@@ -30,6 +30,8 @@ readonly class HoldingFilter
         public ?int $importBatchId = null,
         public ?string $importedFrom = null,
         public ?string $importedTo = null,
+        public ?string $createdFrom = null,
+        public ?string $createdTo = null,
         public ?string $zip = null,
         public ?array $partner = null,
         public ?string $fileName = null,

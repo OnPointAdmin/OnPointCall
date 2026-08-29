@@ -72,6 +72,14 @@ class HoldingReleaseService
             $query->where('imported_at', '<=', $filter->importedTo);
         }
 
+        if ($filter->createdFrom) {
+            $query->whereDate('original_lead_submit_date', '>=', $filter->createdFrom);
+        }
+
+        if ($filter->createdTo) {
+            $query->whereDate('original_lead_submit_date', '<=', $filter->createdTo);
+        }
+
         if ($filter->zip) {
             $query->where('zip', 'like', substr($filter->zip, 0, 5).'%');
         }
