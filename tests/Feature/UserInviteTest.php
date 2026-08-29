@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Enums\UserRole;
 use App\Mail\UserInviteMail;
-use App\Models\AllowedEmail;
 use App\Models\CallingList;
 use App\Models\Company;
 use App\Models\ListAssignment;
@@ -18,7 +17,7 @@ class UserInviteTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_invite_creates_user_allowlist_assignment_and_sends_mail(): void
+    public function test_invite_creates_user_assignment_and_sends_mail(): void
     {
         Mail::fake();
 
@@ -48,13 +47,6 @@ class UserInviteTest extends TestCase
         $this->assertTrue($user->must_change_password);
         $this->assertNull($user->email_verified_at);
         $this->assertNotEmpty($result['password']);
-
-        $this->assertTrue(
-            AllowedEmail::withoutGlobalScopes()
-                ->where('company_id', $company->id)
-                ->where('email', 'jasonpaine1@gmail.com')
-                ->exists()
-        );
 
         $this->assertTrue(
             ListAssignment::withoutGlobalScopes()

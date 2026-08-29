@@ -3,7 +3,6 @@
 namespace Database\Seeders;
 
 use App\Enums\UserRole;
-use App\Models\AllowedEmail;
 use App\Models\CallingList;
 use App\Models\Company;
 use App\Models\ListAssignment;
@@ -40,11 +39,6 @@ class JasonPaineAdminSeeder extends Seeder
         }
 
         $user->save();
-
-        AllowedEmail::query()->updateOrCreate(
-            ['company_id' => $company->id, 'email' => 'jason.paine@onpointmrg.com'],
-            [],
-        );
 
         ListAssignment::query()->updateOrCreate(
             [

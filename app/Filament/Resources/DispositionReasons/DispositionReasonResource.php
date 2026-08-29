@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\DispositionReasons;
 
+use App\Filament\Resources\Dispositions\DispositionResource;
 use App\Filament\Resources\DispositionReasons\Pages\CreateDispositionReason;
 use App\Filament\Resources\DispositionReasons\Pages\EditDispositionReason;
 use App\Filament\Resources\DispositionReasons\Pages\ListDispositionReasons;
@@ -24,7 +25,9 @@ class DispositionReasonResource extends Resource
 
     protected static string|\UnitEnum|null $navigationGroup = 'Configuration';
 
-    protected static ?int $navigationSort = 4;
+    protected static ?string $navigationParentItem = DispositionResource::class;
+
+    protected static ?int $navigationSort = 1;
 
     protected static ?string $navigationLabel = 'Disposition Reasons';
 

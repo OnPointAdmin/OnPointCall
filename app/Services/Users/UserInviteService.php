@@ -4,7 +4,6 @@ namespace App\Services\Users;
 
 use App\Enums\UserRole;
 use App\Mail\UserInviteMail;
-use App\Models\AllowedEmail;
 use App\Models\CallingList;
 use App\Models\Company;
 use App\Models\ListAssignment;
@@ -66,11 +65,6 @@ class UserInviteService
             ]);
             $user->save();
         }
-
-        AllowedEmail::withoutGlobalScopes()->updateOrCreate(
-            ['company_id' => $company->id, 'email' => $email],
-            [],
-        );
 
         foreach ($callingListIds as $listId) {
             $list = CallingList::withoutGlobalScopes()
