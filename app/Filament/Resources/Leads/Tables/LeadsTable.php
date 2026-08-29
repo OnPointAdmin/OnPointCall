@@ -2,7 +2,8 @@
 
 namespace App\Filament\Resources\Leads\Tables;
 
-use App\Enums\Disposition;
+use App\Models\DispositionDefinition;
+use App\Support\CompanyContext;
 use App\Enums\DncStatus;
 use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
@@ -66,7 +67,7 @@ class LeadsTable
                         return null;
                     }
 
-                    return Disposition::tryFrom($value)?->label() ?? $value;
+                    return DispositionDefinition::labelForSlug($record->company_id, $value) ?? $value;
                 }),
             TextColumn::make('last_attempt_at')
                 ->label('Last Call Date')
@@ -181,9 +182,9 @@ class LeadsTable
                 ->searchable(),
             SelectFilter::make('last_disposition')
                 ->label('Last Disp')
-                ->options(fn (): array => ['none' => 'None'] + collect(Disposition::cases())
-                    ->mapWithKeys(fn (Disposition $disposition): array => [$disposition->value => $disposition->label()])
-                    ->all())
+                ->options(fn (): array => ['none' => 'None'] + DispositionDefinition::filterOptions(
+                    (int) (CompanyContext::idOrAuthenticated() ?? Auth::user()?->company_id),
+                ))
                 ->query(function (Builder $query, array $data): Builder {
                     $value = $data['value'] ?? null;
 
@@ -257,7 +258,7 @@ class LeadsTable
 
                             foreach ($records as $record) {
                                 if ($record->status !== LeadStatus::Dnc) {
-                                    $service->apply($record, $user, Disposition::Dnc);
+                                    $service->apply($record, $user, 'dnc');
                                 }
                             }
 

@@ -89,7 +89,7 @@ class DispositionServiceTest extends TestCase
         $updated = app(DispositionService::class)->apply(
             $lead,
             $user,
-            Disposition::Skip,
+            Disposition::Skip->value,
             reason: (string) $reason->id,
         );
 
@@ -143,7 +143,7 @@ class DispositionServiceTest extends TestCase
         $updated = app(DispositionService::class)->apply(
             $lead,
             $user,
-            Disposition::NoAnswer,
+            Disposition::NoAnswer->value,
         );
 
         $this->assertNull($updated->last_skipped_by_user_id);
@@ -169,7 +169,7 @@ class DispositionServiceTest extends TestCase
         app(DispositionService::class)->apply(
             $lead,
             $user,
-            Disposition::Skip,
+            Disposition::Skip->value,
         );
     }
 
@@ -203,7 +203,7 @@ class DispositionServiceTest extends TestCase
         app(DispositionService::class)->apply(
             $lead,
             $user,
-            Disposition::Callback,
+            Disposition::Callback->value,
             callbackAt: Carbon::parse('2026-08-10 22:00:00', 'America/New_York'),
         );
     }
@@ -240,7 +240,7 @@ class DispositionServiceTest extends TestCase
         app(DispositionService::class)->apply(
             $lead,
             $user,
-            Disposition::Booked,
+            Disposition::Booked->value,
             note: '  Asked to call after lunch  ',
         );
 
@@ -281,7 +281,7 @@ class DispositionServiceTest extends TestCase
         app(DispositionService::class)->apply(
             $lead,
             $user,
-            Disposition::NotInterested,
+            Disposition::NotInterested->value,
         );
     }
 
@@ -310,7 +310,7 @@ class DispositionServiceTest extends TestCase
         app(DispositionService::class)->apply(
             $lead,
             $user,
-            Disposition::NotQualified,
+            Disposition::NotQualified->value,
             reason: (string) $reason->id,
         );
 

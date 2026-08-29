@@ -128,17 +128,17 @@ class NextLeadServiceTest extends TestCase
         $first = $service->getNext($user);
         $this->assertSame($skipped->id, $first->lead?->id);
 
-        $dispositions->apply($first->lead, $user, Disposition::Skip, reason: (string) $reason->id);
+        $dispositions->apply($first->lead, $user, Disposition::Skip->value, reason: (string) $reason->id);
 
         $next = $service->getNext($user);
         $this->assertSame($second->id, $next->lead?->id);
 
-        $dispositions->apply($next->lead, $user, Disposition::Skip, reason: (string) $reason->id);
+        $dispositions->apply($next->lead, $user, Disposition::Skip->value, reason: (string) $reason->id);
 
         $afterTwoSkips = $service->getNext($user);
         $this->assertSame($third->id, $afterTwoSkips->lead?->id);
 
-        $dispositions->apply($afterTwoSkips->lead, $user, Disposition::Skip, reason: (string) $reason->id);
+        $dispositions->apply($afterTwoSkips->lead, $user, Disposition::Skip->value, reason: (string) $reason->id);
 
         $result = $service->getNext($user);
         $this->assertFalse($result->hasLead());

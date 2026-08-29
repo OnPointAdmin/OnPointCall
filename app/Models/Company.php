@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Database\Factories\CompanyFactory;
+use Database\Seeders\DispositionSeeder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -44,5 +45,12 @@ class Company extends Model
     public function appSettings(): HasOne
     {
         return $this->hasOne(AppSetting::class);
+    }
+
+    public static function booted(): void
+    {
+        static::created(function (Company $company): void {
+            (new DispositionSeeder)->run($company->id);
+        });
     }
 }

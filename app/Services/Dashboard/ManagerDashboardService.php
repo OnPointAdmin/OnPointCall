@@ -3,9 +3,11 @@
 namespace App\Services\Dashboard;
 
 use App\Enums\Disposition;
+use App\Enums\DispositionReportGroup;
 use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
 use App\Enums\UserRole;
+use App\Models\DispositionDefinition;
 use App\Models\AppSetting;
 use App\Models\Lead;
 use App\Models\LeadHistory;
@@ -81,6 +83,8 @@ class ManagerDashboardService
         $agentBuckets = [];
         $totals = $this->emptyMetrics();
 
+        $reportGroupMap = $this->reportGroupMap($companyId);
+
         foreach ($history as $row) {
             if ($row->actor_id === null) {
                 continue;
@@ -92,8 +96,8 @@ class ManagerDashboardService
                 $agentBuckets[$actorKey] = $this->emptyMetrics();
             }
 
-            $this->applyHistoryRow($totals, $row);
-            $this->applyHistoryRow($agentBuckets[$actorKey], $row);
+            $this->applyHistoryRow($totals, $row, $reportGroupMap);
+            $this->applyHistoryRow($agentBuckets[$actorKey], $row, $reportGroupMap);
         }
 
         $totals['overdue_callbacks']['count'] = array_sum($overdueByOwner);
@@ -310,6 +314,7 @@ class ManagerDashboardService
             ['key' => 'wrong_dnc', 'label' => 'Wrong / DNC', 'show_percent' => true],
             ['key' => 'skipped', 'label' => 'Skipped', 'show_percent' => true],
             ['key' => 'callbacks', 'label' => 'Call Backs', 'show_percent' => true],
+            ['key' => 'other', 'label' => 'Other', 'show_percent' => true],
             ['key' => 'overdue_callbacks', 'label' => 'Overdue Call Backs', 'show_percent' => true],
         ];
     }
@@ -342,7 +347,7 @@ class ManagerDashboardService
         return $metrics;
     }
 
-    private function applyHistoryRow(array &$metrics, LeadHistory $row): void
+    private function applyHistoryRow(array &$metrics, LeadHistory $row, array $reportGroupMap): void
     {
         if ($row->event_type === LeadHistoryType::Skip) {
             $metrics['skipped']['count']++;
@@ -357,21 +362,31 @@ class ManagerDashboardService
 
         $metrics['total_leads_called']['count']++;
 
-        $disposition = Disposition::tryFrom((string) ($row->payload['disposition'] ?? ''));
+        $slug = (string) ($row->payload['disposition'] ?? '');
+        $group = $reportGroupMap[$slug] ?? DispositionReportGroup::Other->value;
 
-        if ($disposition === null) {
-            return;
-        }
-
-        match ($disposition) {
-            Disposition::Booked => $metrics['booked']['count']++,
-            Disposition::NotInterested => $metrics['not_interested']['count']++,
-            Disposition::NotQualified => $metrics['not_qualified']['count']++,
-            Disposition::NoAnswer, Disposition::LeftVm => $metrics['no_answer_vm']['count']++,
-            Disposition::WrongNumber, Disposition::BadNumber, Disposition::Dnc => $metrics['wrong_dnc']['count']++,
-            Disposition::Callback => $metrics['callbacks']['count']++,
-            default => null,
+        match ($group) {
+            DispositionReportGroup::Booked->value => $metrics['booked']['count']++,
+            DispositionReportGroup::NotInterested->value => $metrics['not_interested']['count']++,
+            DispositionReportGroup::NotQualified->value => $metrics['not_qualified']['count']++,
+            DispositionReportGroup::NoAnswerVm->value => $metrics['no_answer_vm']['count']++,
+            DispositionReportGroup::WrongDnc->value => $metrics['wrong_dnc']['count']++,
+            DispositionReportGroup::Callbacks->value => $metrics['callbacks']['count']++,
+            DispositionReportGroup::Other->value => $metrics['other']['count']++,
+            default => $metrics['other']['count']++,
         };
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function reportGroupMap(int $companyId): array
+    {
+        return DispositionDefinition::indexedForCompany($companyId)
+            ->mapWithKeys(fn (DispositionDefinition $definition): array => [
+                $definition->slug => $definition->report_group->value,
+            ])
+            ->all();
     }
 
     /**

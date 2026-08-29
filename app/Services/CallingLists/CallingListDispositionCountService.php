@@ -2,9 +2,9 @@
 
 namespace App\Services\CallingLists;
 
-use App\Enums\Disposition;
 use App\Enums\LeadHistoryType;
 use App\Models\CallingList;
+use App\Models\DispositionDefinition;
 use App\Models\Lead;
 use App\Models\LeadHistory;
 
@@ -22,10 +22,10 @@ class CallingListDispositionCountService
             ->pluck('id');
 
         $total = $leadIds->count();
-        $counts = array_fill_keys(
-            array_map(fn (Disposition $disposition): string => $disposition->value, Disposition::cases()),
-            0,
-        );
+        $definitions = DispositionDefinition::indexedForCompany($list->company_id);
+        $counts = $definitions->mapWithKeys(fn (DispositionDefinition $definition): array => [
+            $definition->slug => 0,
+        ])->all();
         $withDisposition = 0;
 
         if ($total > 0) {
@@ -47,8 +47,12 @@ class CallingListDispositionCountService
 
                 $value = is_array($payload) ? ($payload['disposition'] ?? null) : null;
 
-                if (! is_string($value) || $value === '' || ! array_key_exists($value, $counts)) {
+                if (! is_string($value) || $value === '') {
                     continue;
+                }
+
+                if (! array_key_exists($value, $counts)) {
+                    $counts[$value] = 0;
                 }
 
                 $counts[$value]++;
@@ -70,12 +74,25 @@ class CallingListDispositionCountService
             ],
         ];
 
-        foreach (Disposition::cases() as $disposition) {
-            $count = $counts[$disposition->value];
+        foreach ($definitions as $definition) {
+            $count = $counts[$definition->slug] ?? 0;
 
             $items[] = [
-                'key' => $disposition->value,
-                'label' => $disposition->label(),
+                'key' => $definition->slug,
+                'label' => $definition->label,
+                'count' => $count,
+                'percent' => $percent($count),
+            ];
+        }
+
+        foreach ($counts as $slug => $count) {
+            if ($definitions->has($slug)) {
+                continue;
+            }
+
+            $items[] = [
+                'key' => $slug,
+                'label' => $slug,
                 'count' => $count,
                 'percent' => $percent($count),
             ];

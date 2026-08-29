@@ -98,8 +98,31 @@
     };
 
     $canPutBackCallback = $canPutBackCallback ?? false;
+    $dispositionDefinitions = $dispositionDefinitions ?? \App\Models\DispositionDefinition::indexedForCompany($companyId);
 
-    $outcomePillClasses = function (?string $dispositionValue): string {
+    $outcomeLabelFor = function (?string $dispositionValue) use ($dispositionDefinitions): string {
+        if (! is_string($dispositionValue) || $dispositionValue === '') {
+            return '';
+        }
+
+        $definition = $dispositionDefinitions->get($dispositionValue);
+
+        if ($definition) {
+            return $definition->label;
+        }
+
+        return Disposition::tryFrom($dispositionValue)?->label() ?? $dispositionValue;
+    };
+
+    $outcomePillClasses = function (?string $dispositionValue) use ($dispositionDefinitions): string {
+        if (is_string($dispositionValue) && $dispositionValue !== '') {
+            $definition = $dispositionDefinitions->get($dispositionValue);
+
+            if ($definition?->color) {
+                return $definition->color->pillClasses();
+            }
+        }
+
         return match ($dispositionValue) {
             Disposition::Booked->value => 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-400',
             Disposition::Callback->value, Disposition::NoAnswer->value, Disposition::LeftVm->value => 'bg-blue-100 text-blue-800 dark:bg-blue-500/15 dark:text-blue-400',
@@ -498,7 +521,7 @@
                 @php
                     $dispositionValue = $entry->payload['disposition'] ?? null;
                     $outcomeLabel = $dispositionValue
-                        ? (Disposition::tryFrom($dispositionValue)?->label() ?? $dispositionValue)
+                        ? $outcomeLabelFor(is_string($dispositionValue) ? $dispositionValue : null)
                         : $entry->event_type->label();
                     $note = in_array($entry->event_type, [LeadHistoryType::FieldEdit, LeadHistoryType::DncCheck], true)
                         ? $entry->detailLabel()

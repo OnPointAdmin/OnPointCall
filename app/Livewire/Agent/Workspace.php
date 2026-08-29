@@ -2,16 +2,18 @@
 
 namespace App\Livewire\Agent;
 
-use App\Enums\Disposition;
+use App\Enums\DispositionOutcome;
 use App\Enums\EmptyQueueReason;
 use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
 use App\Enums\QualificationStatus;
 use App\Enums\SoftScoreStatus;
 use App\Exceptions\CallbackOutsideWindowException;
+use App\Exceptions\InvalidDispositionException;
 use App\Exceptions\MissingDispositionReasonException;
 use App\Jobs\QualifyLeadJob;
 use App\Jobs\SoftScoreLeadJob;
+use App\Models\DispositionDefinition;
 use App\Models\DispositionReason;
 use App\Models\Lead;
 use App\Models\LeadHistory;
@@ -260,12 +262,16 @@ class Workspace extends Component
             return;
         }
 
-        $disposition = Disposition::from($dispositionValue);
+        $definition = DispositionDefinition::findBySlug($lead->company_id, $dispositionValue);
+
+        if (! $definition) {
+            return;
+        }
 
         try {
             $callbackAt = null;
 
-            if ($disposition === Disposition::Callback) {
+            if ($definition->outcome === DispositionOutcome::Callback) {
                 if (trim($this->callbackAt) === '') {
                     $this->addError('callbackAt', 'Callback date/time is required.');
 
@@ -280,7 +286,7 @@ class Workspace extends Component
 
             $reason = null;
 
-            if (in_array($disposition, [Disposition::NotInterested, Disposition::NotQualified, Disposition::Skip], true)) {
+            if ($definition->requires_reason) {
                 $reason = trim((string) $this->dispositionReasonId);
 
                 if ($reason === '') {
@@ -295,7 +301,7 @@ class Workspace extends Component
             app(DispositionService::class)->apply(
                 $lead,
                 Auth::guard('agent')->user(),
-                $disposition,
+                $dispositionValue,
                 $callbackAt,
                 $note === '' ? null : $note,
                 $reason,
@@ -314,6 +320,8 @@ class Workspace extends Component
             $this->addError('callbackAt', 'Callback must fall within legal calling hours for this lead.');
         } catch (MissingDispositionReasonException) {
             $this->addError('dispositionReasonId', 'Select a valid reason for this disposition.');
+        } catch (InvalidDispositionException) {
+            $this->addError('dispositionReasonId', 'This disposition is not available.');
         }
     }
 
@@ -800,12 +808,48 @@ class Workspace extends Component
     /**
      * @return Collection<int, DispositionReason>
      */
-    private function reasonsFor(Disposition $disposition): Collection
+    private function reasonsForSlug(string $slug): Collection
     {
         return DispositionReason::withoutGlobalScopes()
             ->where('company_id', Auth::guard('agent')->user()->company_id)
-            ->activeFor($disposition)
+            ->activeForSlug($slug)
             ->get();
+    }
+
+    /**
+     * @return array<string, Collection<int, DispositionReason>>
+     */
+    private function dispositionReasonsBySlug(): array
+    {
+        $companyId = Auth::guard('agent')->user()->company_id;
+        $slugs = DispositionDefinition::withoutGlobalScopes()
+            ->where('company_id', $companyId)
+            ->where('requires_reason', true)
+            ->pluck('slug');
+
+        $reasons = [];
+
+        foreach ($slugs as $slug) {
+            $reasons[$slug] = $this->reasonsForSlug($slug);
+        }
+
+        return $reasons;
+    }
+
+    /**
+     * @return array<string, Collection<int, DispositionDefinition>>
+     */
+    private function activeDispositionsByGroup(): array
+    {
+        $grouped = DispositionDefinition::withoutGlobalScopes()
+            ->where('company_id', Auth::guard('agent')->user()->company_id)
+            ->active()
+            ->orderBy('sort_order')
+            ->orderBy('label')
+            ->get()
+            ->groupBy(fn (DispositionDefinition $definition): string => $definition->button_group->value);
+
+        return $grouped->all();
     }
 
     private function resetDispositionFields(): void
@@ -853,9 +897,14 @@ class Workspace extends Component
             'canRunQualification' => $lead && ! $qualificationRunning && app(QualificationService::class)->shouldShowRunButton($lead),
             'overdueCallbackCount' => $overdueCallbackCount,
             'defaultSecondaryTab' => $overdueCallbackCount > 0 ? 'callbacks' : 'scoreboard',
-            'notInterestedReasons' => $this->reasonsFor(Disposition::NotInterested),
-            'notQualifiedReasons' => $this->reasonsFor(Disposition::NotQualified),
-            'skipReasons' => $this->reasonsFor(Disposition::Skip),
+            'dispositionDefinitions' => DispositionDefinition::indexedForCompany(Auth::guard('agent')->user()->company_id),
+            'activeDispositionsByGroup' => $this->activeDispositionsByGroup(),
+            'dispositionReasonsBySlug' => $this->dispositionReasonsBySlug(),
+            'requiresReasonSlugs' => DispositionDefinition::withoutGlobalScopes()
+                ->where('company_id', Auth::guard('agent')->user()->company_id)
+                ->where('requires_reason', true)
+                ->pluck('slug')
+                ->all(),
             'agentTimezone' => CompanyTimezone::for(Auth::guard('agent')->user()->company_id),
         ]);
     }

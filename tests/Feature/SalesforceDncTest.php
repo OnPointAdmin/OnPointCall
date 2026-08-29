@@ -34,7 +34,7 @@ class SalesforceDncTest extends TestCase
         ]);
         $lead = $this->makeLead($company);
 
-        app(DispositionService::class)->apply($lead, $user, Disposition::Dnc);
+        app(DispositionService::class)->apply($lead, $user, Disposition::Dnc->value);
 
         Queue::assertPushed(DncPushJob::class, fn (DncPushJob $job): bool => $job->leadId === $lead->id);
         Queue::assertPushed(
@@ -78,7 +78,7 @@ class SalesforceDncTest extends TestCase
         app(DispositionService::class)->apply(
             $lead,
             $user,
-            Disposition::Dnc,
+            Disposition::Dnc->value,
             note: 'Call Center DNC request',
         );
 
@@ -156,7 +156,7 @@ class SalesforceDncTest extends TestCase
             'last_name' => 'Smith',
         ]);
 
-        app(DispositionService::class)->apply($lead, $user, Disposition::Dnc);
+        app(DispositionService::class)->apply($lead, $user, Disposition::Dnc->value);
 
         Http::assertSent(function ($request): bool {
             if (! str_contains($request->url(), '/services/data/v64.0/sobjects/DNC__c')) {
@@ -200,7 +200,7 @@ class SalesforceDncTest extends TestCase
             'last_name' => 'Doe',
         ]);
 
-        app(DispositionService::class)->apply($lead, $user, Disposition::Dnc);
+        app(DispositionService::class)->apply($lead, $user, Disposition::Dnc->value);
 
         $history = LeadHistory::withoutGlobalScopes()
             ->where('lead_id', $lead->id)

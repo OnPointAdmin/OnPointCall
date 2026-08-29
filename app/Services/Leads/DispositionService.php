@@ -2,13 +2,15 @@
 
 namespace App\Services\Leads;
 
-use App\Enums\Disposition;
+use App\Enums\DispositionOutcome;
 use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
 use App\Exceptions\CallbackOutsideWindowException;
+use App\Exceptions\InvalidDispositionException;
 use App\Exceptions\MissingDispositionReasonException;
 use App\Jobs\DncPushJob;
 use App\Jobs\SalesforceDncPushJob;
+use App\Models\DispositionDefinition;
 use App\Models\DispositionReason;
 use App\Models\Lead;
 use App\Models\LeadHistory;
@@ -29,12 +31,18 @@ class DispositionService
     public function apply(
         Lead $lead,
         User $user,
-        Disposition $disposition,
+        string $slug,
         ?CarbonInterface $callbackAt = null,
         ?string $note = null,
         ?string $reason = null,
     ): Lead {
-        if ($disposition === Disposition::Callback) {
+        $definition = DispositionDefinition::findBySlug($lead->company_id, $slug);
+
+        if (! $definition) {
+            throw InvalidDispositionException::make();
+        }
+
+        if ($definition->outcome === DispositionOutcome::Callback) {
             if (! $callbackAt || ! $this->compliance->validateCallbackTime($lead, $callbackAt)) {
                 throw CallbackOutsideWindowException::make();
             }
@@ -42,14 +50,15 @@ class DispositionService
             $callbackAt = $callbackAt->copy()->utc();
         }
 
-        $requiresReason = in_array($disposition, [Disposition::NotInterested, Disposition::NotQualified, Disposition::Skip], true);
-        $resolvedReason = $requiresReason ? $this->resolveReason($lead, $disposition, $reason) : null;
+        $resolvedReason = $definition->requires_reason
+            ? $this->resolveReason($lead, $slug, $reason)
+            : null;
 
-        $updated = DB::transaction(function () use ($lead, $user, $disposition, $callbackAt, $note, $resolvedReason): Lead {
+        $updated = DB::transaction(function () use ($lead, $user, $definition, $slug, $callbackAt, $note, $resolvedReason): Lead {
             $lead = Lead::withoutGlobalScopes()->lockForUpdate()->findOrFail($lead->id);
 
             $payload = [
-                'disposition' => $disposition->value,
+                'disposition' => $slug,
             ];
 
             if ($resolvedReason) {
@@ -67,40 +76,40 @@ class DispositionService
 
             $updates = [];
 
-            if ($disposition->incrementsAttempt()) {
+            if ($definition->increments_attempt) {
                 $updates['attempt_count'] = $lead->attempt_count + 1;
             }
 
-            if ($disposition->incrementsAttempt() || $disposition === Disposition::Skip) {
+            if ($definition->increments_attempt || $definition->outcome === DispositionOutcome::Skip) {
                 $updates['last_attempt_at'] = now();
             }
 
-            match ($disposition) {
-                Disposition::Booked => $updates['status'] = LeadStatus::Booked,
-                Disposition::Callback => $updates += [
+            match ($definition->outcome) {
+                DispositionOutcome::Booked => $updates['status'] = LeadStatus::Booked,
+                DispositionOutcome::Callback => $updates += [
                     'status' => LeadStatus::Callback,
                     'callback_owner_id' => $user->id,
                     'callback_at' => $callbackAt,
                 ],
-                Disposition::NoAnswer, Disposition::LeftVm, Disposition::Skip => $updates += [
+                DispositionOutcome::Callable, DispositionOutcome::Skip => $updates += [
                     'status' => LeadStatus::Callable,
                     'callback_owner_id' => null,
                     'callback_at' => null,
                     'next_day_part' => $this->dayPartResolver->advanceDayPart($lead),
                 ],
-                Disposition::NotInterested, Disposition::NotQualified, Disposition::BadNumber, Disposition::WrongNumber => $updates += [
+                DispositionOutcome::Terminal => $updates += [
                     'status' => LeadStatus::Terminal,
                     'callback_owner_id' => null,
                     'callback_at' => null,
                 ],
-                Disposition::Dnc => $updates += [
+                DispositionOutcome::Dnc => $updates += [
                     'status' => LeadStatus::Dnc,
                     'callback_owner_id' => null,
                     'callback_at' => null,
                 ],
             };
 
-            if ($disposition === Disposition::Skip) {
+            if ($definition->outcome === DispositionOutcome::Skip) {
                 $updates['queue_rank'] = $this->nextQueueRank($lead);
                 $updates['last_skipped_by_user_id'] = $user->id;
             } else {
@@ -113,7 +122,7 @@ class DispositionService
                 'company_id' => $lead->company_id,
                 'lead_id' => $lead->id,
                 'actor_id' => $user->id,
-                'event_type' => $disposition === Disposition::Skip
+                'event_type' => $definition->outcome === DispositionOutcome::Skip
                     ? LeadHistoryType::Skip
                     : LeadHistoryType::Disposition,
                 'occurred_at' => now(),
@@ -125,7 +134,7 @@ class DispositionService
             return $lead->fresh(['callingList', 'claim']);
         });
 
-        if ($disposition === Disposition::Dnc) {
+        if ($definition->outcome === DispositionOutcome::Dnc) {
             DncPushJob::dispatch($updated->id);
             SalesforceDncPushJob::dispatch($updated->id, $user->id);
         }
@@ -147,7 +156,7 @@ class DispositionService
         return ((int) $max) + 1;
     }
 
-    private function resolveReason(Lead $lead, Disposition $disposition, ?string $reason): string
+    private function resolveReason(Lead $lead, string $slug, ?string $reason): string
     {
         $trimmed = is_string($reason) ? trim($reason) : '';
 
@@ -157,7 +166,7 @@ class DispositionService
 
         $match = DispositionReason::withoutGlobalScopes()
             ->where('company_id', $lead->company_id)
-            ->where('disposition', $disposition->value)
+            ->where('disposition', $slug)
             ->where('active', true)
             ->where(function ($query) use ($trimmed): void {
                 $query->where('label', $trimmed);

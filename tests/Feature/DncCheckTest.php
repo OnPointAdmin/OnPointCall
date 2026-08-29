@@ -565,7 +565,7 @@ class DncCheckTest extends TestCase
             'imported_at' => now(),
         ]);
 
-        app(DispositionService::class)->apply($lead, $user, Disposition::Dnc);
+        app(DispositionService::class)->apply($lead, $user, Disposition::Dnc->value);
 
         Queue::assertPushed(DncPushJob::class, fn (DncPushJob $job): bool => $job->leadId === $lead->id);
         Queue::assertPushed(

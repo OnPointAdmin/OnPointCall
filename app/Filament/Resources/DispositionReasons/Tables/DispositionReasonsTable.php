@@ -2,7 +2,8 @@
 
 namespace App\Filament\Resources\DispositionReasons\Tables;
 
-use App\Enums\Disposition;
+use App\Models\DispositionDefinition;
+use App\Support\CompanyContext;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -20,9 +21,17 @@ class DispositionReasonsTable
             ->columns([
                 TextColumn::make('disposition')
                     ->badge()
-                    ->formatStateUsing(fn ($state): string => is_object($state) && method_exists($state, 'label')
-                        ? $state->label()
-                        : (string) $state),
+                    ->formatStateUsing(function (mixed $state): string {
+                        if (! is_string($state) || $state === '') {
+                            return '';
+                        }
+
+                        $companyId = CompanyContext::idOrAuthenticated();
+
+                        return $companyId
+                            ? (DispositionDefinition::labelForSlug($companyId, $state) ?? $state)
+                            : $state;
+                    }),
                 TextColumn::make('label')
                     ->searchable(),
                 TextColumn::make('sort_order')
@@ -32,7 +41,13 @@ class DispositionReasonsTable
             ])
             ->filters([
                 SelectFilter::make('disposition')
-                    ->options(Disposition::reasonOptions()),
+                    ->options(fn (): array => DispositionDefinition::withoutGlobalScopes()
+                        ->where('company_id', CompanyContext::idOrAuthenticated())
+                        ->where('requires_reason', true)
+                        ->orderBy('sort_order')
+                        ->orderBy('label')
+                        ->pluck('label', 'slug')
+                        ->all()),
             ])
             ->recordActions([
                 EditAction::make(),

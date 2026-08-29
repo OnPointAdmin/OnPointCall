@@ -6,6 +6,9 @@
     $canPutBackCallback = $lead
         && $lead->status->value === 'callback'
         && $lead->callback_owner_id === auth('agent')->id();
+    $contactDispositions = ($activeDispositionsByGroup['contact'] ?? collect());
+    $callbackDisposition = $contactDispositions->first(fn ($d) => $d->outcome->value === 'callback');
+    $otherContactDispositions = $contactDispositions->filter(fn ($d) => $d->outcome->value !== 'callback');
 @endphp
 
 <div
@@ -54,6 +57,7 @@
                 'qualificationMessage' => $qualificationMessage,
                 'showSoftScoreRecentModal' => $showSoftScoreRecentModal,
                 'canPutBackCallback' => $canPutBackCallback,
+                'dispositionDefinitions' => $dispositionDefinitions,
             ])
         @endif
     </div>
@@ -64,115 +68,177 @@
         @if ($leadIsWorkable)
             <div
                 class="rounded-xl border border-slate-200 bg-white px-4 py-4 shadow-[0_2px_12px_rgba(15,23,42,0.06)] dark:border-slate-800 dark:bg-slate-900"
-                x-data="{ selected: null, modalOpen: false, pendingKey: null, pendingLabel: '' }"
+                x-data="{
+                    selected: null,
+                    modalOpen: false,
+                    pendingKey: null,
+                    pendingLabel: '',
+                    requiresReasonSlugs: @js($requiresReasonSlugs),
+                    pendingRequiresReason() {
+                        return this.requiresReasonSlugs.includes(this.pendingKey);
+                    },
+                    openDisposition(slug, label, needsReason = false) {
+                        this.pendingKey = slug;
+                        this.pendingLabel = label;
+                        this.modalOpen = true;
+                        if (needsReason) {
+                            $wire.set('dispositionReasonId', null);
+                        }
+                    },
+                }"
             >
                 <h4 class="m-0 mb-3 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Disposition</h4>
 
                 <div class="flex flex-col gap-2">
-                    <button
-                        type="button"
-                        x-on:click="selected = 'booked'; pendingKey = 'booked'; pendingLabel = 'Booked'; modalOpen = true"
-                        class="w-full rounded-lg border border-emerald-200 bg-emerald-50 py-3.5 text-[15px] font-bold text-emerald-800 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-400 dark:hover:bg-emerald-500/20"
-                    >
-                        Booked
-                    </button>
-
-                    <div class="grid grid-cols-2 gap-2">
-                        <button type="button" x-on:click="selected = 'callback'" class="rounded-lg border border-blue-200 bg-blue-50 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-500/10 dark:text-blue-400 dark:hover:bg-blue-500/20">Callback</button>
-                        <button type="button" x-on:click="selected = 'no_answer'; pendingKey = 'no_answer'; pendingLabel = 'No Answer'; modalOpen = true" class="rounded-lg border border-slate-300 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300">No Answer</button>
-                        <button type="button" x-on:click="selected = 'left_vm'; pendingKey = 'left_vm'; pendingLabel = 'Left VM'; modalOpen = true" class="rounded-lg border border-slate-300 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300">Left VM</button>
-                    </div>
-
-                    <div x-show="selected === 'callback'" x-cloak class="flex flex-col gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 dark:border-amber-800 dark:bg-amber-500/10">
-                        <label class="text-xs font-semibold text-amber-800 dark:text-amber-400">Callback date/time</label>
-                        <div
-                            wire:ignore
-                            class="grid grid-cols-1 gap-1.5"
-                            x-data="{
-                                date: @js(str_contains($callbackAt, 'T') ? strstr($callbackAt, 'T', true) : ''),
-                                time: @js(str_contains($callbackAt, 'T') ? substr(strstr($callbackAt, 'T'), 1) : ''),
-                                sync() {
-                                    $wire.set('callbackAt', this.date && this.time ? (this.date + 'T' + this.time) : '');
-                                },
-                                openPicker(event) {
-                                    const input = event.currentTarget;
-                                    if (typeof input.showPicker === 'function') {
-                                        try { input.showPicker(); } catch (e) {}
-                                    }
-                                },
-                            }"
+                    @foreach (($activeDispositionsByGroup['primary'] ?? collect()) as $disposition)
+                        <button
+                            type="button"
+                            x-on:click="selected = '{{ $disposition->slug }}'; openDisposition('{{ $disposition->slug }}', '{{ $disposition->label }}', {{ $disposition->requires_reason ? 'true' : 'false' }})"
+                            class="w-full rounded-lg border py-3.5 text-[15px] font-bold {{ $disposition->color->buttonClasses() }}"
                         >
-                            <input
-                                type="date"
-                                x-model="date"
-                                x-on:change="sync()"
-                                x-on:click="openPicker($event)"
-                                class="w-full min-h-10 cursor-pointer rounded-md border border-amber-300 bg-white px-3 py-1.5 text-sm dark:bg-slate-900"
-                            >
-                            <input
-                                type="time"
-                                x-model="time"
-                                x-on:change="sync()"
-                                x-on:click="openPicker($event)"
-                                class="w-full min-h-10 cursor-pointer rounded-md border border-amber-300 bg-white px-3 py-1.5 text-sm dark:bg-slate-900"
-                            >
+                            {{ $disposition->label }}
+                        </button>
+                    @endforeach
+
+                    @if ($contactDispositions->isNotEmpty())
+                        <div class="grid grid-cols-2 gap-2">
+                            @if ($callbackDisposition)
+                                <button
+                                    type="button"
+                                    x-on:click="selected = '{{ $callbackDisposition->slug }}'"
+                                    class="rounded-lg border py-2.5 text-sm font-semibold {{ $callbackDisposition->color->buttonClasses() }}"
+                                >
+                                    {{ $callbackDisposition->label }}
+                                </button>
+                            @endif
+                            @foreach ($otherContactDispositions as $disposition)
+                                <button
+                                    type="button"
+                                    x-on:click="selected = '{{ $disposition->slug }}'; openDisposition('{{ $disposition->slug }}', '{{ $disposition->label }}', {{ $disposition->requires_reason ? 'true' : 'false' }})"
+                                    class="rounded-lg border py-2.5 text-sm font-semibold {{ $disposition->color->buttonClasses() }}"
+                                >
+                                    {{ $disposition->label }}
+                                </button>
+                            @endforeach
                         </div>
-                        <p class="m-0 text-[11px] text-amber-800/80 dark:text-amber-400/80">Times use {{ $agentTimezone }}</p>
-                        @error('callbackAt') <p class="m-0 text-xs text-red-600">{{ $message }}</p> @enderror
-                        <button type="button" x-on:click="pendingKey = 'callback'; pendingLabel = 'Callback'; modalOpen = true" class="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-700">Continue</button>
-                    </div>
 
-                    <div class="my-1 h-px bg-slate-200 dark:bg-slate-700"></div>
-
-                    <div class="grid grid-cols-2 gap-2">
-                        <button type="button" x-on:click="selected = 'not_interested'; pendingKey = 'not_interested'; pendingLabel = 'Not Interested'; modalOpen = true; $wire.set('dispositionReasonId', null)" class="rounded-lg border border-red-200 bg-red-50 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100 dark:border-red-800 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20">Not Interested</button>
-                        <button type="button" x-on:click="selected = 'not_qualified'; pendingKey = 'not_qualified'; pendingLabel = 'Not Qualified'; modalOpen = true; $wire.set('dispositionReasonId', null)" class="rounded-lg border border-red-200 bg-red-50 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100 dark:border-red-800 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20">Not Qualified</button>
-                        <button type="button" x-on:click="selected = 'wrong_number'; pendingKey = 'wrong_number'; pendingLabel = 'Wrong Number'; modalOpen = true" class="rounded-lg border border-red-200 bg-red-50 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100 dark:border-red-800 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20">Wrong Number</button>
-                        <button type="button" x-on:click="selected = 'bad_number'; pendingKey = 'bad_number'; pendingLabel = 'Bad Number'; modalOpen = true" class="rounded-lg border border-red-200 bg-red-50 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100 dark:border-red-800 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20">Bad Number</button>
-                    </div>
-                    <button type="button" x-on:click="selected = 'dnc'; pendingKey = 'dnc'; pendingLabel = 'DNC'; modalOpen = true" class="w-full rounded-lg border border-red-200 bg-red-50 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100 dark:border-red-800 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20">DNC</button>
-
-                    <div class="mt-1 border-t border-dashed border-slate-200 pt-3 dark:border-slate-800">
-                        @if ($canPutBackCallback)
-                            <button
-                                type="button"
-                                wire:click="putBackCallback"
-                                class="w-full rounded-lg border border-slate-300 bg-white py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-950"
-                            >
-                                Put Back
-                            </button>
-                            <p class="m-0 mt-1.5 text-[11px] leading-snug text-slate-400 dark:text-slate-500">Keeps this callback. Open it again when you are ready to call.</p>
-                        @else
-                            <button
-                                type="button"
-                                x-on:click="selected = 'skip'; pendingKey = 'skip'; pendingLabel = 'Skip'; modalOpen = true; $wire.set('dispositionReasonId', null)"
-                                class="w-full rounded-lg border border-dashed border-slate-400 bg-white py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-950"
-                            >
-                                Skip
-                            </button>
+                        @if ($callbackDisposition)
+                            <div x-show="selected === '{{ $callbackDisposition->slug }}'" x-cloak class="flex flex-col gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 dark:border-amber-800 dark:bg-amber-500/10">
+                                <label class="text-xs font-semibold text-amber-800 dark:text-amber-400">Callback date/time</label>
+                                <div
+                                    wire:ignore
+                                    class="grid grid-cols-1 gap-1.5"
+                                    x-data="{
+                                        date: @js(str_contains($callbackAt, 'T') ? strstr($callbackAt, 'T', true) : ''),
+                                        time: @js(str_contains($callbackAt, 'T') ? substr(strstr($callbackAt, 'T'), 1) : ''),
+                                        sync() {
+                                            $wire.set('callbackAt', this.date && this.time ? (this.date + 'T' + this.time) : '');
+                                        },
+                                        openPicker(event) {
+                                            const input = event.currentTarget;
+                                            if (typeof input.showPicker === 'function') {
+                                                try { input.showPicker(); } catch (e) {}
+                                            }
+                                        },
+                                    }"
+                                >
+                                    <input
+                                        type="date"
+                                        x-model="date"
+                                        x-on:change="sync()"
+                                        x-on:click="openPicker($event)"
+                                        class="w-full min-h-10 cursor-pointer rounded-md border border-amber-300 bg-white px-3 py-1.5 text-sm dark:bg-slate-900"
+                                    >
+                                    <input
+                                        type="time"
+                                        x-model="time"
+                                        x-on:change="sync()"
+                                        x-on:click="openPicker($event)"
+                                        class="w-full min-h-10 cursor-pointer rounded-md border border-amber-300 bg-white px-3 py-1.5 text-sm dark:bg-slate-900"
+                                    >
+                                </div>
+                                <p class="m-0 text-[11px] text-amber-800/80 dark:text-amber-400/80">Times use {{ $agentTimezone }}</p>
+                                @error('callbackAt') <p class="m-0 text-xs text-red-600">{{ $message }}</p> @enderror
+                                <button
+                                    type="button"
+                                    x-on:click="openDisposition('{{ $callbackDisposition->slug }}', '{{ $callbackDisposition->label }}')"
+                                    class="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-700"
+                                >
+                                    Continue
+                                </button>
+                            </div>
                         @endif
-                    </div>
+                    @endif
+
+                    @if (($activeDispositionsByGroup['negative'] ?? collect())->isNotEmpty() || ($activeDispositionsByGroup['compliance'] ?? collect())->isNotEmpty())
+                        <div class="my-1 h-px bg-slate-200 dark:bg-slate-700"></div>
+                    @endif
+
+                    @if (($activeDispositionsByGroup['negative'] ?? collect())->isNotEmpty())
+                        <div class="grid grid-cols-2 gap-2">
+                            @foreach (($activeDispositionsByGroup['negative'] ?? collect()) as $disposition)
+                                <button
+                                    type="button"
+                                    x-on:click="selected = '{{ $disposition->slug }}'; openDisposition('{{ $disposition->slug }}', '{{ $disposition->label }}', {{ $disposition->requires_reason ? 'true' : 'false' }})"
+                                    class="rounded-lg border py-2.5 text-sm font-semibold {{ $disposition->color->buttonClasses() }}"
+                                >
+                                    {{ $disposition->label }}
+                                </button>
+                            @endforeach
+                        </div>
+                    @endif
+
+                    @foreach (($activeDispositionsByGroup['compliance'] ?? collect()) as $disposition)
+                        <button
+                            type="button"
+                            x-on:click="selected = '{{ $disposition->slug }}'; openDisposition('{{ $disposition->slug }}', '{{ $disposition->label }}', {{ $disposition->requires_reason ? 'true' : 'false' }})"
+                            class="w-full rounded-lg border py-2.5 text-sm font-semibold {{ $disposition->color->buttonClasses() }}"
+                        >
+                            {{ $disposition->label }}
+                        </button>
+                    @endforeach
+
+                    @if (($activeDispositionsByGroup['utility'] ?? collect())->isNotEmpty() || $canPutBackCallback)
+                        <div class="mt-1 border-t border-dashed border-slate-200 pt-3 dark:border-slate-800">
+                            @if ($canPutBackCallback)
+                                <button
+                                    type="button"
+                                    wire:click="putBackCallback"
+                                    class="w-full rounded-lg border border-slate-300 bg-white py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-950"
+                                >
+                                    Put Back
+                                </button>
+                                <p class="m-0 mt-1.5 text-[11px] leading-snug text-slate-400 dark:text-slate-500">Keeps this callback. Open it again when you are ready to call.</p>
+                            @else
+                                @foreach (($activeDispositionsByGroup['utility'] ?? collect()) as $disposition)
+                                    <button
+                                        type="button"
+                                        x-on:click="selected = '{{ $disposition->slug }}'; openDisposition('{{ $disposition->slug }}', '{{ $disposition->label }}', true); $wire.set('dispositionReasonId', null)"
+                                        class="w-full rounded-lg border border-dashed py-2 text-sm font-medium {{ $disposition->color->buttonClasses() }}"
+                                    >
+                                        {{ $disposition->label }}
+                                    </button>
+                                @endforeach
+                            @endif
+                        </div>
+                    @endif
                 </div>
 
                 <div x-show="modalOpen" x-cloak style="position: fixed; inset: 0; z-index: 50;" class="flex items-center justify-center bg-slate-900/45 p-5">
                     <div class="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900" x-on:click.outside="modalOpen = false">
                         <h3 class="m-0 text-base font-bold text-slate-900 dark:text-slate-100">Add a note</h3>
                         <p class="m-0 mt-1 text-sm text-slate-500 dark:text-slate-400">Dispositioning as <strong class="text-slate-700 dark:text-slate-300" x-text="pendingLabel"></strong>. Optional &mdash; add context for the next call.</p>
-                        <div x-show="pendingKey === 'not_interested' || pendingKey === 'not_qualified' || pendingKey === 'skip'" x-cloak class="mt-3">
+                        <div x-show="pendingRequiresReason()" x-cloak class="mt-3">
                             <label class="text-xs font-semibold text-slate-700 dark:text-slate-300">Reason (required)</label>
                             <select
                                 wire:model="dispositionReasonId"
                                 class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-950"
                             >
                                 <option value="">Select a reason</option>
-                                @foreach ($notInterestedReasons as $reason)
-                                    <option value="{{ $reason->id }}" x-bind:hidden="pendingKey !== 'not_interested'">{{ $reason->label }}</option>
-                                @endforeach
-                                @foreach ($notQualifiedReasons as $reason)
-                                    <option value="{{ $reason->id }}" x-bind:hidden="pendingKey !== 'not_qualified'">{{ $reason->label }}</option>
-                                @endforeach
-                                @foreach ($skipReasons as $reason)
-                                    <option value="{{ $reason->id }}" x-bind:hidden="pendingKey !== 'skip'">{{ $reason->label }}</option>
+                                @foreach ($dispositionReasonsBySlug as $slug => $reasons)
+                                    @foreach ($reasons as $reason)
+                                        <option value="{{ $reason->id }}" x-bind:hidden="pendingKey !== '{{ $slug }}'">{{ $reason->label }}</option>
+                                    @endforeach
                                 @endforeach
                             </select>
                             @error('dispositionReasonId') <p class="m-0 mt-1 text-xs font-semibold text-red-600">{{ $message }}</p> @enderror

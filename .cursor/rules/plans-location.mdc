@@ -1,14 +1,27 @@
 ---
-description: Save all project plans and architecture documents in the plans/ folder
-alwaysApply: false
-globs: plans/**
+description: Store all plans in the project plans/ folder, never only in Cursor user storage
+alwaysApply: true
 ---
 
 # Plan File Location
 
-All project plans, architecture documents, and planning artifacts must be created in the `plans/` folder at the project root.
+All project plans, architecture documents, and planning artifacts belong in the **repo**, not Cursor's user-level storage.
 
-- **Path**: `plans/` (e.g. `plans/call-center-architecture.md`)
-- **Never** use Cursor's default user-level storage (`~/.cursor/plans/`)
-- **Do not** create plan files in the project root, `docs/`, or other directories
-- When updating an existing plan, edit the file in `plans/` rather than creating a duplicate elsewhere
+- **Path**: `plans/` at the project root (e.g. `plans/configurable-dispositions.md`)
+- **Never** leave the only copy in `~/.cursor/plans/` (Windows: `%USERPROFILE%\.cursor\plans\`)
+- **Do not** put plan files in the project root, `docs/`, or `.cursor/plans/`
+- When updating a plan, edit the file in `plans/` rather than creating a duplicate elsewhere
+
+## Creating or updating a plan
+
+1. Write (or copy) the plan markdown into `plans/<kebab-name>.md`.
+2. If Cursor's plan UI also writes to `~/.cursor/plans/`, mirror that content into `plans/` in the same turn so the project copy is the source of truth.
+3. Use existing files in `plans/` as the naming/format guide.
+
+```markdown
+# BAD — only in user-level Cursor storage
+C:\Users\...\cursor\plans\configurable_dispositions_f801357c.plan.md
+
+# GOOD — in the repo
+plans/configurable-dispositions.md
+```

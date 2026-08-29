@@ -2,7 +2,7 @@
 
 namespace App\Filament\Resources\DispositionReasons\Schemas;
 
-use App\Enums\Disposition;
+use App\Models\DispositionDefinition;
 use App\Support\CompanyContext;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -17,7 +17,14 @@ class DispositionReasonForm
         return $schema
             ->components([
                 Select::make('disposition')
-                    ->options(Disposition::reasonOptions())
+                    ->label('Disposition')
+                    ->options(fn (): array => DispositionDefinition::withoutGlobalScopes()
+                        ->where('company_id', CompanyContext::idOrAuthenticated())
+                        ->where('requires_reason', true)
+                        ->orderBy('sort_order')
+                        ->orderBy('label')
+                        ->pluck('label', 'slug')
+                        ->all())
                     ->required(),
                 TextInput::make('label')
                     ->required()
