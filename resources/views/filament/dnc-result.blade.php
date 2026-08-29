@@ -1,7 +1,7 @@
 @php
     /** @var \App\Models\Lead $lead */
     $phones = $lead->dncPhones();
-    $hitReason = $lead->dnc_result['hit_reason'] ?? null;
+    $dncSummary = $lead->dncDetailLabel();
     $ignoredReasons = $lead->dnc_result['ignored_reasons'] ?? [];
     $ignoreNational = (bool) ($lead->dnc_result['ignore_national_dnc'] ?? false);
 @endphp
@@ -12,9 +12,9 @@
             <p class="text-xs font-medium text-gray-500 dark:text-gray-400">Status</p>
             <p class="font-semibold">{{ $lead->dnc_status?->label() ?? '—' }}</p>
         </div>
-        <div>
-            <p class="text-xs font-medium text-gray-500 dark:text-gray-400">Hit reason</p>
-            <p class="font-semibold">{{ $hitReason ? strtoupper($hitReason) : '—' }}</p>
+        <div class="sm:col-span-2">
+            <p class="text-xs font-medium text-gray-500 dark:text-gray-400">DNC details</p>
+            <p class="font-semibold">{{ $dncSummary ?? '—' }}</p>
         </div>
         <div>
             <p class="text-xs font-medium text-gray-500 dark:text-gray-400">Checked at</p>

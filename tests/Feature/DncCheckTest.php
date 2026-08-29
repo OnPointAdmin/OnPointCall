@@ -260,6 +260,38 @@ class DncCheckTest extends TestCase
         $this->assertEqualsCanonicalizing(['national', 'state'], $lead->dnc_result['phones']['phone']['flags']);
     }
 
+    public function test_dnc_check_history_and_lead_show_formatted_details(): void
+    {
+        $this->configureDnc();
+
+        $lead = $this->makeLead('4045551113');
+
+        Http::fake([
+            'www.dncscrub.com/app/main/rpc/scrub' => Http::response([
+                $this->scrubRow('4045551113', $lead->id.':phone', 'D', 'National (USA) 2023-10-20;State (FL) 2023-12-06;;'),
+            ]),
+        ]);
+
+        app(DncService::class)->checkLeads(collect([$lead]));
+
+        $lead->refresh();
+        $this->assertSame(
+            'National DNC since 10-20-2023 State DNC since 12-06-2023',
+            $lead->dncDetailLabel(),
+        );
+
+        $history = LeadHistory::withoutGlobalScopes()
+            ->where('lead_id', $lead->id)
+            ->where('event_type', LeadHistoryType::DncCheck)
+            ->first();
+
+        $this->assertNotNull($history);
+        $this->assertStringContainsString(
+            'DNC · National DNC since 10-20-2023 State DNC since 12-06-2023',
+            $history->detailLabel(),
+        );
+    }
+
     public function test_ignored_national_dnc_leaves_lead_clear(): void
     {
         $this->configureDnc();
@@ -281,6 +313,10 @@ class DncCheckTest extends TestCase
         $this->assertTrue($lead->dnc_result['ignore_national_dnc']);
         $this->assertSame(['national'], $lead->dnc_result['ignored_reasons']);
         $this->assertSame('national', $lead->dnc_result['phones']['phone']['suppress']);
+        $this->assertSame(
+            'National DNC since 06-01-2003 (ignored — consent)',
+            $lead->dncDetailLabel(),
+        );
         $this->assertDatabaseMissing('lead_history', [
             'lead_id' => $lead->id,
             'event_type' => LeadHistoryType::StatusChange->value,

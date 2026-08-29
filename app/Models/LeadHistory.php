@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\Disposition;
+use App\Enums\DncStatus;
 use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
 use App\Enums\QualificationStatus;
@@ -10,6 +11,7 @@ use App\Enums\RndStatus;
 use App\Enums\SoftScoreStatus;
 use App\Models\Concerns\BelongsToCompany;
 use App\Support\CompanyTimezone;
+use App\Support\DncReasonFormatter;
 use App\Support\LeadDisplayFields;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -72,6 +74,7 @@ class LeadHistory extends Model
             LeadHistoryType::RndCheck => $this->formatRndDetails($payload),
             LeadHistoryType::Qualification => $this->formatQualificationDetails($payload),
             LeadHistoryType::FieldEdit => $this->formatFieldEditDetails($payload),
+            LeadHistoryType::DncCheck => $this->formatDncCheckDetails($payload),
             LeadHistoryType::DncPush => $this->formatDncPushDetails($payload),
             LeadHistoryType::Claim => isset($payload['source'])
                 ? 'Source: '.$payload['source']
@@ -295,6 +298,40 @@ class LeadHistory extends Model
         }
 
         return is_scalar($value) ? (string) $value : json_encode($value);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function formatDncCheckDetails(array $payload): string
+    {
+        $parts = [];
+
+        if (isset($payload['status']) && is_string($payload['status'])) {
+            $parts[] = DncStatus::tryFrom($payload['status'])?->label() ?? $payload['status'];
+        }
+
+        $phones = isset($payload['phones']) && is_array($payload['phones']) ? $payload['phones'] : [];
+        $formatted = DncReasonFormatter::formatPhones($phones);
+
+        if ($formatted !== null) {
+            $parts[] = $formatted;
+        }
+
+        $ignoredReasons = $payload['ignored_reasons'] ?? [];
+        $status = isset($payload['status']) && is_string($payload['status'])
+            ? DncStatus::tryFrom($payload['status'])
+            : null;
+
+        if (is_array($ignoredReasons) && $ignoredReasons !== [] && $status === DncStatus::Clear) {
+            $parts[] = '(ignored — consent)';
+        }
+
+        if (isset($payload['error']) && is_string($payload['error']) && $payload['error'] !== '') {
+            $parts[] = 'Error: '.$payload['error'];
+        }
+
+        return $parts !== [] ? implode(' · ', $parts) : '—';
     }
 
     /**

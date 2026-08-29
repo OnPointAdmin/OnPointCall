@@ -9,6 +9,7 @@ use App\Enums\QualificationStatus;
 use App\Enums\RndStatus;
 use App\Enums\SoftScoreStatus;
 use App\Models\Concerns\BelongsToCompany;
+use App\Support\DncReasonFormatter;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -293,6 +294,23 @@ class Lead extends Model
         $phones = $this->dnc_result['phones'] ?? [];
 
         return is_array($phones) ? $phones : [];
+    }
+
+    public function dncDetailLabel(): ?string
+    {
+        $formatted = DncReasonFormatter::formatPhones($this->dncPhones());
+
+        if ($formatted === null) {
+            return null;
+        }
+
+        $ignoredReasons = $this->dnc_result['ignored_reasons'] ?? [];
+
+        if (is_array($ignoredReasons) && $ignoredReasons !== [] && $this->dnc_status === DncStatus::Clear) {
+            return $formatted.' (ignored — consent)';
+        }
+
+        return $formatted;
     }
 
     private static function nullableTrimmedString(mixed $value): ?string

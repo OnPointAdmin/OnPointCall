@@ -96,7 +96,7 @@ class LeadsRelationManager extends RelationManager
                     })
                     ->formatStateUsing(fn (?DncStatus $state): ?string => $state?->label())
                     ->tooltip(fn (Lead $record): ?string => $record->dnc_status
-                        ? 'View DNC scrub result'
+                        ? ($record->dncDetailLabel() ?? 'View DNC scrub result')
                         : null)
                     ->action(ViewDncResultAction::make())
                     ->sortable(),

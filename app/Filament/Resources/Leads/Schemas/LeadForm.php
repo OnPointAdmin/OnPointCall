@@ -9,6 +9,7 @@ use App\Enums\SoftScoreStatus;
 use App\Filament\Support\LeadTypeSelect;
 use App\Models\Lead;
 use Filament\Forms\Components\DateTimePicker;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -107,6 +108,10 @@ class LeadForm
             Select::make('dnc_status')
                 ->label('DNC status')
                 ->options(DncStatus::class),
+            Placeholder::make('dnc_details')
+                ->label('DNC details')
+                ->content(fn (?Lead $record): string => $record?->dncDetailLabel() ?? '—')
+                ->columnSpanFull(),
             DateTimePicker::make('dnc_checked_at')
                 ->label('DNC last checked'),
             Textarea::make('dnc_last_error')

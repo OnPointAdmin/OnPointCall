@@ -11,7 +11,7 @@ class ViewDncResultAction
     {
         return Action::make('viewDncResult')
             ->modalHeading(fn (Lead $record): string => 'DNC result — '.($record->fullName() ?: $record->phone))
-            ->modalDescription(fn (Lead $record): ?string => $record->dnc_status?->label())
+            ->modalDescription(fn (Lead $record): ?string => $record->dncDetailLabel() ?? $record->dnc_status?->label())
             ->modalSubmitAction(false)
             ->modalCancelActionLabel('Close')
             ->modalWidth('3xl')

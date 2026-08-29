@@ -500,7 +500,7 @@
                     $outcomeLabel = $dispositionValue
                         ? (Disposition::tryFrom($dispositionValue)?->label() ?? $dispositionValue)
                         : $entry->event_type->label();
-                    $note = $entry->event_type === LeadHistoryType::FieldEdit
+                    $note = in_array($entry->event_type, [LeadHistoryType::FieldEdit, LeadHistoryType::DncCheck], true)
                         ? $entry->detailLabel()
                         : ($entry->noteLabel() ?? '—');
                 @endphp

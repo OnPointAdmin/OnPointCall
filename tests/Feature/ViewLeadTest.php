@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\Disposition;
+use App\Enums\DncStatus;
 use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
 use App\Enums\UserRole;
@@ -136,6 +137,25 @@ class ViewLeadTest extends TestCase
         $this->assertSame(
             'Email: a@example.com → b@example.com; Zip: 30000 → 30301; Age range: 45-54 → 55-64',
             $fieldEdit->detailLabel(),
+        );
+
+        $dncCheck = new LeadHistory([
+            'event_type' => LeadHistoryType::DncCheck,
+            'payload' => [
+                'status' => DncStatus::Hit->value,
+                'phones' => [
+                    'phone' => [
+                        'reason' => 'National (USA) 2023-10-20;State (FL) 2023-12-06;;',
+                        'result_code' => 'D',
+                        'flags' => ['national', 'state'],
+                    ],
+                ],
+            ],
+        ]);
+
+        $this->assertStringContainsString(
+            'DNC · National DNC since 10-20-2023 State DNC since 12-06-2023',
+            $dncCheck->detailLabel(),
         );
     }
 }
