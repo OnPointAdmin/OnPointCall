@@ -14,11 +14,12 @@ use App\Models\User;
 use App\Services\Dashboard\ManagerDashboardService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Support\CreatesCadences;
 use Tests\TestCase;
 
 class ManagerDashboardServiceTest extends TestCase
 {
-    use RefreshDatabase;
+    use CreatesCadences, RefreshDatabase;
 
     public function test_report_bundles_dispositions_and_counts_total_leads_called(): void
     {
@@ -110,6 +111,54 @@ class ManagerDashboardServiceTest extends TestCase
         $this->assertSame(1, $report['totals']['total_leads_called']['count']);
         $this->assertSame(1, $report['totals']['booked']['count']);
         $this->assertSame(0, $report['totals']['not_interested']['count']);
+    }
+
+    public function test_report_filters_by_calling_list(): void
+    {
+        $company = Company::factory()->create();
+        $agent = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Agent,
+        ]);
+
+        $standardList = $this->createCallingList($company->id, overrides: ['name' => 'Standard']);
+        $tnbList = $this->createCallingList($company->id, overrides: ['name' => 'TNB']);
+
+        $standardLead = $this->createLead($company->id, 'standard', $standardList->id);
+        $tnbLead = $this->createLead($company->id, 'tnb', $tnbList->id);
+        $holdingLead = $this->createLead($company->id, 'standard');
+
+        $this->createDisposition($company->id, $standardLead->id, $agent->id, Disposition::Booked);
+        $this->createDisposition($company->id, $tnbLead->id, $agent->id, Disposition::NotInterested);
+        $this->createDisposition($company->id, $holdingLead->id, $agent->id, Disposition::NoAnswer);
+
+        $service = app(ManagerDashboardService::class);
+        $range = $service->todayRange($company->id);
+
+        $standardReport = $service->report(
+            $company->id,
+            null,
+            null,
+            $range['start'],
+            $range['end'],
+            $standardList->id,
+        );
+        $this->assertSame(1, $standardReport['totals']['total_leads_called']['count']);
+        $this->assertSame(1, $standardReport['totals']['booked']['count']);
+        $this->assertSame(0, $standardReport['totals']['not_interested']['count']);
+        $this->assertSame(0, $standardReport['totals']['no_answer_vm']['count']);
+
+        $holdingReport = $service->report(
+            $company->id,
+            null,
+            null,
+            $range['start'],
+            $range['end'],
+            'holding',
+        );
+        $this->assertSame(1, $holdingReport['totals']['total_leads_called']['count']);
+        $this->assertSame(1, $holdingReport['totals']['no_answer_vm']['count']);
+        $this->assertSame(0, $holdingReport['totals']['booked']['count']);
     }
 
     public function test_overdue_callbacks_use_live_snapshot_not_history_range(): void
@@ -236,13 +285,14 @@ class ManagerDashboardServiceTest extends TestCase
         Carbon::setTestNow();
     }
 
-    private function createLead(int $companyId, string $leadType): Lead
+    private function createLead(int $companyId, string $leadType, ?int $callingListId = null): Lead
     {
         return Lead::withoutGlobalScopes()->create([
             'company_id' => $companyId,
             'phone' => '404555'.random_int(1000, 9999),
             'status' => LeadStatus::Callable,
             'lead_type' => $leadType,
+            'calling_list_id' => $callingListId,
             'imported_at' => now(),
         ]);
     }

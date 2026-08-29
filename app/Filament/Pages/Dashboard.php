@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Enums\UserRole;
 use App\Filament\Support\LeadTypeSelect;
+use App\Models\CallingList;
 use App\Models\User;
 use App\Services\Dashboard\ManagerDashboardService;
 use Carbon\Carbon;
@@ -56,6 +57,7 @@ class Dashboard extends BaseDashboard implements HasSchemas
         $this->filterForm->fill([
             'agent_id' => '',
             'lead_type' => '',
+            'calling_list_id' => '',
             'start_date' => $today,
             'end_date' => $today,
         ]);
@@ -81,6 +83,15 @@ class Dashboard extends BaseDashboard implements HasSchemas
                             ->required(false)
                             ->nullable()
                             ->placeholder('All'),
+                        Select::make('calling_list_id')
+                            ->label('Calling list')
+                            ->options(fn (): array => ['' => 'All', 'holding' => 'Holding'] + CallingList::query()
+                                ->orderBy('name')
+                                ->pluck('name', 'id')
+                                ->all())
+                            ->searchable()
+                            ->nullable()
+                            ->placeholder('All'),
                         DatePicker::make('start_date')
                             ->label('Run dates')
                             ->required(),
@@ -91,7 +102,7 @@ class Dashboard extends BaseDashboard implements HasSchemas
                     ->columns([
                         'default' => 1,
                         'md' => 2,
-                        'xl' => 4,
+                        'xl' => 5,
                     ])
                     ->extraAttributes(['class' => 'dashboard-filter-section']),
             ])
@@ -132,6 +143,7 @@ class Dashboard extends BaseDashboard implements HasSchemas
         $this->filterForm->fill([
             'agent_id' => $this->filterData['agent_id'] ?? '',
             'lead_type' => $this->filterData['lead_type'] ?? '',
+            'calling_list_id' => $this->filterData['calling_list_id'] ?? '',
             'start_date' => $range['start']->toDateString(),
             'end_date' => $range['end']->toDateString(),
         ]);
@@ -217,12 +229,18 @@ class Dashboard extends BaseDashboard implements HasSchemas
             ? (string) $data['lead_type']
             : null;
 
+        $callingListId = $data['calling_list_id'] ?? '';
+        $callingListId = $callingListId === '' || $callingListId === null
+            ? null
+            : ($callingListId === 'holding' ? 'holding' : (int) $callingListId);
+
         $this->report = $dashboardService->report(
             $companyId,
             $agentId,
             $leadType,
             $range['start'],
             $range['end'],
+            $callingListId,
         );
 
         $this->runAt = Carbon::now($timezone)->format('M j, Y g:i A');

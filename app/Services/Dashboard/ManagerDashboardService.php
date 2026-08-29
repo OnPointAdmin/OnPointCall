@@ -12,6 +12,7 @@ use App\Models\LeadHistory;
 use App\Models\User;
 use App\Support\CompanyTimezone;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 
 class ManagerDashboardService
 {
@@ -66,10 +67,16 @@ class ManagerDashboardService
     /**
      * @return array{totals: array<string, array{label: string, count: int, percent: ?float}>, agents: list<array{user_id: int, name: string, metrics: array<string, array{count: int, percent: ?float}>}>}
      */
-    public function report(int $companyId, ?int $actorId, ?string $leadType, Carbon $start, Carbon $end): array
-    {
-        $history = $this->historyQuery($companyId, $actorId, $leadType, $start, $end)->get();
-        $overdueByOwner = $this->overdueCallbacksByOwner($companyId, $actorId, $leadType);
+    public function report(
+        int $companyId,
+        ?int $actorId,
+        ?string $leadType,
+        Carbon $start,
+        Carbon $end,
+        int|string|null $callingListId = null,
+    ): array {
+        $history = $this->historyQuery($companyId, $actorId, $leadType, $start, $end, $callingListId)->get();
+        $overdueByOwner = $this->overdueCallbacksByOwner($companyId, $actorId, $leadType, $callingListId);
 
         $agentBuckets = [];
         $totals = $this->emptyMetrics();
@@ -422,8 +429,12 @@ class ManagerDashboardService
     /**
      * @return array<int, int>
      */
-    private function overdueCallbacksByOwner(int $companyId, ?int $actorId, ?string $leadType): array
-    {
+    private function overdueCallbacksByOwner(
+        int $companyId,
+        ?int $actorId,
+        ?string $leadType,
+        int|string|null $callingListId = null,
+    ): array {
         $query = Lead::withoutGlobalScopes()
             ->where('company_id', $companyId)
             ->where('status', LeadStatus::Callback)
@@ -437,6 +448,8 @@ class ManagerDashboardService
             $query->where('lead_type', $leadType);
         }
 
+        $this->constrainCallingList($query, $callingListId);
+
         return $query
             ->selectRaw('callback_owner_id, count(*) as aggregate_count')
             ->groupBy('callback_owner_id')
@@ -445,8 +458,14 @@ class ManagerDashboardService
             ->all();
     }
 
-    private function historyQuery(int $companyId, ?int $actorId, ?string $leadType, Carbon $start, Carbon $end)
-    {
+    private function historyQuery(
+        int $companyId,
+        ?int $actorId,
+        ?string $leadType,
+        Carbon $start,
+        Carbon $end,
+        int|string|null $callingListId = null,
+    ) {
         $query = LeadHistory::withoutGlobalScopes()
             ->where('company_id', $companyId)
             ->whereBetween('occurred_at', [$start, $end])
@@ -459,11 +478,40 @@ class ManagerDashboardService
             $query->where('actor_id', $actorId);
         }
 
-        if ($leadType !== null) {
-            $query->whereHas('lead', fn ($leadQuery) => $leadQuery->where('lead_type', $leadType));
+        if ($leadType !== null || $this->hasCallingListFilter($callingListId)) {
+            $query->whereHas('lead', function ($leadQuery) use ($leadType, $callingListId): void {
+                if ($leadType !== null) {
+                    $leadQuery->where('lead_type', $leadType);
+                }
+
+                $this->constrainCallingList($leadQuery, $callingListId);
+            });
         }
 
         return $query;
+    }
+
+    private function hasCallingListFilter(int|string|null $callingListId): bool
+    {
+        return $callingListId !== null && $callingListId !== '';
+    }
+
+    /**
+     * @param  Builder<Lead>  $query
+     */
+    private function constrainCallingList(Builder $query, int|string|null $callingListId): void
+    {
+        if (! $this->hasCallingListFilter($callingListId)) {
+            return;
+        }
+
+        if ($callingListId === 'holding') {
+            $query->whereNull('calling_list_id');
+
+            return;
+        }
+
+        $query->where('calling_list_id', (int) $callingListId);
     }
 
     private function timezone(?AppSetting $settings): string
