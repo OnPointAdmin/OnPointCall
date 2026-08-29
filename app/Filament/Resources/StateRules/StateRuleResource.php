@@ -18,9 +18,11 @@ class StateRuleResource extends Resource
 {
     protected static ?string $model = StateRule::class;
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Configuration';
+    protected static string|\UnitEnum|null $navigationGroup = 'Compliance';
 
-    protected static ?int $navigationSort = 2;
+    protected static ?string $navigationLabel = 'State Rules';
+
+    protected static ?int $navigationSort = 1;
 
     protected static ?string $recordTitleAttribute = 'state_code';
 

@@ -65,6 +65,7 @@ class AdminPanelProvider extends PanelProvider
                 NavigationGroup::make('Leads'),
                 NavigationGroup::make('Lists'),
                 NavigationGroup::make('Imports'),
+                NavigationGroup::make('Compliance'),
                 NavigationGroup::make('Configuration'),
                 NavigationGroup::make('Administration'),
             ])

@@ -164,6 +164,28 @@ class HoldingReleaseService
         return $this->queryHolding($companyId, $filter)->count();
     }
 
+    /**
+     * Leads that would be assigned for the current filters.
+     * When $maxCount is set, only the freshest N leads are included (same as releaseFresh).
+     *
+     * @return Builder<Lead>
+     */
+    public function queryMatchingLeads(int $companyId, HoldingFilter $filter, ?int $maxCount = null): Builder
+    {
+        $query = $this->queryHolding($companyId, $filter);
+
+        if ($maxCount === null) {
+            return $query;
+        }
+
+        $ids = (clone $query)
+            ->orderByDesc('imported_at')
+            ->limit($maxCount)
+            ->pluck('id');
+
+        return Lead::withoutGlobalScopes()->whereIn('id', $ids);
+    }
+
     public function releaseAll(
         int $companyId,
         HoldingFilter $filter,

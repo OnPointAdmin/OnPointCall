@@ -47,7 +47,7 @@ Sources of truth for this plan:
 | State windows | **Admin-only**; seed FL/NY/NJ (and federal default) |
 | Hosting | Single **VPS** |
 | Migration | Leads + **last disposition** + **last owner** only (chatgpt asks for full history — slim migration wins for v1) |
-| Partners | **`partner_list` comma-separated field on the lead** (preserve source string); display + manager filter; admin **partner definitions** to interpret known names |
+| Partners | **`partner_list` comma-separated field on the lead** (preserve source string); display + manager filter. No admin partner-definitions catalog. |
 | Booking form | Company **default** URL template in `app_settings`; **per calling list override** (TNB uses a different Formstack URL + param map) |
 | Lead types | **Standard** and **TNB** (Tour No Buys). TNB modeled as its **own calling list(s)**; agent eligibility via list assignment; same lifecycle otherwise |
 | Copy / PII | **Phone number only** may be copied; all other customer fields get copy friction |
@@ -68,7 +68,7 @@ Sources of truth for this plan:
 - **Lead searches are not logged** (no search audit rows; manager activity = calls, outcomes, skip rates only).
 - Manager **bulk ops**: recycle, mark DNC, move between lists, **merge duplicates**; bulk partner-eligibility edits excluded.
 - Multi-tenant foreshadow for **selling or renting the software to clients**: every table except `companies` itself carries **`company_id` from v1**. Full data isolation per company is a schema + query invariant (all reads/writes scoped by `company_id`); do not build billing, client onboarding UI, or cross-company admin yet.
-- Admin **§13 configuration** surface: state windows (times + weekdays + holidays/blackouts), ZIP/address-first TZ, manual-dial states, max attempts, per-list cadence, **default + per-list booking URL/param maps**, allowlist, lists/assignments (incl. TNB lists), partner definitions, CSV import mappings (incl. lead type), blackout calendars, **daily dashboard email (recipients, send time, enabled)**. DNC permanence and no-telephony are **code invariants**, not toggles. **Every settings write appends to `settings_history` (who/when/before/after).**
+- Admin **§13 configuration** surface: state windows (times + weekdays + holidays/blackouts), ZIP/address-first TZ, manual-dial states, max attempts, per-list cadence, **default + per-list booking URL/param maps**, allowlist, lists/assignments (incl. TNB lists), CSV import mappings (incl. lead type), blackout calendars, **daily dashboard email (recipients, send time, enabled)**. DNC permanence and no-telephony are **code invariants**, not toggles. **Every settings write appends to `settings_history` (who/when/before/after).**
 - **Lead types — Standard vs TNB:** Same dispositions, cadence, TCPA, callbacks. Differences: (1) only agents assigned to TNB list(s) get TNB leads; (2) TNB booking form URL/params differ. Implement TNB as **calling list(s) with `lead_type = tnb`**, not a separate auth system.
 - **Daily dashboard email:** cron job once per day per company; HTML summary of the **prior calendar day’s** manager dashboard metrics emailed to a configured group.
 
@@ -141,7 +141,6 @@ erDiagram
   Company ||--o{ User : has
   Company ||--o{ Lead : has
   Company ||--o{ CallingList : has
-  Company ||--o{ Partner : defines
   Company ||--o{ StateRule : configures
   Company ||--o{ SettingsHistory : audits
   User ||--o{ ListAssignment : assigned
@@ -159,7 +158,6 @@ erDiagram
 - `users` — email, role, `active`, OAuth subject ids; `company_id`
 - `allowed_emails` — admin allowlist; `company_id`
 - `leads` — phone, name, address/city/state/zip, email, demographics, venue/event, `external_lead_id`, consent tokens, `timezone`, `status`, `attempt_count`, `next_day_part`, `last_attempt_at`, `callback_at`, `callback_owner_id`, `calling_list_id` (null while holding), `imported_at` / batch refs, **`partner_list`**, `queue_rank`, **`lead_type`**, **`extra_fields` jsonb**, soft-score fields: **`soft_score_code`** (qualificationCode), **`soft_score_status`** (`null` \| `pending` \| `qualified` \| `not_qualified` \| `error`), **`soft_score_checked_at`**, **`soft_score_last_error`**; `company_id`
-- `partners` — admin-defined partner codes/names; `company_id`
 - `import_batches` — source filename, imported_at, counts, duplicate skips, **`lead_type`**, **`run_soft_score`** bool, soft-score job progress counts; `company_id`
 - `import_mappings` — named CSV column layouts, optional default **`lead_type`**; `company_id`
 - `calling_lists` — name, **`lead_type`** (`standard` | `tnb`), cadence, optional max-attempts override, active, **`booking_url_template`**, **`booking_param_map`**; `company_id`
@@ -313,7 +311,7 @@ Owner-scoped v1: upsert/import leads; map **last disposition** + **last owner** 
 2. **Import on lead-ID match:** chatgpt = ignore/no update; owner = also phone dedupe. Plan = **ignore on ID or phone** (no upsert).
 3. **Search logging:** chatgpt = not logged; older REQUIREMENTS_2 = log searches. Plan follows **chatgpt (not logged)**.
 4. **Migration depth:** chatgpt full history vs owner last disposition/owner only. Plan = **slim migration**.
-5. **Partner model:** chatgpt wants normalized eligibility relationships; owner wants a comma-separated lead field. Plan = **raw `partner_list` field + partner definitions + token filter** (no separate eligibility join table unless filtering proves insufficient).
+5. **Partner model:** chatgpt wants normalized eligibility relationships; owner wants a comma-separated lead field. Plan = **raw `partner_list` field + token filter** (no partner-definitions table or eligibility join table).
 6. **TNB Formstack params** — exact query param names not confirmed; ship with empty TNB `booking_param_map` (lead-ID-only fallback) until supplied.
 7. **Soft Score originator header** — Salesforce uses `KALEO`; confirm allowed value for this call-center app before prod.
 8. **Idle agents vs cadence/hours** — empty state must explain hours vs cadence vs none.

@@ -647,6 +647,48 @@ class HoldingReleaseServiceTest extends TestCase
         $this->assertSame($list->id, $newest->calling_list_id);
     }
 
+    public function test_query_matching_leads_limits_to_freshest_when_max_count_set(): void
+    {
+        $company = Company::factory()->create();
+
+        $oldest = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045551101',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'imported_at' => now()->subDays(3),
+        ]);
+
+        $middle = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045551102',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'imported_at' => now()->subDays(2),
+        ]);
+
+        $newest = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045551103',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'imported_at' => now()->subDay(),
+        ]);
+
+        $service = app(HoldingReleaseService::class);
+        $filter = new HoldingFilter(leadType: 'standard');
+
+        $this->assertEqualsCanonicalizing(
+            [$oldest->id, $middle->id, $newest->id],
+            $service->queryMatchingLeads($company->id, $filter)->pluck('id')->all(),
+        );
+
+        $this->assertEqualsCanonicalizing(
+            [$middle->id, $newest->id],
+            $service->queryMatchingLeads($company->id, $filter, 2)->pluck('id')->all(),
+        );
+    }
+
     public function test_release_fresh_rejects_count_below_one(): void
     {
         $company = Company::factory()->create();

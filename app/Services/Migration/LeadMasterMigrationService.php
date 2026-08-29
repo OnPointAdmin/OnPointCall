@@ -78,7 +78,7 @@ class LeadMasterMigrationService
         $headers = array_map(fn (mixed $header): string => trim((string) $header), $headers);
         $headerIndex = $this->buildHeaderIndex($headers);
 
-        $lists = $this->resolveCallingLists($company->id);
+        $lists = [];
         $usersByName = $this->resolveUsersByName($company->id);
 
         $stats = [
@@ -144,6 +144,11 @@ class LeadMasterMigrationService
             $leadType = $this->mapLeadType($this->value($row, $headerIndex, 'Lead Type') ?? '');
             $disposition = $this->mapDisposition($this->value($row, $headerIndex, 'Disposition') ?? '');
             $sheetStatus = trim($this->value($row, $headerIndex, 'Status') ?? '');
+
+            if ($disposition === Disposition::Callback && $lists === []) {
+                $lists = $this->resolveCallingLists($company->id);
+            }
+
             $assignedAgentName = trim($this->value($row, $headerIndex, 'Assigned Agent') ?? '');
             $lastCalledByName = trim($this->value($row, $headerIndex, 'Last Called By') ?? '');
             $agentName = $assignedAgentName !== '' ? $assignedAgentName : $lastCalledByName;
@@ -549,17 +554,29 @@ class LeadMasterMigrationService
         ?User $actor,
         array &$stats,
     ): array {
-        if ($disposition !== Disposition::Callback) {
-            return [LeadStatus::Holding, null, null, null];
+        if ($disposition === Disposition::Callback) {
+            $listId = $lists[$leadType] ?? null;
+
+            if ($listId === null) {
+                throw new \RuntimeException("No callback list mapped for lead type [{$leadType}].");
+            }
+
+            return $this->resolveCallback($listId, $actor, $stats);
         }
 
-        $listId = $lists[$leadType] ?? null;
-
-        if ($listId === null) {
-            throw new \RuntimeException("No callback list mapped for lead type [{$leadType}].");
+        if ($disposition === Disposition::Booked) {
+            return [LeadStatus::Booked, null, null, null];
         }
 
-        return $this->resolveCallback($listId, $actor, $stats);
+        if ($disposition === Disposition::Dnc) {
+            return [LeadStatus::Dnc, null, null, null];
+        }
+
+        if ($disposition?->isTerminal()) {
+            return [LeadStatus::Terminal, null, null, null];
+        }
+
+        return [LeadStatus::Holding, null, null, null];
     }
 
     /**

@@ -70,6 +70,50 @@ class LeadMasterMigrationServiceTest extends TestCase
         $this->assertSame($tnbList->id, $tnbCb->calling_list_id);
     }
 
+    public function test_closed_dispositions_are_not_callable_and_need_no_list(): void
+    {
+        $company = Company::factory()->create();
+
+        $csv = implode("\n", [
+            'Lead ID,Lead Type,Phone,First Name,Last Name,Disposition,Status,Batch Date',
+            'ID-NI,Tour No Buy,4045551001,Ned,NotInt,Not Interested,Completed,8/7/2026',
+            'ID-NQ,Tour No Buy,4045551002,Nina,NotQual,Not Qualified,Completed,8/7/2026',
+            'ID-BK,Tour No Buy,4045551003,Bob,Booked,Booked,Completed,8/7/2026',
+            'ID-DNC,Tour No Buy,4045551004,Dana,Dnc,DNC,Completed,8/7/2026',
+            'ID-BN,Tour No Buy,4045551005,Barb,BadNum,Bad Number,Completed,8/7/2026',
+        ]);
+
+        $path = storage_path('app/imports/leadmaster-closed-tnb-test.csv');
+        if (! is_dir(dirname($path))) {
+            mkdir(dirname($path), 0777, true);
+        }
+        file_put_contents($path, $csv);
+
+        $stats = app(LeadMasterMigrationService::class)->migrate($company, $path);
+
+        $this->assertSame(5, $stats['inserted']);
+        $this->assertArrayNotHasKey(LeadStatus::Callable->value, $stats['status_counts']);
+        $this->assertArrayNotHasKey(LeadStatus::Callback->value, $stats['status_counts']);
+        $this->assertArrayNotHasKey(LeadStatus::Holding->value, $stats['status_counts']);
+        $this->assertSame(3, $stats['status_counts'][LeadStatus::Terminal->value]);
+        $this->assertSame(1, $stats['status_counts'][LeadStatus::Booked->value]);
+        $this->assertSame(1, $stats['status_counts'][LeadStatus::Dnc->value]);
+        $this->assertSame(5, $stats['lead_type_counts']['tnb']);
+
+        $notInterested = Lead::withoutGlobalScopes()->where('phone', '4045551001')->first();
+        $this->assertSame(LeadStatus::Terminal, $notInterested->status);
+        $this->assertSame('tnb', $notInterested->lead_type);
+        $this->assertNull($notInterested->calling_list_id);
+
+        $booked = Lead::withoutGlobalScopes()->where('phone', '4045551003')->first();
+        $this->assertSame(LeadStatus::Booked, $booked->status);
+        $this->assertNull($booked->calling_list_id);
+
+        $dnc = Lead::withoutGlobalScopes()->where('phone', '4045551004')->first();
+        $this->assertSame(LeadStatus::Dnc, $dnc->status);
+        $this->assertNull($dnc->calling_list_id);
+    }
+
     public function test_migrate_aborts_when_list_a_is_missing(): void
     {
         $company = Company::factory()->create();

@@ -6,9 +6,12 @@ use App\DataTransferObjects\HoldingFilter;
 use App\Enums\Disposition;
 use App\Enums\QualificationStatus;
 use App\Exceptions\HoldingReleaseException;
+use App\Filament\Resources\Leads\LeadResource;
 use App\Filament\Support\LeadTypeSelect;
 use App\Models\CallingList;
+use App\Models\DispositionDefinition;
 use App\Models\ImportBatch;
+use App\Models\Lead;
 use App\Services\Import\HoldingReleaseService;
 use App\Support\LeadDemographicOptions;
 use BackedEnum;
@@ -20,13 +23,21 @@ use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Actions;
 use Filament\Schemas\Components\EmbeddedSchema;
+use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Components\Form;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Concerns\InteractsWithTable;
+use Filament\Tables\Contracts\HasTable;
+use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
-class AssignLeads extends Page
+class AssignLeads extends Page implements HasTable
 {
+    use InteractsWithTable;
+
     protected static string|\UnitEnum|null $navigationGroup = 'Leads';
 
     protected static ?int $navigationSort = 0;
@@ -188,6 +199,7 @@ class AssignLeads extends Page
                             ->integer()
                             ->minValue(1)
                             ->nullable()
+                            ->live(debounce: 500)
                             ->helperText('Leave empty to assign all matching leads. Enter a number to assign that many freshest leads.'),
                     ])
                     ->columns(1),
@@ -220,7 +232,68 @@ class AssignLeads extends Page
                                 ->color('primary'),
                         ]),
                     ]),
+                Section::make('Selected leads')
+                    ->description(fn (): string => $this->selectedLeadsDescription())
+                    ->schema([
+                        EmbeddedTable::make(),
+                    ]),
             ]);
+    }
+
+    public function table(Table $table): Table
+    {
+        return $table
+            ->query(fn (): Builder => $this->matchingLeadsQuery())
+            ->heading(null)
+            ->columns([
+                TextColumn::make('phone')
+                    ->searchable()
+                    ->sortable(),
+                TextColumn::make('first_name')
+                    ->searchable()
+                    ->sortable(),
+                TextColumn::make('last_name')
+                    ->searchable()
+                    ->sortable(),
+                TextColumn::make('state')
+                    ->searchable()
+                    ->sortable(),
+                TextColumn::make('venue')
+                    ->toggleable(),
+                TextColumn::make('event')
+                    ->toggleable(),
+                TextColumn::make('status')
+                    ->badge(),
+                TextColumn::make('last_disposition')
+                    ->label('Last Disp')
+                    ->badge()
+                    ->placeholder('—')
+                    ->getStateUsing(function (Lead $record): ?string {
+                        $value = $record->latestDisposition?->payload['disposition'] ?? null;
+
+                        if (! is_string($value) || $value === '') {
+                            return null;
+                        }
+
+                        return DispositionDefinition::labelForSlug($record->company_id, $value) ?? $value;
+                    }),
+                TextColumn::make('attempt_count')
+                    ->label('Attempts')
+                    ->numeric()
+                    ->sortable(),
+                TextColumn::make('imported_at')
+                    ->dateTime()
+                    ->sortable(),
+                TextColumn::make('file_name')
+                    ->label('Source file')
+                    ->toggleable(isToggledHiddenByDefault: true),
+            ])
+            ->defaultSort('imported_at', 'desc')
+            ->recordUrl(fn (Lead $record): string => LeadResource::getUrl('view', ['record' => $record]))
+            ->paginated([10, 25, 50, 100])
+            ->defaultPaginationPageOption(25)
+            ->emptyStateHeading('No matching leads')
+            ->emptyStateDescription('Adjust the filters above to select leads.');
     }
 
     public function refreshCountAction(HoldingReleaseService $releaseService): void
@@ -231,6 +304,11 @@ class AssignLeads extends Page
     public function updatedFilterData(): void
     {
         $this->refreshCount(app(HoldingReleaseService::class));
+    }
+
+    public function updatedReleaseData(): void
+    {
+        $this->resetSelectedLeadsTable();
     }
 
     public function release(HoldingReleaseService $releaseService): void
@@ -359,6 +437,60 @@ class AssignLeads extends Page
             auth()->user()->company_id,
             $this->buildFilter(),
         );
+
+        $this->resetSelectedLeadsTable();
+    }
+
+    private function resetSelectedLeadsTable(): void
+    {
+        if (! isset($this->table)) {
+            return;
+        }
+
+        $this->resetPage();
+        $this->flushCachedTableRecords();
+    }
+
+    /**
+     * @return Builder<Lead>
+     */
+    private function matchingLeadsQuery(): Builder
+    {
+        return app(HoldingReleaseService::class)
+            ->queryMatchingLeads(
+                auth()->user()->company_id,
+                $this->buildFilter(),
+                $this->previewMaxCount(),
+            )
+            ->with(['latestDisposition']);
+    }
+
+    private function selectedLeadsDescription(): string
+    {
+        $maxCount = $this->previewMaxCount();
+
+        if ($this->holdingCount === 0) {
+            return 'No matching leads.';
+        }
+
+        if ($maxCount !== null && $maxCount < $this->holdingCount) {
+            return "The {$maxCount} freshest of {$this->holdingCount} matching leads.";
+        }
+
+        return "All {$this->holdingCount} matching leads.";
+    }
+
+    private function previewMaxCount(): ?int
+    {
+        $value = $this->releaseData['max_count'] ?? null;
+
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        $count = (int) $value;
+
+        return $count >= 1 ? $count : null;
     }
 
     private function buildFilter(): HoldingFilter

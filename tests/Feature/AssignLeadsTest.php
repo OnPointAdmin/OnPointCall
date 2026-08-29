@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Enums\Disposition;
 use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
 use App\Enums\QualificationStatus;
@@ -11,7 +10,6 @@ use App\Filament\Pages\AssignLeads;
 use App\Models\CallingList;
 use App\Models\Company;
 use App\Models\Lead;
-use App\Models\LeadHistory;
 use App\Models\LeadTypeDefinition;
 use App\Models\User;
 use App\Support\CompanyContext;
@@ -28,18 +26,40 @@ class AssignLeadsTest extends TestCase
     {
         [$admin, $list] = $this->setUpAssignPage();
 
-        $this->makeHoldingLead($admin->company_id, '4045552001', now()->subDays(2));
-        $this->makeHoldingLead($admin->company_id, '4045552002', now()->subDay());
+        $first = $this->makeHoldingLead($admin->company_id, '4045552001', now()->subDays(2));
+        $second = $this->makeHoldingLead($admin->company_id, '4045552002', now()->subDay());
 
         Livewire::actingAs($admin)
             ->test(AssignLeads::class)
             ->assertOk()
             ->assertSet('holdingCount', 2)
             ->assertSee('Matching leads')
+            ->assertSee('Selected leads')
             ->assertSee('Max Count')
             ->assertFormFieldExists('max_count', 'releaseForm')
             ->assertFormFieldDoesNotExist('release_mode', 'releaseForm')
-            ->assertSee($list->name);
+            ->assertSee($list->name)
+            ->assertCanSeeTableRecords([$first, $second]);
+    }
+
+    public function test_selected_leads_table_limits_to_max_count_freshest(): void
+    {
+        [$admin] = $this->setUpAssignPage();
+
+        $oldest = $this->makeHoldingLead($admin->company_id, '4045552101', now()->subDays(3));
+        $middle = $this->makeHoldingLead($admin->company_id, '4045552102', now()->subDays(2));
+        $newest = $this->makeHoldingLead($admin->company_id, '4045552103', now()->subDay());
+
+        Livewire::actingAs($admin)
+            ->test(AssignLeads::class)
+            ->assertSet('holdingCount', 3)
+            ->assertCanSeeTableRecords([$oldest, $middle, $newest])
+            ->fillForm([
+                'max_count' => 2,
+            ], 'releaseForm')
+            ->assertSee('The 2 freshest of 3 matching leads.')
+            ->assertCanSeeTableRecords([$middle, $newest])
+            ->assertCanNotSeeTableRecords([$oldest]);
     }
 
     public function test_empty_max_count_assigns_all_matching_leads(): void
@@ -131,17 +151,20 @@ class AssignLeadsTest extends TestCase
     {
         [$admin] = $this->setUpAssignPage();
 
-        $this->makeHoldingLead($admin->company_id, '4045555001', now()->subDay(), attemptCount: 0);
-        $this->makeHoldingLead($admin->company_id, '4045555002', now()->subDay(), attemptCount: 2);
+        $zeroAttempts = $this->makeHoldingLead($admin->company_id, '4045555001', now()->subDay(), attemptCount: 0);
+        $twoAttempts = $this->makeHoldingLead($admin->company_id, '4045555002', now()->subDay(), attemptCount: 2);
 
         Livewire::actingAs($admin)
             ->test(AssignLeads::class)
             ->assertSet('holdingCount', 2)
+            ->assertCanSeeTableRecords([$zeroAttempts, $twoAttempts])
             ->fillForm([
                 'attempt_count' => 2,
             ], 'filterForm')
             ->call('refreshCountAction')
-            ->assertSet('holdingCount', 1);
+            ->assertSet('holdingCount', 1)
+            ->assertCanSeeTableRecords([$twoAttempts])
+            ->assertCanNotSeeTableRecords([$zeroAttempts]);
     }
 
     public function test_list_source_shows_matching_callable_leads(): void
