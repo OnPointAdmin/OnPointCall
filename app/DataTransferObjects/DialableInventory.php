@@ -38,9 +38,31 @@ readonly class DialableInventory
         public ?string $timezone = null,
     ) {}
 
-    public static function empty(): self
+    public static function empty(?string $timezone = null): self
     {
-        return new self(0, 0);
+        return new self(0, 0, timezone: $timezone);
+    }
+
+    public function withTimezone(string $timezone): self
+    {
+        if ($this->timezone === $timezone) {
+            return $this;
+        }
+
+        return new self(
+            readyNow: $this->readyNow,
+            waiting: $this->waiting,
+            waitingCadence: $this->waitingCadence,
+            waitingHours: $this->waitingHours,
+            claimed: $this->claimed,
+            maxAttempts: $this->maxAttempts,
+            cadenceByDayPart: $this->cadenceByDayPart,
+            callbacksDue: $this->callbacksDue,
+            callbacksScheduled: $this->callbacksScheduled,
+            cadenceEarliestByPart: $this->cadenceEarliestByPart,
+            cadenceWaitSlots: $this->cadenceWaitSlots,
+            timezone: $timezone,
+        );
     }
 
     /**

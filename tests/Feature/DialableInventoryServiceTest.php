@@ -2,11 +2,14 @@
 
 namespace Tests\Feature;
 
+use App\Enums\Disposition;
+use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
 use App\Enums\UserRole;
 use App\Models\Company;
 use App\Models\Lead;
 use App\Models\LeadClaim;
+use App\Models\LeadHistory;
 use App\Models\StateRule;
 use App\Models\User;
 use App\Services\Leads\DialableInventoryService;
@@ -204,6 +207,100 @@ class DialableInventoryServiceTest extends TestCase
         $this->assertSame(0, $service->forList($readyList)->waiting);
         $this->assertSame(0, $service->forList($waitingList)->readyNow);
         $this->assertSame(1, $service->forList($waitingList)->waiting);
+    }
+
+    public function test_active_today_includes_list_with_disposition_today(): void
+    {
+        $company = $this->makeCompany();
+        $admin = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Admin,
+        ]);
+        $dialedList = $this->createCallingList($company->id, overrides: ['name' => 'Dialed Today']);
+        $idleList = $this->createCallingList($company->id, overrides: ['name' => 'Idle']);
+        $lead = $this->makeCallableLead($company->id, $dialedList->id, '4045552001');
+        $this->makeCallableLead($company->id, $idleList->id, '4045552002');
+
+        LeadHistory::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'lead_id' => $lead->id,
+            'actor_id' => $admin->id,
+            'event_type' => LeadHistoryType::Disposition,
+            'occurred_at' => now(),
+            'payload' => ['disposition' => Disposition::NoAnswer->value],
+        ]);
+
+        $active = app(DialableInventoryService::class)->activeTodayForCompany($company->id);
+
+        $this->assertCount(1, $active);
+        $this->assertSame('Dialed Today', $active[0]['list']->name);
+        $this->assertSame(1, $active[0]['inventory']->readyNow);
+    }
+
+    public function test_active_today_includes_list_with_only_active_claim(): void
+    {
+        $company = $this->makeCompany();
+        $agent = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Agent,
+        ]);
+        $claimedList = $this->createCallingList($company->id, overrides: ['name' => 'Claimed']);
+        $idleList = $this->createCallingList($company->id, overrides: ['name' => 'Idle']);
+        $lead = $this->makeCallableLead($company->id, $claimedList->id, '4045553001');
+        $this->makeCallableLead($company->id, $idleList->id, '4045553002');
+
+        LeadClaim::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'lead_id' => $lead->id,
+            'user_id' => $agent->id,
+            'claimed_at' => now(),
+            'expires_at' => now()->addMinutes(20),
+        ]);
+
+        $active = app(DialableInventoryService::class)->activeTodayForCompany($company->id);
+
+        $this->assertCount(1, $active);
+        $this->assertSame('Claimed', $active[0]['list']->name);
+        $this->assertSame(1, $active[0]['inventory']->claimed);
+    }
+
+    public function test_active_today_excludes_idle_lists(): void
+    {
+        $company = $this->makeCompany();
+        $idleList = $this->createCallingList($company->id, overrides: ['name' => 'Idle']);
+        $this->makeCallableLead($company->id, $idleList->id, '4045554001');
+
+        $active = app(DialableInventoryService::class)->activeTodayForCompany($company->id);
+
+        $this->assertSame([], $active);
+    }
+
+    public function test_active_today_includes_exhausted_list_with_zero_inventory(): void
+    {
+        $company = $this->makeCompany();
+        $admin = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Admin,
+        ]);
+        $list = $this->createCallingList($company->id, overrides: ['name' => 'Worked Out']);
+        $lead = $this->makeLead($company->id, $list->id, LeadStatus::Booked, '4045555001');
+
+        LeadHistory::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'lead_id' => $lead->id,
+            'actor_id' => $admin->id,
+            'event_type' => LeadHistoryType::Disposition,
+            'occurred_at' => now(),
+            'payload' => ['disposition' => Disposition::Booked->value],
+        ]);
+
+        $active = app(DialableInventoryService::class)->activeTodayForCompany($company->id);
+
+        $this->assertCount(1, $active);
+        $this->assertSame('Worked Out', $active[0]['list']->name);
+        $this->assertSame(0, $active[0]['inventory']->readyNow);
+        $this->assertSame(0, $active[0]['inventory']->waiting);
+        $this->assertNotNull($active[0]['inventory']->timezone);
     }
 
     private function makeCompany(): Company

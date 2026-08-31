@@ -6,7 +6,7 @@ use App\DataTransferObjects\HoldingFilter;
 use App\Enums\Disposition;
 use App\Enums\QualificationStatus;
 use App\Exceptions\HoldingReleaseException;
-use App\Filament\Resources\Leads\LeadResource;
+use App\Filament\Resources\Leads\Schemas\LeadForm;
 use App\Filament\Support\LeadTypeSelect;
 use App\Models\CallingList;
 use App\Models\DispositionDefinition;
@@ -16,6 +16,7 @@ use App\Services\Import\HoldingReleaseService;
 use App\Support\LeadDemographicOptions;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Actions\ViewAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -27,6 +28,7 @@ use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Components\Form;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
@@ -293,7 +295,12 @@ class AssignLeads extends Page implements HasTable
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->defaultSort('imported_at', 'desc')
-            ->recordUrl(fn (Lead $record): string => LeadResource::getUrl('view', ['record' => $record]))
+            ->recordActions([
+                ViewAction::make()
+                    ->slideOver()
+                    ->modalWidth(Width::Full)
+                    ->schema(fn (Schema $schema): Schema => LeadForm::configure($schema, withHistory: true)->columns(2)),
+            ])
             ->paginated([10, 25, 50, 100])
             ->defaultPaginationPageOption(25)
             ->emptyStateHeading('No matching leads')

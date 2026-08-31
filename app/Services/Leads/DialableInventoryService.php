@@ -3,9 +3,12 @@
 namespace App\Services\Leads;
 
 use App\DataTransferObjects\DialableInventory;
+use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
 use App\Models\CallingList;
 use App\Models\Lead;
+use App\Models\LeadClaim;
+use App\Models\LeadHistory;
 use App\Services\Compliance\ComplianceService;
 use App\Services\Dashboard\LeadDashboardService;
 use App\Services\Dashboard\ManagerDashboardService;
@@ -35,6 +38,83 @@ class DialableInventoryService
     public function forCompany(int $companyId): array
     {
         return $this->byCompany[$companyId] ??= $this->compute($companyId);
+    }
+
+    /**
+     * Calling lists dialed today or with an active claim, with remaining inventory counts.
+     *
+     * @return list<array{list: CallingList, inventory: DialableInventory}>
+     */
+    public function activeTodayForCompany(int $companyId): array
+    {
+        $listIds = $this->activeTodayListIds($companyId);
+
+        if ($listIds === []) {
+            return [];
+        }
+
+        $lists = CallingList::withoutGlobalScopes()
+            ->where('company_id', $companyId)
+            ->whereIn('id', $listIds)
+            ->orderBy('name')
+            ->get();
+
+        $inventoryByList = $this->forCompany($companyId);
+        $timezone = $this->managerDashboard->companyTimezone($companyId);
+
+        $result = [];
+
+        foreach ($lists as $list) {
+            $inventory = ($inventoryByList[$list->id] ?? DialableInventory::empty())
+                ->withTimezone($timezone);
+
+            $result[] = [
+                'list' => $list,
+                'inventory' => $inventory,
+            ];
+        }
+
+        return $result;
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function activeTodayListIds(int $companyId): array
+    {
+        $range = $this->managerDashboard->todayRange($companyId);
+
+        $dialedTodayListIds = LeadHistory::withoutGlobalScopes()
+            ->where('company_id', $companyId)
+            ->whereBetween('occurred_at', [$range['start'], $range['end']])
+            ->whereIn('event_type', [
+                LeadHistoryType::Disposition->value,
+                LeadHistoryType::Skip->value,
+            ])
+            ->whereHas('lead', fn ($query) => $query->whereNotNull('calling_list_id'))
+            ->with('lead:id,calling_list_id')
+            ->get()
+            ->pluck('lead.calling_list_id')
+            ->filter()
+            ->map(fn (mixed $id): int => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+
+        $claimedListIds = LeadClaim::withoutGlobalScopes()
+            ->where('company_id', $companyId)
+            ->where('expires_at', '>', now())
+            ->whereHas('lead', fn ($query) => $query->whereNotNull('calling_list_id'))
+            ->with('lead:id,calling_list_id')
+            ->get()
+            ->pluck('lead.calling_list_id')
+            ->filter()
+            ->map(fn (mixed $id): int => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+
+        return array_values(array_unique(array_merge($dialedTodayListIds, $claimedListIds)));
     }
 
     /**

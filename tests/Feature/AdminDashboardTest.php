@@ -57,6 +57,79 @@ class AdminDashboardTest extends TestCase
             ->assertSee('Calling list');
     }
 
+    public function test_dashboard_shows_queue_status_for_active_lists_only(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-10 15:00:00', 'America/New_York'));
+
+        $company = Company::factory()->create();
+        $admin = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Admin,
+            'active' => true,
+        ]);
+        $agent = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Agent,
+            'active' => true,
+        ]);
+
+        AppSetting::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'max_attempts' => 6,
+            'claim_ttl_minutes' => 20,
+            'dashboard_email_timezone' => 'America/New_York',
+        ]);
+
+        $activeList = $this->createCallingList($company->id, overrides: ['name' => 'Active List']);
+        $idleList = $this->createCallingList($company->id, overrides: ['name' => 'Idle List']);
+
+        $activeLead = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045559201',
+            'state' => 'NY',
+            'timezone' => 'America/New_York',
+            'status' => LeadStatus::Callable,
+            'lead_type' => 'standard',
+            'calling_list_id' => $activeList->id,
+            'imported_at' => now(),
+        ]);
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045559202',
+            'state' => 'NY',
+            'timezone' => 'America/New_York',
+            'status' => LeadStatus::Callable,
+            'lead_type' => 'standard',
+            'calling_list_id' => $idleList->id,
+            'imported_at' => now(),
+        ]);
+
+        LeadHistory::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'lead_id' => $activeLead->id,
+            'actor_id' => $agent->id,
+            'event_type' => LeadHistoryType::Disposition,
+            'occurred_at' => now(),
+            'payload' => ['disposition' => Disposition::NoAnswer->value],
+        ]);
+
+        CompanyContext::set($company->id);
+
+        $component = Livewire::actingAs($admin)
+            ->test(Dashboard::class)
+            ->assertSee('Queue status')
+            ->assertSee('Active List')
+            ->assertSee('Ready now');
+
+        $listNames = collect($component->instance()->queueStatuses())
+            ->pluck('list.name')
+            ->all();
+
+        $this->assertSame(['Active List'], $listNames);
+
+        Carbon::setTestNow();
+    }
+
     public function test_date_preset_fills_run_dates_and_applies(): void
     {
         $this->seed(DatabaseSeeder::class);

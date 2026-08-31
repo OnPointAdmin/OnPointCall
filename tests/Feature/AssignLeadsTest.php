@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\Disposition;
 use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
 use App\Enums\QualificationStatus;
@@ -10,6 +11,7 @@ use App\Filament\Pages\AssignLeads;
 use App\Models\CallingList;
 use App\Models\Company;
 use App\Models\Lead;
+use App\Models\LeadHistory;
 use App\Models\LeadTypeDefinition;
 use App\Models\User;
 use App\Support\CompanyContext;
@@ -40,6 +42,57 @@ class AssignLeadsTest extends TestCase
             ->assertFormFieldDoesNotExist('release_mode', 'releaseForm')
             ->assertSee($list->name)
             ->assertCanSeeTableRecords([$first, $second]);
+    }
+
+    public function test_selected_leads_table_view_opens_slide_over_with_full_record_and_history(): void
+    {
+        [$admin] = $this->setUpAssignPage();
+
+        $lead = $this->makeHoldingLead($admin->company_id, '4045552100', now()->subDay());
+        $lead->update([
+            'first_name' => 'Pat',
+            'last_name' => 'Callahan',
+            'email' => 'pat@example.com',
+            'address' => '1291 E Strawberry Drive',
+            'city' => 'Gilbert',
+        ]);
+
+        LeadHistory::withoutGlobalScopes()->create([
+            'company_id' => $admin->company_id,
+            'lead_id' => $lead->id,
+            'actor_id' => $admin->id,
+            'event_type' => LeadHistoryType::Disposition,
+            'occurred_at' => now(),
+            'payload' => [
+                'disposition' => Disposition::LeftVm->value,
+                'note' => 'Left a voicemail about the tour.',
+            ],
+        ]);
+
+        $component = Livewire::actingAs($admin)
+            ->test(AssignLeads::class)
+            ->assertOk()
+            ->assertTableActionExists('view')
+            ->mountTableAction('view', $lead)
+            ->assertTableActionDataSet([
+                'phone' => '4045552100',
+                'first_name' => 'Pat',
+                'last_name' => 'Callahan',
+                'email' => 'pat@example.com',
+                'address' => '1291 E Strawberry Drive',
+                'city' => 'Gilbert',
+            ]);
+
+        $this->assertNull($component->instance()->getMountedAction()?->getUrl());
+
+        $schemaHtml = $component->instance()
+            ->getSchema($component->instance()->getMountedActionSchemaName())
+            ?->toHtml() ?? '';
+
+        $this->assertStringContainsString('History', $schemaHtml);
+        $this->assertStringContainsString('Left VM', $schemaHtml);
+        $this->assertStringContainsString($admin->name, $schemaHtml);
+        $this->assertStringContainsString('Left a voicemail about the tour.', $schemaHtml);
     }
 
     public function test_selected_leads_table_limits_to_max_count_freshest(): void

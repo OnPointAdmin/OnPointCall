@@ -47,6 +47,41 @@
             {{ $this->content }}
         </div>
 
+        @php
+            $queueStatuses = $this->queueStatuses();
+        @endphp
+
+        <div class="dashboard-card dashboard-queue-status">
+            <h2 class="dashboard-section-title">Queue status</h2>
+
+            @if (count($queueStatuses) === 0)
+                <p class="dashboard-queue-empty">No lists have been dialed today.</p>
+            @else
+                <div class="dashboard-queue-grid">
+                    @foreach ($queueStatuses as $entry)
+                        @php
+                            $list = $entry['list'];
+                            $inventory = $entry['inventory'];
+                        @endphp
+
+                        <div class="dashboard-queue-card">
+                            <h3 class="dashboard-queue-list-name">
+                                <a href="{{ \App\Filament\Resources\CallingLists\CallingListResource::getUrl('view', ['record' => $list]) }}">
+                                    {{ $list->name }}
+                                </a>
+                            </h3>
+
+                            @include('filament.resources.calling-lists.queue-status', [
+                                'rows' => $inventory->queueStatusRows(),
+                                'timezone' => $inventory->timezone,
+                                'showHeading' => false,
+                            ])
+                        </div>
+                    @endforeach
+                </div>
+            @endif
+        </div>
+
         <div class="dashboard-card dashboard-totals">
             <h2 class="dashboard-section-title">Totals</h2>
 

@@ -7,6 +7,7 @@ use App\Filament\Support\LeadTypeSelect;
 use App\Models\CallingList;
 use App\Models\User;
 use App\Services\Dashboard\ManagerDashboardService;
+use App\Services\Leads\DialableInventoryService;
 use Carbon\Carbon;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
@@ -204,6 +205,16 @@ class Dashboard extends BaseDashboard implements HasSchemas
     public function formatPercent(array $metrics, string $key): string
     {
         return app(ManagerDashboardService::class)->formatPercent($metrics, $key);
+    }
+
+    /**
+     * @return list<array{list: CallingList, inventory: \App\DataTransferObjects\DialableInventory}>
+     */
+    public function queueStatuses(): array
+    {
+        $companyId = (int) auth()->user()->company_id;
+
+        return app(DialableInventoryService::class)->activeTodayForCompany($companyId);
     }
 
     private function applyFilters(ManagerDashboardService $dashboardService): void
