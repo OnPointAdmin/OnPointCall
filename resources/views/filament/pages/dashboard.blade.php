@@ -51,34 +51,64 @@
             $queueStatuses = $this->queueStatuses();
         @endphp
 
-        <div class="dashboard-card dashboard-queue-status">
+        <div class="dashboard-card dashboard-table dashboard-queue-status">
             <h2 class="dashboard-section-title">Queue status</h2>
 
-            @if (count($queueStatuses) === 0)
-                <p class="dashboard-queue-empty">No lists have been dialed today.</p>
-            @else
-                <div class="dashboard-queue-grid">
-                    @foreach ($queueStatuses as $entry)
-                        @php
-                            $list = $entry['list'];
-                            $inventory = $entry['inventory'];
-                        @endphp
+            <div class="dashboard-table-scroll">
+                <table class="dashboard-queue-table">
+                    <thead>
+                        <tr>
+                            <th class="col-start">List</th>
+                            <th>Ready now</th>
+                            <th>Waiting on cadence</th>
+                            <th>Cadence timing</th>
+                            <th>Waiting on legal hours</th>
+                            <th>On an active claim</th>
+                            <th>At max attempts</th>
+                            <th>Callbacks due now</th>
+                            <th>Callbacks scheduled</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse ($queueStatuses as $entry)
+                            @php
+                                $list = $entry['list'];
+                                $inventory = $entry['inventory'];
+                            @endphp
 
-                        <div class="dashboard-queue-card">
-                            <h3 class="dashboard-queue-list-name">
-                                <a href="{{ \App\Filament\Resources\CallingLists\CallingListResource::getUrl('view', ['record' => $list]) }}">
-                                    {{ $list->name }}
-                                </a>
-                            </h3>
+                            <tr>
+                                <td class="col-start">
+                                    <a
+                                        href="{{ \App\Filament\Resources\CallingLists\CallingListResource::getUrl('view', ['record' => $list]) }}"
+                                        class="dashboard-queue-list-link"
+                                    >
+                                        {{ $list->name }}
+                                    </a>
+                                </td>
+                                <td>{{ number_format($inventory->readyNow) }}</td>
+                                <td>{{ number_format($inventory->waitingCadence) }}</td>
+                                <td class="dashboard-queue-timing">
+                                    {{ $inventory->waitingCadence > 0 ? $inventory->cadenceWaitSlotDescription() : '—' }}
+                                </td>
+                                <td>{{ number_format($inventory->waitingHours) }}</td>
+                                <td>{{ number_format($inventory->claimed) }}</td>
+                                <td>{{ number_format($inventory->maxAttempts) }}</td>
+                                <td>{{ number_format($inventory->callbacksDue) }}</td>
+                                <td>{{ number_format($inventory->callbacksScheduled) }}</td>
+                            </tr>
+                        @empty
+                            <tr class="empty-row">
+                                <td colspan="9">No lists have been dialed today.</td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
 
-                            @include('filament.resources.calling-lists.queue-status', [
-                                'rows' => $inventory->queueStatusRows(),
-                                'timezone' => $inventory->timezone,
-                                'showHeading' => false,
-                            ])
-                        </div>
-                    @endforeach
-                </div>
+            @if (count($queueStatuses) > 0)
+                <p class="dashboard-footnote">
+                    Live remaining inventory for lists dialed today or with an active claim. Times use {{ $queueStatuses[0]['inventory']->timezone }}.
+                </p>
             @endif
         </div>
 
