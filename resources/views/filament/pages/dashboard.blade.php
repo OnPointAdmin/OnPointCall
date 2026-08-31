@@ -47,81 +47,6 @@
             {{ $this->content }}
         </div>
 
-        @php
-            $queueStatuses = $this->queueStatuses();
-        @endphp
-
-        <div class="dashboard-card dashboard-table dashboard-queue-status">
-            <h2 class="dashboard-section-title">Queue status</h2>
-
-            <div class="dashboard-table-scroll">
-                <table class="dashboard-queue-table">
-                    <thead>
-                        <tr>
-                            <th class="col-start">List</th>
-                            <th>Ready now</th>
-                            <th>Waiting on cadence</th>
-                            <th class="dashboard-queue-timing">Cadence timing</th>
-                            <th>Waiting on legal hours</th>
-                            <th>On an active claim</th>
-                            <th>At max attempts</th>
-                            <th>Callbacks due now</th>
-                            <th>Callbacks scheduled</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @forelse ($queueStatuses as $entry)
-                            @php
-                                $list = $entry['list'];
-                                $inventory = $entry['inventory'];
-                            @endphp
-
-                            <tr>
-                                <td class="col-start">
-                                    <a
-                                        href="{{ \App\Filament\Resources\CallingLists\CallingListResource::getUrl('view', ['record' => $list]) }}"
-                                        class="dashboard-queue-list-link"
-                                    >
-                                        {{ $list->name }}
-                                    </a>
-                                </td>
-                                <td>{{ number_format($inventory->readyNow) }}</td>
-                                <td>{{ number_format($inventory->waitingCadence) }}</td>
-                                <td class="dashboard-queue-timing">
-                                    @if ($inventory->waitingCadence > 0)
-                                        <div class="dashboard-queue-timing-list">
-                                            @foreach ($inventory->cadenceWaitSlots as $slot)
-                                                @if ($slot['count'] > 0)
-                                                    <div>{{ number_format($slot['count']) }} {{ $slot['label'] }}</div>
-                                                @endif
-                                            @endforeach
-                                        </div>
-                                    @else
-                                        —
-                                    @endif
-                                </td>
-                                <td>{{ number_format($inventory->waitingHours) }}</td>
-                                <td>{{ number_format($inventory->claimed) }}</td>
-                                <td>{{ number_format($inventory->maxAttempts) }}</td>
-                                <td>{{ number_format($inventory->callbacksDue) }}</td>
-                                <td>{{ number_format($inventory->callbacksScheduled) }}</td>
-                            </tr>
-                        @empty
-                            <tr class="empty-row">
-                                <td colspan="9">No lists have been dialed today.</td>
-                            </tr>
-                        @endforelse
-                    </tbody>
-                </table>
-            </div>
-
-            @if (count($queueStatuses) > 0)
-                <p class="dashboard-footnote">
-                    Live remaining inventory for lists dialed today or with an active claim. Times use {{ $queueStatuses[0]['inventory']->timezone }}.
-                </p>
-            @endif
-        </div>
-
         <div class="dashboard-card dashboard-totals">
             <h2 class="dashboard-section-title">Totals</h2>
 
@@ -219,6 +144,81 @@
             <p class="dashboard-footnote">
                 Percentages represent % of total leads called.
             </p>
+        </div>
+
+        @php
+            $queueStatuses = $this->queueStatuses();
+        @endphp
+
+        <div class="dashboard-card dashboard-table dashboard-queue-status">
+            <h2 class="dashboard-section-title">Queue status</h2>
+
+            <div class="dashboard-table-scroll">
+                <table class="dashboard-queue-table">
+                    <thead>
+                        <tr>
+                            <th class="col-start">List</th>
+                            <th>Ready now</th>
+                            <th>Waiting on cadence</th>
+                            <th class="dashboard-queue-timing">Cadence timing</th>
+                            <th>Waiting on legal hours</th>
+                            <th>On an active claim</th>
+                            <th>At max attempts</th>
+                            <th>Callbacks due now</th>
+                            <th>Callbacks scheduled</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse ($queueStatuses as $entry)
+                            @php
+                                $list = $entry['list'];
+                                $inventory = $entry['inventory'];
+                            @endphp
+
+                            <tr>
+                                <td class="col-start">
+                                    <a
+                                        href="{{ \App\Filament\Resources\CallingLists\CallingListResource::getUrl('view', ['record' => $list]) }}"
+                                        class="dashboard-queue-list-link"
+                                    >
+                                        {{ $list->name }}
+                                    </a>
+                                </td>
+                                <td>{{ number_format($inventory->readyNow) }}</td>
+                                <td>{{ number_format($inventory->waitingCadence) }}</td>
+                                <td class="dashboard-queue-timing">
+                                    @if ($inventory->waitingCadence > 0)
+                                        <div class="dashboard-queue-timing-list">
+                                            @foreach ($inventory->cadenceWaitSlots as $slot)
+                                                @if ($slot['count'] > 0)
+                                                    <div>{{ number_format($slot['count']) }} {{ $slot['label'] }}</div>
+                                                @endif
+                                            @endforeach
+                                        </div>
+                                    @else
+                                        —
+                                    @endif
+                                </td>
+                                <td>{{ number_format($inventory->waitingHours) }}</td>
+                                <td>{{ number_format($inventory->claimed) }}</td>
+                                <td>{{ number_format($inventory->maxAttempts) }}</td>
+                                <td>{{ number_format($inventory->callbacksDue) }}</td>
+                                <td>{{ number_format($inventory->callbacksScheduled) }}</td>
+                            </tr>
+                        @empty
+                            <tr class="empty-row">
+                                <td colspan="9">No lists have been dialed today.</td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+
+            @if (count($queueStatuses) > 0)
+                <p class="dashboard-footnote">
+                    Live remaining inventory for lists dialed today or with an active claim. Times use {{ $queueStatuses[0]['inventory']->timezone }}.
+                </p>
+            @endif
         </div>
     </div>
 </x-filament-panels::page>
