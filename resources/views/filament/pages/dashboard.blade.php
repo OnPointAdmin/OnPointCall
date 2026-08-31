@@ -61,7 +61,7 @@
                             <th class="col-start">List</th>
                             <th>Ready now</th>
                             <th>Waiting on cadence</th>
-                            <th>Cadence timing</th>
+                            <th class="dashboard-queue-timing">Cadence timing</th>
                             <th>Waiting on legal hours</th>
                             <th>On an active claim</th>
                             <th>At max attempts</th>
@@ -88,7 +88,17 @@
                                 <td>{{ number_format($inventory->readyNow) }}</td>
                                 <td>{{ number_format($inventory->waitingCadence) }}</td>
                                 <td class="dashboard-queue-timing">
-                                    {{ $inventory->waitingCadence > 0 ? $inventory->cadenceWaitSlotDescription() : '—' }}
+                                    @if ($inventory->waitingCadence > 0)
+                                        <div class="dashboard-queue-timing-list">
+                                            @foreach ($inventory->cadenceWaitSlots as $slot)
+                                                @if ($slot['count'] > 0)
+                                                    <div>{{ number_format($slot['count']) }} {{ $slot['label'] }}</div>
+                                                @endif
+                                            @endforeach
+                                        </div>
+                                    @else
+                                        —
+                                    @endif
                                 </td>
                                 <td>{{ number_format($inventory->waitingHours) }}</td>
                                 <td>{{ number_format($inventory->claimed) }}</td>
