@@ -11,6 +11,7 @@ use App\Models\AppSetting;
 use App\Models\Company;
 use App\Models\Lead;
 use App\Models\LeadHistory;
+use App\Models\StateRule;
 use App\Models\User;
 use App\Support\CompanyContext;
 use Carbon\Carbon;
@@ -126,6 +127,78 @@ class AdminDashboardTest extends TestCase
             ->all();
 
         $this->assertSame(['Active List'], $listNames);
+
+        Carbon::setTestNow();
+    }
+
+    public function test_dashboard_queue_status_shows_evening_cadence_timing(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-10 15:00:00', 'America/New_York'));
+
+        $company = Company::factory()->create();
+        $admin = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Admin,
+            'active' => true,
+        ]);
+        $agent = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Agent,
+            'active' => true,
+        ]);
+
+        AppSetting::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'max_attempts' => 6,
+            'claim_ttl_minutes' => 20,
+            'dashboard_email_timezone' => 'America/New_York',
+        ]);
+
+        StateRule::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'state_code' => 'NY',
+            'window_start' => '08:00:00',
+            'window_end' => '21:00:00',
+            'permitted_weekdays' => [0, 1, 2, 3, 4, 5, 6],
+            'manual_dial_only' => false,
+        ]);
+
+        $list = $this->createCallingList(
+            $company->id,
+            $this->createCadenceWithDayParts($company->id),
+            ['name' => 'Standard - List A'],
+        );
+        $lead = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045559301',
+            'state' => 'NY',
+            'timezone' => 'America/New_York',
+            'status' => LeadStatus::Callable,
+            'lead_type' => 'standard',
+            'calling_list_id' => $list->id,
+            'attempt_count' => 1,
+            'last_attempt_at' => now()->subMinutes(5),
+            'next_day_part' => 'evening',
+            'imported_at' => now(),
+        ]);
+
+        LeadHistory::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'lead_id' => $lead->id,
+            'actor_id' => $agent->id,
+            'event_type' => LeadHistoryType::Disposition,
+            'occurred_at' => now(),
+            'payload' => ['disposition' => Disposition::NoAnswer->value],
+        ]);
+
+        CompanyContext::set($company->id);
+
+        Livewire::actingAs($admin)
+            ->test(Dashboard::class)
+            ->assertSee('Queue status')
+            ->assertSee('Standard - List A')
+            ->assertSee('Evening')
+            ->assertSee('Tomorrow');
 
         Carbon::setTestNow();
     }

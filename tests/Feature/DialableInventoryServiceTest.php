@@ -82,15 +82,15 @@ class DialableInventoryServiceTest extends TestCase
         $this->assertSame(1, $inventory->cadenceByDayPart['morning']);
         $this->assertSame('1 morning', $inventory->cadenceDayPartDescription());
         $this->assertNotNull($inventory->cadenceEarliestByPart['morning']);
-        $this->assertNotEmpty($inventory->cadenceWaitSlotRows());
         $slots = $inventory->cadenceWaitSlotRows();
-        $this->assertCount(4, $slots);
+        $this->assertNotEmpty($slots);
 
         $tomorrowMorning = collect($slots)->first(
             fn (array $slot): bool => str_contains($slot['label'], 'Tomorrow') && str_contains($slot['label'], 'Morning'),
         );
         $this->assertNotNull($tomorrowMorning);
         $this->assertSame(1, $tomorrowMorning['count']);
+        $this->assertSame(1, collect($slots)->sum('count'));
 
         $this->assertNull(collect($slots)->first(
             fn (array $slot): bool => str_contains($slot['label'], 'Today') && str_contains($slot['label'], 'Morning'),
@@ -98,6 +98,142 @@ class DialableInventoryServiceTest extends TestCase
         $this->assertNull(collect($slots)->first(
             fn (array $slot): bool => str_contains($slot['label'], 'Today') && str_contains($slot['label'], 'Afternoon'),
         ));
+    }
+
+    public function test_afternoon_call_shows_evening_cadence_slot(): void
+    {
+        $company = $this->makeCompany();
+        $list = $this->createCallingList($company->id, $this->createCadenceWithDayParts($company->id));
+        $this->makeCallableLead(
+            $company->id,
+            $list->id,
+            '4045551001',
+            attemptCount: 1,
+            lastAttemptAt: now()->subMinutes(5),
+            nextDayPart: 'evening',
+        );
+
+        $inventory = app(DialableInventoryService::class)->forList($list);
+        $slots = $inventory->cadenceWaitSlotRows();
+
+        $this->assertSame(0, $inventory->readyNow);
+        $this->assertSame(1, $inventory->waitingCadence);
+        $this->assertSame(1, $inventory->cadenceByDayPart['evening']);
+
+        $evening = collect($slots)->first(
+            fn (array $slot): bool => str_contains($slot['label'], 'Evening'),
+        );
+        $this->assertNotNull($evening);
+        $this->assertSame(1, $evening['count']);
+        $this->assertStringContainsString('Tomorrow', $evening['label']);
+    }
+
+    public function test_leftover_evening_wait_shows_today_evening_during_morning(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-11 10:00:00', 'America/New_York'));
+
+        $company = $this->makeCompany();
+        $list = $this->createCallingList($company->id, $this->createCadenceWithDayParts($company->id));
+        $this->makeCallableLead(
+            $company->id,
+            $list->id,
+            '4045551001',
+            attemptCount: 1,
+            lastAttemptAt: Carbon::parse('2026-08-10 15:00:00', 'America/New_York'),
+            nextDayPart: 'evening',
+        );
+
+        $inventory = app(DialableInventoryService::class)->forList($list);
+        $slots = $inventory->cadenceWaitSlotRows();
+
+        $this->assertSame(0, $inventory->readyNow);
+        $this->assertSame(1, $inventory->waitingCadence);
+
+        $evening = collect($slots)->first(
+            fn (array $slot): bool => str_contains($slot['label'], 'Evening'),
+        );
+        $this->assertNotNull($evening);
+        $this->assertSame(1, $evening['count']);
+        $this->assertStringContainsString('Today', $evening['label']);
+    }
+
+    public function test_evening_wait_stays_labeled_after_company_evening_window_starts(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-10 18:00:00', 'America/New_York'));
+
+        $company = $this->makeCompany();
+        $list = $this->createCallingList($company->id, $this->createCadenceWithDayParts($company->id));
+        $this->makeCallableLead(
+            $company->id,
+            $list->id,
+            '2065551001',
+            attemptCount: 1,
+            lastAttemptAt: Carbon::parse('2026-08-09 15:00:00', 'America/Los_Angeles'),
+            nextDayPart: 'evening',
+            timezone: 'America/Los_Angeles',
+        );
+
+        $inventory = app(DialableInventoryService::class)->forList($list);
+        $slots = $inventory->cadenceWaitSlotRows();
+        $labels = collect($slots)->pluck('label')->implode(' | ');
+
+        $this->assertSame(0, $inventory->readyNow);
+        $this->assertSame(1, $inventory->waitingCadence);
+        $this->assertStringContainsString('Evening', $labels);
+        $this->assertStringNotContainsString('After tomorrow', $labels);
+    }
+
+    public function test_ready_now_during_evening_names_the_evening_window(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-10 18:00:00', 'America/New_York'));
+
+        $company = $this->makeCompany();
+        $list = $this->createCallingList($company->id, $this->createCadenceWithDayParts($company->id));
+        $this->makeCallableLead(
+            $company->id,
+            $list->id,
+            '4045551001',
+            attemptCount: 1,
+            lastAttemptAt: Carbon::parse('2026-08-09 15:00:00', 'America/New_York'),
+            nextDayPart: 'evening',
+        );
+
+        $inventory = app(DialableInventoryService::class)->forList($list);
+
+        $this->assertSame(1, $inventory->readyNow);
+        $this->assertSame(0, $inventory->waitingCadence);
+        $this->assertSame(['Evening'], $inventory->readyNowDayPartSummary());
+        $this->assertSame('Evening', $inventory->readyNowDayPartDescription());
+    }
+
+    public function test_later_evening_wait_keeps_evening_label(): void
+    {
+        $company = $this->makeCompany();
+        $list = $this->createCallingList(
+            $company->id,
+            $this->createCadenceWithDayParts(
+                $company->id,
+                attemptGaps: [['after_attempt' => 1, 'wait_value' => 3, 'wait_unit' => 'days']],
+            ),
+        );
+        $this->makeCallableLead(
+            $company->id,
+            $list->id,
+            '4045551001',
+            attemptCount: 1,
+            lastAttemptAt: now()->subMinutes(5),
+            nextDayPart: 'evening',
+        );
+
+        $inventory = app(DialableInventoryService::class)->forList($list);
+        $slots = $inventory->cadenceWaitSlotRows();
+
+        $evening = collect($slots)->first(
+            fn (array $slot): bool => str_contains($slot['label'], 'Evening'),
+        );
+        $this->assertNotNull($evening);
+        $this->assertSame(1, $evening['count']);
+        $this->assertStringContainsString('After tomorrow', $evening['label']);
     }
 
     public function test_outside_legal_hours_counts_as_waiting(): void
@@ -335,6 +471,7 @@ class DialableInventoryServiceTest extends TestCase
         int $attemptCount = 0,
         ?Carbon $lastAttemptAt = null,
         ?string $nextDayPart = null,
+        string $timezone = 'America/New_York',
     ): Lead {
         return $this->makeLead(
             $companyId,
@@ -344,6 +481,7 @@ class DialableInventoryServiceTest extends TestCase
             $attemptCount,
             $lastAttemptAt,
             $nextDayPart,
+            timezone: $timezone,
         );
     }
 
@@ -356,12 +494,13 @@ class DialableInventoryServiceTest extends TestCase
         ?Carbon $lastAttemptAt = null,
         ?string $nextDayPart = null,
         ?Carbon $callbackAt = null,
+        string $timezone = 'America/New_York',
     ): Lead {
         return Lead::withoutGlobalScopes()->create([
             'company_id' => $companyId,
             'phone' => $phone,
             'state' => 'NY',
-            'timezone' => 'America/New_York',
+            'timezone' => $timezone,
             'status' => $status,
             'lead_type' => 'standard',
             'calling_list_id' => $listId,
