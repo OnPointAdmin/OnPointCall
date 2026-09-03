@@ -14,19 +14,14 @@
     </ul>
 
     <p>
-        <strong>Agent window:</strong>
-        <a href="{{ $agentLoginUrl }}">{{ $agentLoginUrl }}</a>
+        <strong>Sign in:</strong>
+        <a href="{{ $loginUrl }}">{{ $loginUrl }}</a>
     </p>
 
-    @if ($canAccessAdmin)
-        <p>
-            <strong>Admin:</strong>
-            <a href="{{ $adminLoginUrl }}">{{ $adminLoginUrl }}</a>
+    @if (! $canAccessAdmin)
+        <p style="color: #64748b; font-size: 13px;">
+            You need a calling-list assignment to use the agent window. If sign-in says you are not assigned to any lists, ask an admin to assign you.
         </p>
     @endif
-
-    <p style="color: #64748b; font-size: 13px;">
-        You need a calling-list assignment to open the agent window. If login says you are not assigned to any lists, ask an admin to assign you.
-    </p>
 </body>
 </html>

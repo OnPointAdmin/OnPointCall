@@ -38,7 +38,7 @@ class PasswordResetTest extends TestCase
             'active' => true,
         ]);
 
-        $response = $this->post(route('agent.password.email'), [
+        $response = $this->post(route('password.email'), [
             'email' => $user->email,
         ]);
 
@@ -55,7 +55,7 @@ class PasswordResetTest extends TestCase
     {
         Mail::fake();
 
-        $response = $this->post(route('agent.password.email'), [
+        $response = $this->post(route('password.email'), [
             'email' => 'missing@example.com',
         ]);
 
@@ -75,7 +75,7 @@ class PasswordResetTest extends TestCase
             'active' => false,
         ]);
 
-        $response = $this->post(route('agent.password.email'), [
+        $response = $this->post(route('password.email'), [
             'email' => $user->email,
         ]);
 
@@ -115,10 +115,10 @@ class PasswordResetTest extends TestCase
             'password_confirmation' => 'new-password-123',
         ]);
 
-        $response->assertRedirect(route('agent.login'));
+        $response->assertRedirect(route('login'));
         $response->assertSessionHas('status');
 
-        $loginResponse = $this->post('/agent/login', [
+        $loginResponse = $this->post('/login', [
             'email' => $user->email,
             'password' => 'new-password-123',
         ]);
@@ -145,9 +145,12 @@ class PasswordResetTest extends TestCase
         $response->assertSessionHasErrors('email');
     }
 
-    public function test_filament_password_reset_request_page_is_available(): void
+    public function test_forgot_password_page_is_available_at_shared_url(): void
     {
-        $this->get('/admin/password-reset/request')
+        $this->get('/forgot-password')
             ->assertOk();
+
+        $this->get('/admin/password-reset/request')
+            ->assertRedirect('/forgot-password');
     }
 }

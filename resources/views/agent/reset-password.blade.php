@@ -115,7 +115,7 @@
     </form>
 
     <div style="text-align:center;">
-        <x-filament::link :href="route('agent.login')">
+        <x-filament::link :href="route('login')">
             Back to sign in
         </x-filament::link>
     </div>

@@ -89,7 +89,7 @@ class PasswordResetController extends Controller
 
         if ($status === Password::PASSWORD_RESET) {
             return redirect()
-                ->route('agent.login')
+                ->route('login')
                 ->with('status', 'Your password has been reset. You can sign in with your new password.');
         }
 

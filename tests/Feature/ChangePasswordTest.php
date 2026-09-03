@@ -8,7 +8,6 @@ use App\Models\CallingList;
 use App\Models\Company;
 use App\Models\ListAssignment;
 use App\Models\User;
-use Filament\Auth\Pages\Login as FilamentLogin;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
@@ -31,7 +30,7 @@ class ChangePasswordTest extends TestCase
     {
         $user = $this->assignedAgent(['must_change_password' => true]);
 
-        $this->post('/agent/login', [
+        $this->post('/login', [
             'email' => $user->email,
             'password' => 'password',
         ])->assertRedirect(route('agent.password.change'));
@@ -145,17 +144,17 @@ class ChangePasswordTest extends TestCase
             'email' => $user->email,
             'password' => 'reset-password-123',
             'password_confirmation' => 'reset-password-123',
-        ])->assertRedirect(route('agent.login'));
+        ])->assertRedirect(route('login'));
 
         $this->assertFalse($user->fresh()->must_change_password);
 
-        $this->post('/agent/login', [
+        $this->post('/login', [
             'email' => $user->email,
             'password' => 'reset-password-123',
         ])->assertRedirect(route('agent.workspace'));
     }
 
-    public function test_invited_admin_is_sent_to_profile_after_filament_login(): void
+    public function test_invited_admin_is_sent_to_profile_after_homepage_login(): void
     {
         $user = User::factory()->create([
             'role' => UserRole::Admin,
@@ -163,13 +162,12 @@ class ChangePasswordTest extends TestCase
             'must_change_password' => true,
         ]);
 
-        Livewire::test(FilamentLogin::class)
-            ->fillForm([
-                'email' => $user->email,
-                'password' => 'password',
-            ])
-            ->call('authenticate')
-            ->assertHasNoFormErrors()
+        $this->post('/login', [
+            'email' => $user->email,
+            'password' => 'password',
+        ])->assertRedirect(route('choose'));
+
+        $this->get('/admin')
             ->assertRedirect(url('/admin/profile'));
     }
 

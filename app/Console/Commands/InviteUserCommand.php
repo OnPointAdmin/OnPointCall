@@ -86,11 +86,7 @@ class InviteUserCommand extends Command
 
         $this->info("Invited {$result['user']->email} as {$role->value}.");
         $this->line("Temporary password: {$result['password']}");
-        $this->line('Agent login: '.url('/agent/login'));
-
-        if ($role->canAccessAdmin()) {
-            $this->line('Admin login: '.url('/admin'));
-        }
+        $this->line('Sign in: '.url('/'));
 
         if ($this->option('no-email')) {
             $this->warn('Email was not sent (--no-email).');

@@ -36,8 +36,9 @@ docker compose exec app php artisan migrate --force
 | Check | Command / URL | Expected |
 |-------|----------------|----------|
 | App health | `curl -f http://localhost/up` | HTTP 200 |
-| Admin login | `/admin` | Filament login loads |
-| Agent login | `/agent/login` | Agent sign-in loads |
+| Sign in | `/` | Sign-in page loads |
+| Admin | `/admin` | Filament dashboard (after sign-in) |
+| Agent window | `/agent` | Agent workspace (after sign-in) |
 | Company context | `docker compose exec app php artisan tinker --execute="echo App\Models\Company::count();"` | ≥ 1 company |
 | Leads present | `docker compose exec app php artisan tinker --execute="echo App\Models\Lead::withoutGlobalScopes()->count();"` | Matches expected count |
 | Queue worker | `docker compose ps queue` | Running |

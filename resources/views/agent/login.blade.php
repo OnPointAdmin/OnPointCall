@@ -16,7 +16,7 @@
         </div>
     @endif
 
-    <form method="POST" action="{{ route('agent.login') }}" class="fi-sc fi-sc-has-gap" style="display:grid; gap:1.5rem;">
+    <form method="POST" action="{{ url('/login') }}" class="fi-sc fi-sc-has-gap" style="display:grid; gap:1.5rem;">
         @csrf
 
         <div data-field-wrapper class="fi-fo-field">
@@ -52,7 +52,7 @@
                             Password<sup class="fi-fo-field-label-required-mark">*</sup>
                         </span>
                     </label>
-                    <x-filament::link :href="route('agent.password.request')" tabindex="-1">
+                    <x-filament::link :href="route('password.request')" tabindex="-1">
                         Forgot password?
                     </x-filament::link>
                 </div>

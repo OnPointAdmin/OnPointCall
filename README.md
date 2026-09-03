@@ -73,11 +73,12 @@ Do **not** run `php artisan optimize` locally. It caches config/routes, can 500 
 | Check | URL / command |
 |---|---|
 | Health | http://localhost/up |
+| Sign in | http://localhost/ |
 | Admin | http://localhost/admin |
-| Agent | http://localhost/agent/login |
+| Agent window | http://localhost/agent |
 | Tests | `docker compose exec app php artisan test` |
 
-Admin login: `jason.paine@onpointcall.com` / `password`
+Sign in: `jason.paine@onpointcall.com` / `password`
 
 ### Invite a user by email
 

@@ -34,7 +34,6 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->authGuard('web')
-            ->login()
             ->passwordReset()
             ->profile(EditProfile::class, isSimple: true)
             ->userMenuItems([
@@ -70,6 +69,12 @@ class AdminPanelProvider extends PanelProvider
                 NavigationGroup::make('Administration'),
             ])
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\Filament\Widgets')
+            ->renderHook(
+                PanelsRenderHook::USER_MENU_BEFORE,
+                fn (): HtmlString => new HtmlString(
+                    view('filament.hooks.agent-window-link')->render()
+                ),
+            )
             ->renderHook(
                 PanelsRenderHook::HEAD_END,
                 fn (): HtmlString => new HtmlString(

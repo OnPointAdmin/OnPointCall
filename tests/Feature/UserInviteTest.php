@@ -121,7 +121,7 @@ class UserInviteTest extends TestCase
         $this->assertSame(UserRole::Agent, UserRole::coerce('agent'));
     }
 
-    public function test_agent_invite_email_omits_admin_link(): void
+    public function test_agent_invite_email_uses_single_sign_in_link(): void
     {
         $mail = new UserInviteMail(
             User::factory()->make([
@@ -133,12 +133,14 @@ class UserInviteTest extends TestCase
         $html = $mail->render();
 
         $this->assertFalse($mail->canAccessAdmin);
-        $this->assertStringContainsString('/agent/login', $html);
+        $this->assertSame(url('/'), $mail->loginUrl);
+        $this->assertStringContainsString(url('/'), $html);
         $this->assertStringContainsString('choose a new password', $html);
         $this->assertStringNotContainsString('/admin', $html);
+        $this->assertStringNotContainsString('/agent/login', $html);
     }
 
-    public function test_admin_and_manager_invite_emails_include_admin_link(): void
+    public function test_admin_and_manager_invite_emails_use_single_sign_in_link(): void
     {
         foreach ([UserRole::Admin, UserRole::Manager] as $role) {
             $mail = new UserInviteMail(
@@ -151,8 +153,10 @@ class UserInviteTest extends TestCase
             $html = $mail->render();
 
             $this->assertTrue($mail->canAccessAdmin, $role->value.' should get admin access');
-            $this->assertStringContainsString('/agent/login', $html);
-            $this->assertStringContainsString('/admin', $html);
+            $this->assertSame(url('/'), $mail->loginUrl);
+            $this->assertStringContainsString(url('/'), $html);
+            $this->assertStringNotContainsString('/agent/login', $html);
+            $this->assertStringNotContainsString('/admin/login', $html);
         }
     }
 }

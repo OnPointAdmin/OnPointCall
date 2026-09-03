@@ -12,9 +12,7 @@ class UserInviteMail extends Mailable
 {
     public bool $canAccessAdmin;
 
-    public string $agentLoginUrl;
-
-    public string $adminLoginUrl;
+    public string $loginUrl;
 
     public function __construct(
         public User $user,
@@ -25,8 +23,7 @@ class UserInviteMail extends Mailable
             : UserRole::coerce((string) $this->user->role);
 
         $this->canAccessAdmin = $role->canAccessAdmin();
-        $this->agentLoginUrl = url('/agent/login');
-        $this->adminLoginUrl = url('/admin');
+        $this->loginUrl = url('/');
     }
 
     public function envelope(): Envelope

@@ -18,6 +18,16 @@
         <div class="mx-auto flex max-w-[1440px] items-center justify-between gap-4 px-6 py-3">
             <x-brand-mark size="sm" />
             <div class="flex items-center gap-3.5 text-sm">
+                @if (auth('agent')->user()?->role->canAccessAdmin())
+                    <a
+                        href="{{ url('/admin') }}"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="rounded-md px-2.5 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                    >
+                        Admin
+                    </a>
+                @endif
                 <div class="relative" x-on:click.outside="userMenuOpen = false" x-on:keydown.escape.window="userMenuOpen = false">
                     <button
                         type="button"

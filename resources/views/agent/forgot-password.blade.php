@@ -17,7 +17,7 @@
         </div>
     @endif
 
-    <form method="POST" action="{{ route('agent.password.email') }}" style="display:grid; gap:1.5rem;">
+    <form method="POST" action="{{ route('password.email') }}" style="display:grid; gap:1.5rem;">
         @csrf
 
         <div data-field-wrapper class="fi-fo-field">
@@ -51,7 +51,7 @@
     </form>
 
     <div style="text-align:center;">
-        <x-filament::link :href="route('agent.login')">
+        <x-filament::link :href="route('login')">
             Back to sign in
         </x-filament::link>
     </div>

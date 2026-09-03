@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\User;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -12,10 +13,14 @@ class EnsureCanCall
     {
         $user = $request->user('agent') ?? $request->user();
 
-        if (! $user || ! $user->active || ! $user->canCall()) {
+        if (! $user instanceof User || ! $user->active) {
             abort(403, 'You are not assigned to any calling lists.');
         }
 
-        return $next($request);
+        if ($user->canCall() || $user->role->canAccessAdmin()) {
+            return $next($request);
+        }
+
+        abort(403, 'You are not assigned to any calling lists.');
     }
 }

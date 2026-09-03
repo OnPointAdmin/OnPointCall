@@ -32,6 +32,12 @@ class EnsurePasswordChanged
     private function isAllowedWhilePasswordChangeRequired(Request $request): bool
     {
         return $request->routeIs(
+            'login',
+            'choose',
+            'password.request',
+            'password.email',
+            'agent.password.reset',
+            'agent.password.update',
             'agent.password.change',
             'agent.password.change.update',
             'agent.logout',

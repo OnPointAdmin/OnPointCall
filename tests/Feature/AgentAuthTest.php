@@ -44,7 +44,7 @@ class AgentAuthTest extends TestCase
             'calling_list_id' => $list->id,
         ]);
 
-        $response = $this->post('/agent/login', [
+        $response = $this->post('/login', [
             'email' => $user->email,
             'password' => 'password',
         ]);
@@ -54,7 +54,51 @@ class AgentAuthTest extends TestCase
 
         $this->get(route('agent.workspace'))
             ->assertOk()
-            ->assertSee('Get Next Lead');
+            ->assertSee('Get Next Lead')
+            ->assertDontSee('href="'.url('/admin').'"', false);
+    }
+
+    public function test_admin_without_lists_can_login_and_access_empty_agent_workspace(): void
+    {
+        $company = Company::factory()->create();
+        $admin = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Admin,
+            'password' => bcrypt('password'),
+        ]);
+
+        $this->post('/login', [
+            'email' => $admin->email,
+            'password' => 'password',
+        ])
+            ->assertRedirect(route('choose'));
+
+        $this->assertAuthenticatedAs($admin, 'agent');
+        $this->assertAuthenticatedAs($admin, 'web');
+
+        $this->get(route('agent.workspace'))
+            ->assertOk()
+            ->assertSee('No active lead');
+    }
+
+    public function test_admin_login_redirects_to_chooser(): void
+    {
+        $company = Company::factory()->create();
+        $admin = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Admin,
+            'password' => bcrypt('password'),
+        ]);
+
+        $this->post('/login', [
+            'email' => $admin->email,
+            'password' => 'password',
+        ])->assertRedirect(route('choose'));
+
+        $this->get(route('choose'))
+            ->assertOk()
+            ->assertSee('Admin')
+            ->assertSee('Agent window');
     }
 
     public function test_agent_and_admin_sessions_can_coexist(): void
@@ -86,7 +130,7 @@ class AgentAuthTest extends TestCase
             'calling_list_id' => $list->id,
         ]);
 
-        $this->post('/agent/login', [
+        $this->post('/login', [
             'email' => $agent->email,
             'password' => 'password',
         ])->assertRedirect(route('agent.workspace'));
@@ -129,7 +173,7 @@ class AgentAuthTest extends TestCase
             'calling_list_id' => $list->id,
         ]);
 
-        $this->post('/agent/login', [
+        $this->post('/login', [
             'email' => $agent->email,
             'password' => 'password',
         ])->assertRedirect(route('agent.workspace'));
@@ -137,7 +181,7 @@ class AgentAuthTest extends TestCase
         $this->actingAs($admin, 'web');
 
         $this->post(route('agent.logout'))
-            ->assertRedirect(route('agent.login'));
+            ->assertRedirect(route('login'));
 
         $this->assertGuest('agent');
         $this->assertAuthenticatedAs($admin, 'web');
@@ -173,7 +217,7 @@ class AgentAuthTest extends TestCase
             'calling_list_id' => $list->id,
         ]);
 
-        $this->post('/agent/login', [
+        $this->post('/login', [
             'email' => $agent->email,
             'password' => 'password',
         ])->assertRedirect(route('agent.workspace'));
@@ -191,7 +235,13 @@ class AgentAuthTest extends TestCase
     public function test_unauthenticated_agent_workspace_redirects_to_login(): void
     {
         $this->get(route('agent.workspace'))
-            ->assertRedirect(route('agent.login'));
+            ->assertRedirect(route('login'));
+    }
+
+    public function test_old_login_urls_redirect_to_homepage(): void
+    {
+        $this->get('/agent/login')->assertRedirect('/');
+        $this->get('/admin/login')->assertRedirect('/');
     }
 
     public function test_user_without_list_assignment_cannot_login(): void
@@ -203,12 +253,58 @@ class AgentAuthTest extends TestCase
             'password' => bcrypt('password'),
         ]);
 
-        $response = $this->post('/agent/login', [
+        $response = $this->post('/login', [
             'email' => $user->email,
             'password' => 'password',
         ]);
 
         $response->assertSessionHasErrors('email');
         $this->assertGuest('agent');
+    }
+
+    public function test_admin_sees_admin_link_on_agent_header(): void
+    {
+        $company = Company::factory()->create();
+        $admin = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Admin,
+            'password' => bcrypt('password'),
+        ]);
+
+        $this->actingAs($admin, 'agent');
+
+        $this->get(route('agent.workspace'))
+            ->assertOk()
+            ->assertSee('Admin')
+            ->assertSee('target="_blank"', false);
+    }
+
+    public function test_agent_does_not_see_admin_link_on_agent_header(): void
+    {
+        $company = Company::factory()->create();
+        $user = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Agent,
+            'password' => bcrypt('password'),
+        ]);
+
+        $list = CallingList::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'name' => 'Standard',
+            'lead_type' => 'standard',
+            'active' => true,
+        ]);
+
+        ListAssignment::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'user_id' => $user->id,
+            'calling_list_id' => $list->id,
+        ]);
+
+        $this->actingAs($user, 'agent');
+
+        $this->get(route('agent.workspace'))
+            ->assertOk()
+            ->assertDontSee('href="'.url('/admin').'"', false);
     }
 }

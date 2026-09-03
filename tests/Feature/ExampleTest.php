@@ -14,6 +14,7 @@ class ExampleTest extends TestCase
     {
         $response = $this->get('/');
 
-        $response->assertRedirect(route('agent.login'));
+        $response->assertOk();
+        $response->assertSee('Sign in');
     }
 }

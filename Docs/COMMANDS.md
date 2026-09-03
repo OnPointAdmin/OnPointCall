@@ -11,10 +11,11 @@ Edit code on `D:\`, save, refresh the browser. No local deploy.
 | Check | URL |
 |---|---|
 | Health | http://localhost/up |
+| Sign in | http://localhost/ |
 | Admin | http://localhost/admin |
-| Agent | http://localhost/agent/login |
+| Agent window | http://localhost/agent |
 
-Admin login: `jason.paine@onpointcall.com` / `password`
+Sign in: `jason.paine@onpointcall.com` / `password`
 
 ---
 

@@ -9,16 +9,20 @@ use App\Http\Middleware\SetCompanyContext;
 use App\Livewire\Agent\Workspace;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
-    return redirect()->route('agent.login');
-});
+Route::get('/', [AuthController::class, 'showLogin'])->name('login');
+Route::post('/login', [AuthController::class, 'login']);
+Route::get('/choose', [AuthController::class, 'showChoose'])->name('choose');
 
-Route::get('/agent/login', [AuthController::class, 'showLogin'])->name('agent.login');
-Route::post('/agent/login', [AuthController::class, 'login']);
+Route::redirect('/agent/login', '/');
+Route::redirect('/admin/login', '/');
+
 Route::post('/agent/logout', [AuthController::class, 'logout'])->name('agent.logout');
 
-Route::get('/agent/forgot-password', [PasswordResetController::class, 'showForgotPassword'])->name('agent.password.request');
-Route::post('/agent/forgot-password', [PasswordResetController::class, 'sendResetLink'])->name('agent.password.email');
+Route::get('/forgot-password', [PasswordResetController::class, 'showForgotPassword'])->name('password.request');
+Route::post('/forgot-password', [PasswordResetController::class, 'sendResetLink'])->name('password.email');
+Route::redirect('/agent/forgot-password', '/forgot-password');
+Route::redirect('/admin/password-reset/request', '/forgot-password');
+
 Route::get('/agent/reset-password/{token}', [PasswordResetController::class, 'showResetPassword'])->name('agent.password.reset');
 Route::post('/agent/reset-password', [PasswordResetController::class, 'resetPassword'])->name('agent.password.update');
 

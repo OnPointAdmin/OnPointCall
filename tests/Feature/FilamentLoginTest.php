@@ -18,34 +18,38 @@ class FilamentLoginTest extends TestCase
         $this->withoutMiddleware(PreventRequestForgery::class);
     }
 
-    public function test_filament_login_with_seeded_admin_credentials(): void
+    public function test_homepage_login_with_seeded_admin_credentials(): void
     {
         $this->seed(\Database\Seeders\DatabaseSeeder::class);
         $this->seed(\Database\Seeders\JasonPaineAdminSeeder::class);
 
-        \Livewire\Livewire::test(\Filament\Auth\Pages\Login::class)
-            ->fillForm([
-                'email' => 'jason.paine@onpointmrg.com',
-                'password' => 'password',
-            ])
-            ->call('authenticate')
-            ->assertHasNoFormErrors();
+        $user = User::where('email', 'jason.paine@onpointmrg.com')->firstOrFail();
 
-        $this->assertAuthenticatedAs(
-            User::where('email', 'jason.paine@onpointmrg.com')->firstOrFail()
-        );
-    }
-
-    public function test_agent_login_with_seeded_admin_credentials(): void
-    {
-        $this->seed(\Database\Seeders\DatabaseSeeder::class);
-        $this->seed(\Database\Seeders\JasonPaineAdminSeeder::class);
-
-        $response = $this->post('/agent/login', [
+        $response = $this->post('/login', [
             'email' => 'jason.paine@onpointmrg.com',
             'password' => 'password',
         ]);
 
-        $response->assertRedirect(route('agent.workspace'));
+        $response->assertRedirect(route('choose'));
+
+        $this->assertAuthenticatedAs($user, 'web');
+        $this->assertAuthenticatedAs($user, 'agent');
+
+        $this->get('/admin')->assertOk();
+    }
+
+    public function test_seeded_admin_can_open_agent_workspace_after_homepage_login(): void
+    {
+        $this->seed(\Database\Seeders\DatabaseSeeder::class);
+        $this->seed(\Database\Seeders\JasonPaineAdminSeeder::class);
+
+        $this->post('/login', [
+            'email' => 'jason.paine@onpointmrg.com',
+            'password' => 'password',
+        ])->assertRedirect(route('choose'));
+
+        $this->get(route('agent.workspace'))
+            ->assertOk()
+            ->assertSee('Get Next Lead');
     }
 }
