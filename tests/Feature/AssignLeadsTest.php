@@ -200,6 +200,35 @@ class AssignLeadsTest extends TestCase
             ->assertSet('holdingCount', 0);
     }
 
+    public function test_clear_filters_resets_filters_and_matching_count(): void
+    {
+        [$admin] = $this->setUpAssignPage();
+
+        $inside = $this->makeHoldingLead($admin->company_id, '4045559101', now(), originalSubmitDate: '2026-06-15');
+        $outside = $this->makeHoldingLead($admin->company_id, '4045559102', now(), originalSubmitDate: '2026-05-01');
+
+        Livewire::actingAs($admin)
+            ->test(AssignLeads::class)
+            ->assertActionExists('clearFilters')
+            ->assertSee('Clear Filters')
+            ->assertSet('holdingCount', 2)
+            ->fillForm([
+                'created_from' => '2026-06-01',
+                'created_to' => '2026-06-30',
+            ], 'filterForm')
+            ->call('refreshCountAction')
+            ->assertSet('holdingCount', 1)
+            ->assertCanSeeTableRecords([$inside])
+            ->assertCanNotSeeTableRecords([$outside])
+            ->callAction('clearFilters')
+            ->assertSet('filterData.created_from', null)
+            ->assertSet('filterData.created_to', null)
+            ->assertSet('filterData.lead_type', 'standard')
+            ->assertSet('filterData.source_calling_list_id', 'holding')
+            ->assertSet('holdingCount', 2)
+            ->assertCanSeeTableRecords([$inside, $outside]);
+    }
+
     public function test_create_date_filters_limit_matching_leads(): void
     {
         [$admin] = $this->setUpAssignPage();

@@ -66,15 +66,36 @@ class AssignLeads extends Page implements HasTable
 
     public function mount(HoldingReleaseService $releaseService): void
     {
-        $this->filterForm->fill([
-            'lead_type' => 'standard',
-            'source_calling_list_id' => 'holding',
-        ]);
+        $this->filterForm->fill($this->defaultFilterData());
 
         $this->releaseForm->fill([
             'max_count' => null,
         ]);
 
+        $this->refreshCount($releaseService);
+    }
+
+    /**
+     * @return array<Action>
+     */
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('clearFilters')
+                ->label('Clear Filters')
+                ->icon(Heroicon::OutlinedXMark)
+                ->color('gray')
+                ->action(function (HoldingReleaseService $releaseService): void {
+                    $this->clearFilters($releaseService);
+                }),
+        ];
+    }
+
+    public function clearFilters(HoldingReleaseService $releaseService): void
+    {
+        $reset = array_fill_keys(array_keys($this->filterData ?? []), null);
+
+        $this->filterForm->fill(array_merge($reset, $this->defaultFilterData()));
         $this->refreshCount($releaseService);
     }
 
@@ -405,6 +426,17 @@ class AssignLeads extends Page implements HasTable
         }
 
         return (int) $source;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function defaultFilterData(): array
+    {
+        return [
+            'lead_type' => 'standard',
+            'source_calling_list_id' => 'holding',
+        ];
     }
 
     /**
