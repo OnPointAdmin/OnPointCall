@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\DataTransferObjects\DialableInventory;
 use App\Enums\UserRole;
 use App\Filament\Support\LeadTypeSelect;
 use App\Models\CallingList;
@@ -20,6 +21,8 @@ use Filament\Schemas\Components\Section;
 use Filament\Schemas\Concerns\InteractsWithSchemas;
 use Filament\Schemas\Contracts\HasSchemas;
 use Filament\Schemas\Schema;
+use Filament\Support\Enums\Alignment;
+use Illuminate\Contracts\Support\Htmlable;
 
 class Dashboard extends BaseDashboard implements HasSchemas
 {
@@ -41,7 +44,7 @@ class Dashboard extends BaseDashboard implements HasSchemas
     public ?array $filterData = [];
 
     /**
-     * @var array{totals: array<string, array{label: string, count: int, percent: ?float}>, agents: list<array{user_id: int, name: string, metrics: array<string, array{count: int, percent: ?float}>}>}|null
+     * @var array{totals: array<string, array{label: string, count: int, percent: ?float}>, agents: list<array{user_id: int, name: string, metrics: array<string, array{count: int, percent: ?float}>, lists: list<array{calling_list_id: ?int, name: string, metrics: array<string, array{count: int, percent: ?float}>}>}>}|null
      */
     public ?array $report = null;
 
@@ -123,7 +126,7 @@ class Dashboard extends BaseDashboard implements HasSchemas
                                 ->label('Apply')
                                 ->submit('applyFiltersAction')
                                 ->extraAttributes(['class' => 'dashboard-apply-btn']),
-                        ])->alignment(\Filament\Support\Enums\Alignment::End),
+                        ])->alignment(Alignment::End),
                     ])
                     ->extraAttributes(['class' => 'dashboard-filter-form']),
             ]);
@@ -165,7 +168,7 @@ class Dashboard extends BaseDashboard implements HasSchemas
         $this->applyFilters($dashboardService);
     }
 
-    public function getHeading(): string|\Illuminate\Contracts\Support\Htmlable|null
+    public function getHeading(): string|Htmlable|null
     {
         return '';
     }
@@ -208,7 +211,7 @@ class Dashboard extends BaseDashboard implements HasSchemas
     }
 
     /**
-     * @return list<array{list: CallingList, inventory: \App\DataTransferObjects\DialableInventory}>
+     * @return list<array{list: CallingList, inventory: DialableInventory}>
      */
     public function queueStatuses(): array
     {

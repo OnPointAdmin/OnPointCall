@@ -2,6 +2,10 @@
     display: none;
 }
 
+[x-cloak] {
+    display: none !important;
+}
+
 .dashboard-report {
     display: flex;
     flex-direction: column;
@@ -138,6 +142,42 @@
     color: #0f172a;
 }
 
+.dashboard-section-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.dashboard-section-header .dashboard-section-title {
+    padding: 0;
+}
+
+.dashboard-expand-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.dashboard-expand-btn {
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    color: #334155;
+    border-radius: 0.45rem;
+    padding: 0.35rem 0.7rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.dashboard-expand-btn:hover {
+    background: #f8fafc;
+    border-color: #94a3b8;
+}
+
 .dashboard-stat-row {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(5.5rem, 1fr));
@@ -226,8 +266,7 @@
     color: #64748b;
 }
 
-.dashboard-table .dashboard-section-title {
-    padding-bottom: 1rem;
+.dashboard-table .dashboard-section-header {
     border-bottom: 1px solid #e2e8f0;
 }
 
@@ -280,6 +319,47 @@
     background: #fff;
     font-weight: 700;
     color: #0f172a;
+}
+
+.dashboard-rep-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+    text-align: left;
+}
+
+.dashboard-rep-chevron {
+    flex-shrink: 0;
+    transition: transform 0.12s ease;
+}
+
+.dashboard-rep-chevron.is-open {
+    transform: rotate(90deg);
+}
+
+.dashboard-table tbody tr.list-row td {
+    background: #f8fafc;
+    font-weight: 500;
+}
+
+.dashboard-table tbody tr.list-row td.col-start {
+    background: #f8fafc;
+    font-weight: 500;
+    padding-left: 2.35rem;
+    color: #475569;
+}
+
+.dashboard-table tbody tr.list-row:hover td,
+.dashboard-table tbody tr.list-row:hover td.col-start {
+    background: #f1f5f9;
 }
 
 .dashboard-table tbody td {

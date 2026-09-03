@@ -4,6 +4,12 @@
         $totals = $report['totals'] ?? [];
         $agents = $report['agents'] ?? [];
         $metricDefinitions = $this->metricDefinitions();
+        $multiListAgentIds = collect($agents)
+            ->filter(fn (array $agent): bool => count($agent['lists'] ?? []) > 1)
+            ->pluck('user_id')
+            ->map(fn (mixed $id): int => (int) $id)
+            ->values()
+            ->all();
     @endphp
 
     <div class="dashboard-report">
@@ -73,8 +79,35 @@
             </p>
         </div>
 
-        <div class="dashboard-card dashboard-table">
-            <h2 class="dashboard-section-title">Results by Rep</h2>
+        <div
+            class="dashboard-card dashboard-table"
+            x-data="{
+                expandedIds: [],
+                multiIds: {{ json_encode($multiListAgentIds) }},
+                toggle(id) {
+                    const index = this.expandedIds.indexOf(id);
+                    if (index === -1) {
+                        this.expandedIds.push(id);
+                    } else {
+                        this.expandedIds.splice(index, 1);
+                    }
+                },
+                expandAll() {
+                    this.expandedIds = [...this.multiIds];
+                },
+                collapseAll() {
+                    this.expandedIds = [];
+                }
+            }"
+        >
+            <div class="dashboard-section-header">
+                <h2 class="dashboard-section-title">Results by Rep</h2>
+
+                <div class="dashboard-expand-actions" x-show="multiIds.length > 0" x-cloak>
+                    <button type="button" class="dashboard-expand-btn" x-on:click="expandAll()">Expand all</button>
+                    <button type="button" class="dashboard-expand-btn" x-on:click="collapseAll()">Collapse all</button>
+                </div>
+            </div>
 
             <div class="dashboard-table-scroll">
                 <table>
@@ -99,8 +132,29 @@
                     </thead>
                     <tbody>
                         @forelse ($agents as $agent)
+                            @php
+                                $agentId = (int) $agent['user_id'];
+                                $agentLists = $agent['lists'] ?? [];
+                                $canExpand = count($agentLists) > 1;
+                            @endphp
                             <tr>
-                                <td class="col-start">{{ $agent['name'] }}</td>
+                                <td class="col-start">
+                                    @if ($canExpand)
+                                        <button
+                                            type="button"
+                                            class="dashboard-rep-toggle"
+                                            x-on:click="toggle({{ $agentId }})"
+                                            :aria-expanded="expandedIds.includes({{ $agentId }})"
+                                        >
+                                            <svg class="dashboard-rep-chevron" :class="{ 'is-open': expandedIds.includes({{ $agentId }}) }" width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M7 5l6 5-6 5" />
+                                            </svg>
+                                            {{ $agent['name'] }}
+                                        </button>
+                                    @else
+                                        {{ $agent['name'] }}
+                                    @endif
+                                </td>
                                 <td>{{ number_format($agent['metrics']['total_leads_called']['count'] ?? 0) }}</td>
                                 @foreach ($metricDefinitions as $definition)
                                     @continue($definition['key'] === 'total_leads_called')
@@ -113,6 +167,24 @@
                                     <td class="muted">{{ $this->formatPercent($agent['metrics'], $definition['key']) }}</td>
                                 @endforeach
                             </tr>
+                            @if ($canExpand)
+                                @foreach ($agentLists as $list)
+                                    <tr class="list-row" x-show="expandedIds.includes({{ $agentId }})" x-cloak>
+                                        <td class="col-start">{{ $list['name'] }}</td>
+                                        <td>{{ number_format($list['metrics']['total_leads_called']['count'] ?? 0) }}</td>
+                                        @foreach ($metricDefinitions as $definition)
+                                            @continue($definition['key'] === 'total_leads_called')
+
+                                            @php
+                                                $metric = $list['metrics'][$definition['key']] ?? ['count' => 0, 'percent' => null];
+                                            @endphp
+
+                                            <td class="split">{{ number_format($metric['count'] ?? 0) }}</td>
+                                            <td class="muted">{{ $this->formatPercent($list['metrics'], $definition['key']) }}</td>
+                                        @endforeach
+                                    </tr>
+                                @endforeach
+                            @endif
                         @empty
                             <tr class="empty-row">
                                 <td colspan="{{ 2 + ((count($metricDefinitions) - 1) * 2) }}">

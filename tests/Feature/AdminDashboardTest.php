@@ -303,4 +303,75 @@ class AdminDashboardTest extends TestCase
             ->assertSee('Calling list')
             ->assertSee('Standard');
     }
+
+    public function test_dashboard_includes_calling_list_rows_under_rep(): void
+    {
+        $company = Company::factory()->create();
+        $admin = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Admin,
+            'active' => true,
+        ]);
+        $agent = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Agent,
+            'active' => true,
+            'name' => 'Alice Rep',
+        ]);
+
+        AppSetting::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'max_attempts' => 6,
+            'claim_ttl_minutes' => 20,
+            'dashboard_email_timezone' => 'America/New_York',
+        ]);
+
+        $standardList = $this->createCallingList($company->id, overrides: ['name' => 'Standard AM']);
+        $tnbList = $this->createCallingList($company->id, overrides: ['name' => 'TNB']);
+
+        $standardLead = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045559301',
+            'status' => LeadStatus::Callable,
+            'lead_type' => 'standard',
+            'calling_list_id' => $standardList->id,
+            'imported_at' => now(),
+        ]);
+        $tnbLead = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045559302',
+            'status' => LeadStatus::Callable,
+            'lead_type' => 'tnb',
+            'calling_list_id' => $tnbList->id,
+            'imported_at' => now(),
+        ]);
+
+        LeadHistory::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'lead_id' => $standardLead->id,
+            'actor_id' => $agent->id,
+            'event_type' => LeadHistoryType::Disposition,
+            'occurred_at' => now(),
+            'payload' => ['disposition' => Disposition::Booked->value],
+        ]);
+        LeadHistory::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'lead_id' => $tnbLead->id,
+            'actor_id' => $agent->id,
+            'event_type' => LeadHistoryType::Disposition,
+            'occurred_at' => now(),
+            'payload' => ['disposition' => Disposition::NotInterested->value],
+        ]);
+
+        CompanyContext::set($company->id);
+
+        Livewire::actingAs($admin)
+            ->test(Dashboard::class)
+            ->assertSee('Results by Rep')
+            ->assertSee('Alice Rep')
+            ->assertSee('Standard AM')
+            ->assertSee('TNB')
+            ->assertSee('Expand all')
+            ->assertSee('Collapse all');
+    }
 }

@@ -161,6 +161,44 @@ class ManagerDashboardServiceTest extends TestCase
         $this->assertSame(0, $holdingReport['totals']['booked']['count']);
     }
 
+    public function test_report_breaks_down_results_by_calling_list(): void
+    {
+        $company = Company::factory()->create();
+        $agent = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Agent,
+            'name' => 'Alice',
+        ]);
+
+        $standardList = $this->createCallingList($company->id, overrides: ['name' => 'Standard AM']);
+        $tnbList = $this->createCallingList($company->id, overrides: ['name' => 'TNB']);
+
+        $standardLead = $this->createLead($company->id, 'standard', $standardList->id);
+        $tnbLead = $this->createLead($company->id, 'tnb', $tnbList->id);
+        $holdingLead = $this->createLead($company->id, 'standard');
+
+        $this->createDisposition($company->id, $standardLead->id, $agent->id, Disposition::Booked);
+        $this->createDisposition($company->id, $tnbLead->id, $agent->id, Disposition::NotInterested);
+        $this->createDisposition($company->id, $holdingLead->id, $agent->id, Disposition::NoAnswer);
+
+        $service = app(ManagerDashboardService::class);
+        $range = $service->todayRange($company->id);
+        $report = $service->report($company->id, null, null, $range['start'], $range['end']);
+
+        $this->assertCount(1, $report['agents']);
+        $this->assertSame(3, $report['agents'][0]['metrics']['total_leads_called']['count']);
+        $this->assertSame(1, $report['agents'][0]['metrics']['booked']['count']);
+        $this->assertSame(['Standard AM', 'TNB', 'Holding'], array_column($report['agents'][0]['lists'], 'name'));
+
+        $lists = collect($report['agents'][0]['lists'])->keyBy('name');
+        $this->assertSame($standardList->id, $lists['Standard AM']['calling_list_id']);
+        $this->assertSame(1, $lists['Standard AM']['metrics']['booked']['count']);
+        $this->assertSame(1, $lists['Standard AM']['metrics']['total_leads_called']['count']);
+        $this->assertSame(1, $lists['TNB']['metrics']['not_interested']['count']);
+        $this->assertSame(1, $lists['Holding']['metrics']['no_answer_vm']['count']);
+        $this->assertNull($lists['Holding']['calling_list_id']);
+    }
+
     public function test_overdue_callbacks_use_live_snapshot_not_history_range(): void
     {
         $company = Company::factory()->create();
@@ -191,6 +229,47 @@ class ManagerDashboardServiceTest extends TestCase
         $this->assertSame(0, $report['totals']['total_leads_called']['count']);
         $this->assertSame(1, $report['totals']['overdue_callbacks']['count']);
         $this->assertSame(1, $report['agents'][0]['metrics']['overdue_callbacks']['count']);
+    }
+
+    public function test_report_overdue_callbacks_break_down_by_calling_list(): void
+    {
+        $company = Company::factory()->create();
+        $agent = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Agent,
+        ]);
+        $list = $this->createCallingList($company->id, overrides: ['name' => 'Standard AM']);
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045559001',
+            'status' => LeadStatus::Callback,
+            'lead_type' => 'standard',
+            'calling_list_id' => $list->id,
+            'callback_owner_id' => $agent->id,
+            'callback_at' => now()->subDay(),
+            'imported_at' => now(),
+        ]);
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045559002',
+            'status' => LeadStatus::Callback,
+            'lead_type' => 'standard',
+            'callback_owner_id' => $agent->id,
+            'callback_at' => now()->subDay(),
+            'imported_at' => now(),
+        ]);
+
+        $service = app(ManagerDashboardService::class);
+        $range = $service->todayRange($company->id);
+        $report = $service->report($company->id, null, null, $range['start'], $range['end']);
+
+        $this->assertSame(2, $report['totals']['overdue_callbacks']['count']);
+        $this->assertSame(2, $report['agents'][0]['metrics']['overdue_callbacks']['count']);
+
+        $lists = collect($report['agents'][0]['lists'])->keyBy('name');
+        $this->assertSame(1, $lists['Standard AM']['metrics']['overdue_callbacks']['count']);
+        $this->assertSame(1, $lists['Holding']['metrics']['overdue_callbacks']['count']);
     }
 
     public function test_date_presets_use_monday_sunday_weeks(): void

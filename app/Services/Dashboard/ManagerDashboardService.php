@@ -7,14 +7,16 @@ use App\Enums\DispositionReportGroup;
 use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
 use App\Enums\UserRole;
-use App\Models\DispositionDefinition;
 use App\Models\AppSetting;
+use App\Models\CallingList;
+use App\Models\DispositionDefinition;
 use App\Models\Lead;
 use App\Models\LeadHistory;
 use App\Models\User;
 use App\Support\CompanyTimezone;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 
 class ManagerDashboardService
 {
@@ -67,7 +69,7 @@ class ManagerDashboardService
     }
 
     /**
-     * @return array{totals: array<string, array{label: string, count: int, percent: ?float}>, agents: list<array{user_id: int, name: string, metrics: array<string, array{count: int, percent: ?float}>}>}
+     * @return array{totals: array<string, array{label: string, count: int, percent: ?float}>, agents: list<array{user_id: int, name: string, metrics: array<string, array{count: int, percent: ?float}>, lists: list<array{calling_list_id: ?int, name: string, metrics: array<string, array{count: int, percent: ?float}>}>}>}
      */
     public function report(
         int $companyId,
@@ -77,10 +79,16 @@ class ManagerDashboardService
         Carbon $end,
         int|string|null $callingListId = null,
     ): array {
-        $history = $this->historyQuery($companyId, $actorId, $leadType, $start, $end, $callingListId)->get();
-        $overdueByOwner = $this->overdueCallbacksByOwner($companyId, $actorId, $leadType, $callingListId);
+        $history = $this->historyQuery($companyId, $actorId, $leadType, $start, $end, $callingListId)
+            ->with(['lead' => function ($leadQuery): void {
+                $leadQuery->withoutGlobalScopes()->select('id', 'calling_list_id');
+            }])
+            ->get();
+        $overdueByOwnerAndList = $this->overdueCallbacksByOwnerAndList($companyId, $actorId, $leadType, $callingListId);
 
         $agentBuckets = [];
+        $agentListBuckets = [];
+        $listIds = [];
         $totals = $this->emptyMetrics();
 
         $reportGroupMap = $this->reportGroupMap($companyId);
@@ -91,13 +99,43 @@ class ManagerDashboardService
             }
 
             $actorKey = (int) $row->actor_id;
+            $callingListIdForRow = $row->lead?->calling_list_id !== null
+                ? (int) $row->lead->calling_list_id
+                : null;
+            $listKey = $this->listKey($callingListIdForRow);
+
+            if ($callingListIdForRow !== null) {
+                $listIds[$callingListIdForRow] = $callingListIdForRow;
+            }
 
             if (! isset($agentBuckets[$actorKey])) {
                 $agentBuckets[$actorKey] = $this->emptyMetrics();
             }
 
+            if (! isset($agentListBuckets[$actorKey][$listKey])) {
+                $agentListBuckets[$actorKey][$listKey] = $this->emptyMetrics();
+            }
+
             $this->applyHistoryRow($totals, $row, $reportGroupMap);
             $this->applyHistoryRow($agentBuckets[$actorKey], $row, $reportGroupMap);
+            $this->applyHistoryRow($agentListBuckets[$actorKey][$listKey], $row, $reportGroupMap);
+        }
+
+        foreach ($overdueByOwnerAndList as $byList) {
+            foreach (array_keys($byList) as $listKey) {
+                if ($listKey === 'holding') {
+                    continue;
+                }
+
+                $id = (int) $listKey;
+                $listIds[$id] = $id;
+            }
+        }
+
+        $overdueByOwner = [];
+
+        foreach ($overdueByOwnerAndList as $ownerId => $byList) {
+            $overdueByOwner[(int) $ownerId] = array_sum($byList);
         }
 
         $totals['overdue_callbacks']['count'] = array_sum($overdueByOwner);
@@ -107,6 +145,10 @@ class ManagerDashboardService
             ->where('company_id', $companyId)
             ->get()
             ->keyBy('id');
+
+        $listNames = CallingList::withoutGlobalScopes()
+            ->whereIn('id', array_values($listIds))
+            ->pluck('name', 'id');
 
         $agentIds = $this->resolveAgentIds($companyId, $actorId, array_keys($agentBuckets), array_keys($overdueByOwner));
 
@@ -121,6 +163,11 @@ class ManagerDashboardService
                 'user_id' => $agentId,
                 'name' => $users->get($agentId)?->name ?? 'Unknown',
                 'metrics' => $metrics,
+                'lists' => $this->buildAgentLists(
+                    $agentListBuckets[$agentId] ?? [],
+                    $overdueByOwnerAndList[$agentId] ?? [],
+                    $listNames,
+                ),
             ];
         }
 
@@ -442,9 +489,9 @@ class ManagerDashboardService
     }
 
     /**
-     * @return array<int, int>
+     * @return array<int, array<string, int>>
      */
-    private function overdueCallbacksByOwner(
+    private function overdueCallbacksByOwnerAndList(
         int $companyId,
         ?int $actorId,
         ?string $leadType,
@@ -465,12 +512,83 @@ class ManagerDashboardService
 
         $this->constrainCallingList($query, $callingListId);
 
-        return $query
-            ->selectRaw('callback_owner_id, count(*) as aggregate_count')
-            ->groupBy('callback_owner_id')
-            ->pluck('aggregate_count', 'callback_owner_id')
-            ->mapWithKeys(fn (mixed $count, mixed $ownerId): array => [(int) $ownerId => (int) $count])
-            ->all();
+        $rows = $query
+            ->selectRaw('callback_owner_id, calling_list_id, count(*) as aggregate_count')
+            ->groupBy('callback_owner_id', 'calling_list_id')
+            ->get();
+
+        $grouped = [];
+
+        foreach ($rows as $row) {
+            $ownerId = (int) $row->callback_owner_id;
+            $listKey = $this->listKey($row->calling_list_id !== null ? (int) $row->calling_list_id : null);
+            $grouped[$ownerId][$listKey] = (int) $row->aggregate_count;
+        }
+
+        return $grouped;
+    }
+
+    /**
+     * @param  array<string, array<string, array{label: string, count: int, percent: ?float}>>  $listBuckets
+     * @param  array<string, int>  $overdueByList
+     * @param  Collection<int, string>  $listNames
+     * @return list<array{calling_list_id: ?int, name: string, metrics: array<string, array{count: int, percent: ?float}>}>
+     */
+    private function buildAgentLists(array $listBuckets, array $overdueByList, Collection $listNames): array
+    {
+        $keys = collect(array_keys($listBuckets))
+            ->merge(array_keys($overdueByList))
+            ->unique()
+            ->values();
+
+        $lists = [];
+
+        foreach ($keys as $key) {
+            $metrics = $listBuckets[$key] ?? $this->emptyMetrics();
+            $metrics['overdue_callbacks']['count'] = $overdueByList[$key] ?? 0;
+            $this->applyPercents($metrics);
+
+            $lists[] = [
+                'calling_list_id' => $this->callingListIdFromKey((string) $key),
+                'name' => $this->listName((string) $key, $listNames),
+                'metrics' => $metrics,
+            ];
+        }
+
+        usort($lists, function (array $a, array $b): int {
+            $aHolding = $a['calling_list_id'] === null;
+            $bHolding = $b['calling_list_id'] === null;
+
+            if ($aHolding !== $bHolding) {
+                return $aHolding ? 1 : -1;
+            }
+
+            return strcasecmp($a['name'], $b['name']);
+        });
+
+        return $lists;
+    }
+
+    private function listKey(?int $callingListId): string
+    {
+        return $callingListId === null ? 'holding' : (string) $callingListId;
+    }
+
+    private function callingListIdFromKey(string $key): ?int
+    {
+        return $key === 'holding' ? null : (int) $key;
+    }
+
+    /**
+     * @param  Collection<int, string>  $listNames
+     */
+    private function listName(string $key, Collection $listNames): string
+    {
+        if ($key === 'holding') {
+            return 'Holding';
+        }
+
+        return $listNames->get((int) $key) ?? 'Unknown list';
     }
 
     private function historyQuery(
