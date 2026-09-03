@@ -52,6 +52,7 @@ class AdminDashboardTest extends TestCase
             ->test(Dashboard::class)
             ->assertSet('report', fn (?array $report): bool => is_array($report) && isset($report['totals'], $report['agents']))
             ->assertSee('Total Leads Called')
+            ->assertSeeHtml('<th rowspan="2">Total</th>')
             ->assertSee('No Answer / VM')
             ->assertSee('Wrong / DNC')
             ->assertSee('Calling list');

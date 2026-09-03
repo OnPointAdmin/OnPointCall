@@ -114,7 +114,7 @@
                     <thead>
                         <tr>
                             <th rowspan="2" class="col-start">Rep</th>
-                            <th rowspan="2">Total Leads Called</th>
+                            <th rowspan="2">Total</th>
                             @foreach ($metricDefinitions as $definition)
                                 @continue($definition['key'] === 'total_leads_called')
 
