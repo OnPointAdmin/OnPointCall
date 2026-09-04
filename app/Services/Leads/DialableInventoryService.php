@@ -10,6 +10,7 @@ use App\Models\Lead;
 use App\Models\LeadClaim;
 use App\Models\LeadHistory;
 use App\Services\Compliance\ComplianceService;
+use App\Services\Compliance\DayPartResolver;
 use App\Services\Dashboard\LeadDashboardService;
 use App\Services\Dashboard\ManagerDashboardService;
 use App\Support\CadenceDefaults;
@@ -25,6 +26,7 @@ class DialableInventoryService
         private readonly ComplianceService $compliance,
         private readonly LeadDashboardService $leadDashboard,
         private readonly ManagerDashboardService $managerDashboard,
+        private readonly DayPartResolver $dayParts,
     ) {}
 
     public function forList(CallingList $list): DialableInventory
@@ -180,6 +182,8 @@ class DialableInventoryService
 
             if ($this->compliance->canDialNow($lead)) {
                 $buckets[$listId]['readyNow']++;
+                $readyPart = $this->cadenceDayPartKey($this->dayParts->currentDayPart($lead));
+                $buckets[$listId]['readyNowByDayPart'][$readyPart]++;
 
                 continue;
             }
@@ -242,9 +246,10 @@ class DialableInventoryService
                 cadenceWaitSlots: $this->cadenceWaitSlotRows(
                     $bucket,
                     $timezone,
-                    $this->cadenceWindowTemplate($lists->get($listId), $timezone),
+                    $this->cadenceWindowStarts($lists->get($listId)),
                 ),
                 timezone: $timezone,
+                readyNowByDayPart: $bucket['readyNowByDayPart'],
             );
         }
 
@@ -253,81 +258,121 @@ class DialableInventoryService
 
     /**
      * @param  array<string, mixed>  $bucket
-     * @param  list<array{key: string, label: string}>  $templateSlots
+     * @param  array<string, string>  $windowStarts
      * @return list<array{label: string, count: int}>
      */
-    private function cadenceWaitSlotRows(array $bucket, string $timezone, array $templateSlots): array
+    private function cadenceWaitSlotRows(array $bucket, string $timezone, array $windowStarts): array
     {
         if ($bucket['waitingCadence'] === 0) {
             return [];
         }
 
-        $afterTomorrow = $bucket['cadenceWaitSlotCounts']['later'] ?? 0;
+        $today = Carbon::now($timezone)->toDateString();
+        $tomorrow = Carbon::now($timezone)->copy()->addDay()->toDateString();
+        $partOrder = array_flip([...CadenceDefaults::DAY_PARTS, 'other']);
+        $rows = [];
+        $afterTomorrowByPart = [];
+        $unscheduled = $bucket['cadenceWaitSlotCounts']['later'] ?? 0;
 
         foreach ($bucket['cadenceWaitSlotCounts'] as $key => $count) {
             if ($key === 'later' || $count === 0) {
                 continue;
             }
 
-            if (! in_array($key, array_column($templateSlots, 'key'), true)) {
-                $afterTomorrow += $count;
+            [$date, $dayPart] = array_pad(explode('|', $key, 2), 2, 'other');
+            $dayPart = $this->cadenceDayPartKey($dayPart);
+            $windowStart = $windowStarts[$dayPart] ?? '00:00';
+
+            if ($date === $today || $date === $tomorrow) {
+                $rows[] = [
+                    'label' => DialableInventory::formatCadenceWindowLabel(
+                        $date,
+                        $dayPart,
+                        $windowStart,
+                        $timezone,
+                    ),
+                    'count' => $count,
+                    'date' => $date,
+                    'start' => $windowStart,
+                    'part' => $dayPart,
+                ];
+
+                continue;
             }
+
+            $afterTomorrowByPart[$dayPart] = ($afterTomorrowByPart[$dayPart] ?? 0) + $count;
         }
 
-        $rows = [];
-
-        foreach ($templateSlots as $slot) {
+        foreach ($afterTomorrowByPart as $dayPart => $count) {
             $rows[] = [
-                'label' => $slot['label'],
-                'count' => $bucket['cadenceWaitSlotCounts'][$slot['key']] ?? 0,
+                'label' => $this->afterTomorrowPartLabel($dayPart, $timezone, $windowStarts),
+                'count' => $count,
+                'date' => '9999-12-31',
+                'start' => $windowStarts[$dayPart] ?? '99:99',
+                'part' => $dayPart,
             ];
         }
 
-        if ($afterTomorrow > 0) {
+        if ($unscheduled > 0) {
             $rows[] = [
                 'label' => 'After tomorrow',
-                'count' => $afterTomorrow,
+                'count' => $unscheduled,
+                'date' => '9999-12-31',
+                'start' => '99:99',
+                'part' => 'other',
             ];
         }
 
-        return $rows;
+        usort(
+            $rows,
+            function (array $left, array $right) use ($partOrder): int {
+                return [$left['date'], $left['start'], $partOrder[$left['part']] ?? 99]
+                    <=> [$right['date'], $right['start'], $partOrder[$right['part']] ?? 99];
+            },
+        );
+
+        return array_map(
+            fn (array $row): array => [
+                'label' => $row['label'],
+                'count' => $row['count'],
+            ],
+            $rows,
+        );
     }
 
     /**
-     * @return list<array{key: string, label: string}>
+     * @param  array<string, string>  $windowStarts
      */
-    private function cadenceWindowTemplate(?CallingList $list, string $timezone): array
+    private function afterTomorrowPartLabel(string $dayPart, string $timezone, array $windowStarts): string
     {
-        $now = Carbon::now($timezone);
-        $dates = [
-            $now->toDateString(),
-            $now->copy()->addDay()->toDateString(),
-        ];
-
-        $slots = [];
-
-        foreach ($this->enabledCadenceDayParts($list) as $part) {
-            foreach ($dates as $date) {
-                $windowStart = Carbon::parse($date.' '.$part['window_start'], $timezone);
-
-                if ($windowStart->lte($now)) {
-                    continue;
-                }
-
-                $key = $date.'|'.$part['day_part'];
-                $slots[] = [
-                    'key' => $key,
-                    'label' => DialableInventory::formatCadenceWindowLabel(
-                        $date,
-                        $part['day_part'],
-                        $part['window_start'],
-                        $timezone,
-                    ),
-                ];
-            }
+        if ($dayPart === 'other' || ! isset($windowStarts[$dayPart])) {
+            return 'After tomorrow';
         }
 
-        return $slots;
+        $local = Carbon::parse(
+            Carbon::now($timezone)->toDateString().' '.$windowStarts[$dayPart],
+            $timezone,
+        );
+
+        return 'After tomorrow, '.CadenceDefaults::label($dayPart).' · '.$local->format('g:i A T');
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function cadenceWindowStarts(?CallingList $list): array
+    {
+        $starts = [];
+
+        foreach (CadenceDefaults::windows() as $part => [$start]) {
+            $starts[$part] = $start;
+        }
+
+        foreach ($this->enabledCadenceDayParts($list) as $part) {
+            $starts[$part['day_part']] = $part['window_start'];
+        }
+
+        return $starts;
     }
 
     /**
@@ -406,6 +451,12 @@ class DialableInventoryService
             'cadenceWaitSlotCounts' => [],
             'callbacksDue' => 0,
             'callbacksScheduled' => 0,
+            'readyNowByDayPart' => [
+                'morning' => 0,
+                'afternoon' => 0,
+                'evening' => 0,
+                'other' => 0,
+            ],
         ];
     }
 

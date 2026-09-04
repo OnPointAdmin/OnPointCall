@@ -12,6 +12,7 @@ readonly class DialableInventory
      * @param  array{morning: int, afternoon: int, evening: int, other: int}  $cadenceByDayPart
      * @param  array{morning: ?string, afternoon: ?string, evening: ?string, other: ?string}  $cadenceEarliestByPart
      * @param  list<array{label: string, count: int}>  $cadenceWaitSlots
+     * @param  array{morning: int, afternoon: int, evening: int, other: int}  $readyNowByDayPart
      */
     public function __construct(
         public int $readyNow,
@@ -36,6 +37,12 @@ readonly class DialableInventory
         ],
         public array $cadenceWaitSlots = [],
         public ?string $timezone = null,
+        public array $readyNowByDayPart = [
+            'morning' => 0,
+            'afternoon' => 0,
+            'evening' => 0,
+            'other' => 0,
+        ],
     ) {}
 
     public static function empty(?string $timezone = null): self
@@ -62,6 +69,7 @@ readonly class DialableInventory
             cadenceEarliestByPart: $this->cadenceEarliestByPart,
             cadenceWaitSlots: $this->cadenceWaitSlots,
             timezone: $timezone,
+            readyNowByDayPart: $this->readyNowByDayPart,
         );
     }
 
@@ -84,6 +92,42 @@ readonly class DialableInventory
     public function cadenceDayPartDescription(): string
     {
         return implode(' · ', $this->cadenceDayPartSummary());
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function readyNowDayPartSummary(): array
+    {
+        $present = [];
+
+        foreach ($this->readyNowByDayPart as $part => $count) {
+            if ($count > 0) {
+                $present[$part] = $count;
+            }
+        }
+
+        if ($present === []) {
+            return [];
+        }
+
+        $mixed = count($present) > 1;
+
+        $parts = [];
+
+        foreach ($present as $part => $count) {
+            $label = CadenceDefaults::label($part);
+            $parts[] = $mixed ? $count.' '.$label : $label;
+        }
+
+        return $parts;
+    }
+
+    public function readyNowDayPartDescription(): ?string
+    {
+        $parts = $this->readyNowDayPartSummary();
+
+        return $parts === [] ? null : implode(' · ', $parts);
     }
 
     public function cadenceWaitSlotDescription(): string
@@ -111,7 +155,12 @@ readonly class DialableInventory
     public function queueStatusRows(): array
     {
         $rows = [
-            ['label' => 'Ready now', 'count' => $this->readyNow, 'indent' => false, 'timing' => null],
+            [
+                'label' => 'Ready now',
+                'count' => $this->readyNow,
+                'indent' => false,
+                'timing' => $this->readyNowDayPartDescription(),
+            ],
         ];
 
         if ($this->waitingCadence > 0) {

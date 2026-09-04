@@ -256,7 +256,12 @@
                                         {{ $list->name }}
                                     </a>
                                 </td>
-                                <td>{{ number_format($inventory->readyNow) }}</td>
+                                <td>
+                                    <div>{{ number_format($inventory->readyNow) }}</div>
+                                    @foreach ($inventory->readyNowDayPartSummary() as $line)
+                                        <div class="dashboard-queue-timing">{{ $line }}</div>
+                                    @endforeach
+                                </td>
                                 <td>{{ number_format($inventory->waitingCadence) }}</td>
                                 <td class="dashboard-queue-timing">
                                     @if ($inventory->waitingCadence > 0)

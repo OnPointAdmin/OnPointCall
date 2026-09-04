@@ -16,7 +16,7 @@
                         {{ $row['label'] }}
                         @if (! empty($row['timing']))
                             <div style="font-size:0.75rem;color:rgba(100,116,139,1);margin-top:0.15rem;">
-                                Earliest: {{ $row['timing'] }}
+                                {{ $row['timing'] }}
                             </div>
                         @endif
                     </td>
