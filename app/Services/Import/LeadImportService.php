@@ -547,6 +547,12 @@ class LeadImportService
 
         $attributes['phone'] = PhoneNormalizer::normalize($attributes['phone']);
         $attributes['phone_2'] = PhoneNormalizer::normalize($attributes['phone_2']);
+
+        if ($attributes['phone'] === null && $attributes['phone_2'] !== null) {
+            $attributes['phone'] = $attributes['phone_2'];
+            $attributes['phone_2'] = null;
+        }
+
         $attributes['state'] = $attributes['state'] ? strtoupper(substr($attributes['state'], 0, 2)) : null;
         $attributes['timezone'] = TimezoneResolver::resolve(
             $attributes['state'],

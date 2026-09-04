@@ -303,6 +303,8 @@ class LeadImportServiceTest extends TestCase
         $this->assertNotNull($tnb);
         $this->assertFalse($tnb->is_default);
         $this->assertSame('tnb', $tnb->lead_type);
+        $this->assertSame('caller_id', $tnb->column_map['phone'] ?? null);
+        $this->assertSame('Phone_2', $tnb->column_map['phone_2'] ?? null);
 
         $csv = implode("\n", [
             'caller_id,first_name,last_name,address,city,state,zip,email,AgeRange,annual_income,Marital Status,Gender,HomeOwner,OP_Id,Venue,Event,original_lead_submit_date,PartnerList,File Name,BookingId,Phone_2,FirstName2,LastName2,Address2,TourLocation,TourDate,Premiums,Tour_Result,TourOrNoShow',
@@ -326,13 +328,13 @@ class LeadImportServiceTest extends TestCase
 
         $lead = Lead::withoutGlobalScopes()
             ->where('company_id', $company->id)
-            ->where('phone', '4045553333')
+            ->where('phone', '4045551111')
             ->first();
 
         $this->assertNotNull($lead);
         $this->assertSame('tnb', $lead->lead_type);
         $this->assertSame('BK-100', $lead->booking_id);
-        $this->assertSame('4045551111', $lead->phone_2);
+        $this->assertSame('4045553333', $lead->phone_2);
         $this->assertSame('Sam', $lead->first_name);
         $this->assertSame('Smith', $lead->last_name);
         $this->assertSame('Pat', $lead->first_name_2);
@@ -349,6 +351,87 @@ class LeadImportServiceTest extends TestCase
         $this->assertSame('2 Nights', $lead->premiums);
         $this->assertSame('Completed', $lead->tour_result);
         $this->assertSame('Show', $lead->tour_or_no_show);
+    }
+
+    public function test_tnb_mapping_imports_when_phone_2_is_empty(): void
+    {
+        $company = Company::factory()->create();
+        CompanyContext::set($company->id);
+
+        (new ImportMappingSeeder)->run($company->id);
+
+        $tnb = ImportMapping::query()->where('name', 'TNB')->first();
+
+        $csv = implode("\n", [
+            'caller_id,first_name,last_name,Phone_2,OP_Id',
+            '4045551111,Sam,Smith,,OP-TNB-EMPTY',
+        ]);
+
+        $path = storage_path('app/imports/tnb-empty-phone-2.csv');
+        if (! is_dir(dirname($path))) {
+            mkdir(dirname($path), 0777, true);
+        }
+        file_put_contents($path, $csv);
+
+        $service = app(LeadImportService::class);
+        $batch = $service->createBatch($company->id, 'tnb-empty-phone-2.csv', 'tnb', false);
+
+        $result = $service->process($batch, $path, $tnb->column_map, 'tnb');
+
+        CompanyContext::clear();
+
+        $this->assertSame(1, $result['inserted_count']);
+        $this->assertSame(0, $result['duplicate_count']);
+        $this->assertSame(0, $batch->skippedRows()->count());
+
+        $lead = Lead::withoutGlobalScopes()
+            ->where('company_id', $company->id)
+            ->where('phone', '4045551111')
+            ->first();
+
+        $this->assertNotNull($lead);
+        $this->assertNull($lead->phone_2);
+        $this->assertSame('Sam', $lead->first_name);
+    }
+
+    public function test_import_uses_phone_2_when_mapped_phone_is_empty(): void
+    {
+        $company = Company::factory()->create();
+        CompanyContext::set($company->id);
+
+        $csv = implode("\n", [
+            'caller_id,first_name,Phone_2',
+            '4045552222,Sam,',
+        ]);
+
+        $path = storage_path('app/imports/tnb-phone-fallback.csv');
+        if (! is_dir(dirname($path))) {
+            mkdir(dirname($path), 0777, true);
+        }
+        file_put_contents($path, $csv);
+
+        $service = app(LeadImportService::class);
+        $batch = $service->createBatch($company->id, 'tnb-phone-fallback.csv', 'tnb', false);
+
+        $result = $service->process($batch, $path, [
+            'phone' => 'Phone_2',
+            'phone_2' => 'caller_id',
+            'first_name' => 'first_name',
+        ], 'tnb');
+
+        CompanyContext::clear();
+
+        $this->assertSame(1, $result['inserted_count']);
+        $this->assertSame(0, $batch->skippedRows()->count());
+
+        $lead = Lead::withoutGlobalScopes()
+            ->where('company_id', $company->id)
+            ->where('phone', '4045552222')
+            ->first();
+
+        $this->assertNotNull($lead);
+        $this->assertNull($lead->phone_2);
+        $this->assertSame('Sam', $lead->first_name);
     }
 
     public function test_refresh_lead_fields_from_source_fills_fields_missed_by_original_map(): void

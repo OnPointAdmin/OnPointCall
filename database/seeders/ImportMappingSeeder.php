@@ -97,8 +97,8 @@ class ImportMappingSeeder extends Seeder
             ],
             [
                 'column_map' => [
-                    'phone' => 'Phone_2',
-                    'phone_2' => 'caller_id',
+                    'phone' => 'caller_id',
+                    'phone_2' => 'Phone_2',
                     'first_name' => 'first_name',
                     'last_name' => 'last_name',
                     'first_name_2' => 'FirstName2',
