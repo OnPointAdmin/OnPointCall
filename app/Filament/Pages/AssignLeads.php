@@ -119,13 +119,13 @@ class AssignLeads extends Page implements HasTable
                             ->label('Source file')
                             ->live(debounce: 500),
                         DatePicker::make('imported_from')
-                            ->label('Import start date'),
+                            ->label('Import Start Date'),
                         DatePicker::make('imported_to')
-                            ->label('Import end date'),
+                            ->label('Import End Date'),
                         DatePicker::make('created_from')
-                            ->label('Start Create Date'),
+                            ->label('Create Start Date'),
                         DatePicker::make('created_to')
-                            ->label('End Create Date'),
+                            ->label('Create End Date'),
                     ])
                     ->columns(3),
                 Section::make('Venue & event')

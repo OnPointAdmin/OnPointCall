@@ -80,6 +80,81 @@ class ImportBatchHealthTest extends TestCase
         $this->assertSame('Healthy', $batch->healthLabel());
     }
 
+    public function test_health_scope_matches_health_status(): void
+    {
+        $company = Company::factory()->create();
+
+        $batches = collect([
+            $this->batch([
+                'company_id' => $company->id,
+                'status' => ImportBatchStatus::Processing,
+            ]),
+            $this->batch([
+                'company_id' => $company->id,
+                'status' => ImportBatchStatus::Completed,
+                'run_soft_score' => true,
+                'soft_score_pending' => 2,
+            ]),
+            $this->batch([
+                'company_id' => $company->id,
+                'status' => ImportBatchStatus::Completed,
+                'run_soft_score' => true,
+                'soft_score_error' => 5,
+            ]),
+            $this->batch([
+                'company_id' => $company->id,
+                'status' => ImportBatchStatus::Completed,
+                'run_rnd_check' => true,
+                'rnd_clear' => 4,
+                'rnd_reassigned' => 1,
+            ]),
+            $this->batch([
+                'company_id' => $company->id,
+                'status' => ImportBatchStatus::Failed,
+            ]),
+            $this->batch([
+                'company_id' => $company->id,
+                'status' => ImportBatchStatus::Completed,
+                'error_message' => 'Import crashed',
+            ]),
+            $this->batch([
+                'company_id' => $company->id,
+                'status' => ImportBatchStatus::Completed,
+                'run_dnc_check' => true,
+                'dnc_pending' => 1,
+            ]),
+            $this->batch([
+                'company_id' => $company->id,
+                'status' => ImportBatchStatus::Completed,
+                'run_qualification' => true,
+                'qualification_error' => 1,
+            ]),
+            $this->batch([
+                'company_id' => $company->id,
+                'status' => ImportBatchStatus::Processing,
+                'soft_score_error' => 3,
+            ]),
+        ]);
+
+        foreach (['ok', 'pending', 'error'] as $health) {
+            $fromScope = ImportBatch::withoutGlobalScopes()
+                ->where('company_id', $company->id)
+                ->health($health)
+                ->orderBy('id')
+                ->pluck('id')
+                ->all();
+
+            $fromPhp = $batches
+                ->filter(fn (ImportBatch $batch): bool => $batch->fresh()->healthStatus() === $health)
+                ->sortBy('id')
+                ->pluck('id')
+                ->values()
+                ->all();
+
+            $this->assertSame($fromPhp, $fromScope, "health scope {$health} should match healthStatus()");
+        }
+    }
+
     /**
      * @param  array<string, mixed>  $overrides
      */

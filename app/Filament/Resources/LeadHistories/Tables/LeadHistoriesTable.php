@@ -115,9 +115,9 @@ class LeadHistoriesTable
                             ])
                             ->default('today'),
                         DatePicker::make('start_date')
-                            ->label('Start date'),
+                            ->label('Start Date'),
                         DatePicker::make('end_date')
-                            ->label('End date'),
+                            ->label('End Date'),
                     ])
                     ->default(function (): array {
                         $timezone = CompanyTimezone::forAuthenticated();

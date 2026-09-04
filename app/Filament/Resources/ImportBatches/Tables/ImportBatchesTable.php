@@ -2,12 +2,20 @@
 
 namespace App\Filament\Resources\ImportBatches\Tables;
 
+use App\Enums\ImportBatchStatus;
 use App\Models\ImportBatch;
+use App\Models\LeadTypeDefinition;
+use App\Support\CompanyTimezone;
+use Carbon\Carbon;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\ViewAction;
+use Filament\Forms\Components\DatePicker;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\Filter;
+use Filament\Tables\Filters\Indicator;
+use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\HtmlString;
@@ -146,7 +154,75 @@ class ImportBatchesTable
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
-                //
+                SelectFilter::make('status')
+                    ->options(collect(ImportBatchStatus::cases())->mapWithKeys(
+                        fn (ImportBatchStatus $status): array => [$status->value => $status->label()]
+                    )),
+                SelectFilter::make('health')
+                    ->label('Health')
+                    ->options([
+                        'ok' => 'Healthy',
+                        'pending' => 'In progress',
+                        'error' => 'Errors',
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        $value = $data['value'] ?? null;
+
+                        if (! is_string($value) || $value === '') {
+                            return $query;
+                        }
+
+                        return $query->health($value);
+                    }),
+                SelectFilter::make('lead_type')
+                    ->options(fn (): array => LeadTypeDefinition::allOptions()),
+                Filter::make('imported_at')
+                    ->label('Imported')
+                    ->schema([
+                        DatePicker::make('start_date')
+                            ->label('Start Date'),
+                        DatePicker::make('end_date')
+                            ->label('End Date'),
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        $timezone = CompanyTimezone::forAuthenticated();
+
+                        if (filled($data['start_date'] ?? null)) {
+                            $query->where(
+                                'imported_at',
+                                '>=',
+                                Carbon::parse($data['start_date'], $timezone)->startOfDay()->utc(),
+                            );
+                        }
+
+                        if (filled($data['end_date'] ?? null)) {
+                            $query->where(
+                                'imported_at',
+                                '<=',
+                                Carbon::parse($data['end_date'], $timezone)->endOfDay()->utc(),
+                            );
+                        }
+
+                        return $query;
+                    })
+                    ->indicateUsing(function (array $data): array {
+                        $timezone = CompanyTimezone::forAuthenticated();
+                        $startDate = $data['start_date'] ?? null;
+                        $endDate = $data['end_date'] ?? null;
+
+                        if (! filled($startDate) && ! filled($endDate)) {
+                            return [];
+                        }
+
+                        $startLabel = filled($startDate)
+                            ? Carbon::parse($startDate, $timezone)->format('M j, Y')
+                            : '…';
+                        $endLabel = filled($endDate)
+                            ? Carbon::parse($endDate, $timezone)->format('M j, Y')
+                            : '…';
+
+                        return [Indicator::make("Imported: {$startLabel} – {$endLabel}")];
+                    }),
             ])
             ->recordActions([
                 ViewAction::make(),

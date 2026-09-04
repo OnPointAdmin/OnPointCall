@@ -1,0 +1,30 @@
+---
+description: Keep Filament filter labels consistent, especially date ranges
+globs: app/Filament/**/*.php
+alwaysApply: false
+---
+
+# Filter labels
+
+Date range filters always use **Start Date** and **End Date**. Never From, To, Until, or mixed casing.
+
+```php
+// BAD
+DatePicker::make('from')->label('From'),
+DatePicker::make('until')->label('Until'),
+
+// GOOD
+DatePicker::make('start_date')->label('Start Date'),
+DatePicker::make('end_date')->label('End Date'),
+```
+
+If the same form has more than one date range, prefix with the data it filters:
+
+```php
+DatePicker::make('imported_from')->label('Import Start Date'),
+DatePicker::make('imported_to')->label('Import End Date'),
+DatePicker::make('created_from')->label('Create Start Date'),
+DatePicker::make('created_to')->label('Create End Date'),
+```
+
+Reuse existing labels for the same concept (`Calling list`, `Lead type`, `Health`, `Last Disp`). Do not invent a second name for a filter that already exists on another page.
