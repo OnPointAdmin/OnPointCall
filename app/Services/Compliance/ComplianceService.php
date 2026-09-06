@@ -89,7 +89,8 @@ class ComplianceService
         $date = $local->toDateString();
 
         return $this->blackoutsFor($lead->company_id)
-            ->contains(fn (BlackoutDate $blackout): bool => $blackout->date->toDateString() === $date);
+            ->contains(fn (BlackoutDate $blackout): bool => $blackout->date->toDateString() === $date
+                && $blackout->appliesTo($lead));
     }
 
     public function isManualDialOnly(Lead $lead): bool

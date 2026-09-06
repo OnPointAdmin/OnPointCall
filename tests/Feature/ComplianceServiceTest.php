@@ -3,11 +3,13 @@
 namespace Tests\Feature;
 
 use App\Enums\LeadStatus;
+use App\Models\BlackoutDate;
 use App\Models\Company;
 use App\Models\Lead;
 use App\Models\StateRule;
 use App\Services\Compliance\ComplianceService;
 use App\Support\CadenceDefaults;
+use App\Support\UsStates;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Support\CreatesCadences;
@@ -147,6 +149,91 @@ class ComplianceServiceTest extends TestCase
         $this->assertFalse($service->canDialNow($lead));
     }
 
+    public function test_all_states_blackout_blocks_every_lead(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-10 15:00:00', 'America/New_York'));
+
+        $company = Company::factory()->create();
+        $this->seedStateRule($company->id, 'NY');
+        $this->seedBlackout($company->id, '2026-08-10', UsStates::ALL);
+
+        $service = app(ComplianceService::class);
+
+        $nyLead = $this->makeLead($company->id, state: 'NY', phone: '2125551234');
+        $caLead = $this->makeLead($company->id, state: 'CA', phone: '3105551234', timezone: 'America/Los_Angeles');
+
+        $this->assertTrue($service->isBlackedOut($nyLead));
+        $this->assertTrue($service->isBlackedOut($caLead));
+    }
+
+    public function test_state_blackout_blocks_lead_by_state_even_with_out_of_state_area_code(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-10 15:00:00', 'America/Los_Angeles'));
+
+        $company = Company::factory()->create();
+        $this->seedStateRule($company->id, 'CA');
+        $this->seedBlackout($company->id, '2026-08-10', 'CA');
+
+        $lead = $this->makeLead(
+            $company->id,
+            state: 'CA',
+            phone: '2125551234',
+            timezone: 'America/Los_Angeles',
+        );
+
+        $service = app(ComplianceService::class);
+
+        $this->assertTrue($service->isBlackedOut($lead));
+        $this->assertFalse($service->isWithinLegalWindow($lead));
+    }
+
+    public function test_state_blackout_blocks_lead_by_area_code_even_with_out_of_state_address(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-10 15:00:00', 'America/New_York'));
+
+        $company = Company::factory()->create();
+        $this->seedStateRule($company->id, 'NY');
+        $this->seedBlackout($company->id, '2026-08-10', 'CA');
+
+        $lead = $this->makeLead($company->id, state: 'NY', phone: '3105551234');
+
+        $service = app(ComplianceService::class);
+
+        $this->assertTrue($service->isBlackedOut($lead));
+        $this->assertFalse($service->isWithinLegalWindow($lead));
+    }
+
+    public function test_state_blackout_does_not_block_unrelated_state_and_area_code(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-10 15:00:00', 'America/New_York'));
+
+        $company = Company::factory()->create();
+        $this->seedStateRule($company->id, 'NY');
+        $this->seedBlackout($company->id, '2026-08-10', 'CA');
+
+        $lead = $this->makeLead($company->id, state: 'NY', phone: '2125551234');
+
+        $service = app(ComplianceService::class);
+
+        $this->assertFalse($service->isBlackedOut($lead));
+        $this->assertTrue($service->isWithinLegalWindow($lead));
+    }
+
+    public function test_state_blackout_matches_secondary_phone_area_code(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-10 15:00:00', 'America/New_York'));
+
+        $company = Company::factory()->create();
+        $this->seedStateRule($company->id, 'NY');
+        $this->seedBlackout($company->id, '2026-08-10', 'CA');
+
+        $lead = $this->makeLead($company->id, state: 'NY', phone: '2125551234', phone2: '3105559999');
+
+        $service = app(ComplianceService::class);
+
+        $this->assertTrue($service->isBlackedOut($lead));
+    }
+
     private function seedStateRule(int $companyId, string $state): void
     {
         StateRule::withoutGlobalScopes()->create([
@@ -168,15 +255,31 @@ class ComplianceServiceTest extends TestCase
         ]);
     }
 
-    private function makeLead(int $companyId): Lead
+    private function seedBlackout(int $companyId, string $date, string $stateCode): void
     {
+        BlackoutDate::withoutGlobalScopes()->create([
+            'company_id' => $companyId,
+            'date' => $date,
+            'state_code' => $stateCode,
+            'label' => 'Holiday',
+        ]);
+    }
+
+    private function makeLead(
+        int $companyId,
+        string $state = 'NY',
+        string $phone = '4045551234',
+        ?string $phone2 = null,
+        string $timezone = 'America/New_York',
+    ): Lead {
         $list = $this->createCallingList($companyId);
 
         return Lead::withoutGlobalScopes()->create([
             'company_id' => $companyId,
-            'phone' => '4045551234',
-            'state' => 'NY',
-            'timezone' => 'America/New_York',
+            'phone' => $phone,
+            'phone_2' => $phone2,
+            'state' => $state,
+            'timezone' => $timezone,
             'status' => LeadStatus::Callable,
             'lead_type' => 'standard',
             'calling_list_id' => $list->id,
