@@ -35,13 +35,29 @@ trait HasDashboardFilters
         $timezone = $dashboardService->companyTimezone($companyId);
         $today = Carbon::now($timezone)->toDateString();
 
-        $this->filterForm->fill([
+        $this->filterForm->fill(array_merge([
             'agent_id' => '',
             'lead_type' => '',
             'calling_list_id' => '',
             'start_date' => $today,
             'end_date' => $today,
-        ]);
+        ], $this->extraDashboardFilterDefaults()));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function extraDashboardFilterDefaults(): array
+    {
+        return [];
+    }
+
+    /**
+     * @return list<\Filament\Forms\Components\Component>
+     */
+    protected function extraDashboardFilterFields(): array
+    {
+        return [];
     }
 
     public function filterForm(Schema $schema): Schema
@@ -49,7 +65,7 @@ trait HasDashboardFilters
         return $schema
             ->components([
                 Section::make()
-                    ->schema([
+                    ->schema(array_merge([
                         Select::make('agent_id')
                             ->label('Rep')
                             ->options(fn (): array => ['' => 'All'] + User::query()
@@ -77,7 +93,7 @@ trait HasDashboardFilters
                         DatePicker::make('end_date')
                             ->label('End Date')
                             ->required(),
-                    ])
+                    ], $this->extraDashboardFilterFields()))
                     ->columns([
                         'default' => 1,
                         'md' => 2,
@@ -119,13 +135,13 @@ trait HasDashboardFilters
         $range = $dashboardService->presetDates($preset, $timezone);
 
         $this->datePreset = $preset;
-        $this->filterForm->fill([
+        $this->filterForm->fill(array_merge([
             'agent_id' => $this->filterData['agent_id'] ?? '',
             'lead_type' => $this->filterData['lead_type'] ?? '',
             'calling_list_id' => $this->filterData['calling_list_id'] ?? '',
             'start_date' => $range['start']->toDateString(),
             'end_date' => $range['end']->toDateString(),
-        ]);
+        ], $this->preservedExtraDashboardFilterValues()));
 
         $this->applyDashboardFilters($dashboardService);
     }
@@ -141,6 +157,21 @@ trait HasDashboardFilters
     public function refreshReport(ManagerDashboardService $dashboardService): void
     {
         $this->applyDashboardFilters($dashboardService);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function preservedExtraDashboardFilterValues(): array
+    {
+        $defaults = $this->extraDashboardFilterDefaults();
+        $preserved = [];
+
+        foreach (array_keys($defaults) as $key) {
+            $preserved[$key] = $this->filterData[$key] ?? $defaults[$key];
+        }
+
+        return $preserved;
     }
 
     /**

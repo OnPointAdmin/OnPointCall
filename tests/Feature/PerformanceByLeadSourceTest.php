@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Enums\Disposition;
 use App\Enums\LeadHistoryType;
+use App\Enums\LeadSourceGroupBy;
 use App\Enums\LeadStatus;
 use App\Enums\UserRole;
 use App\Filament\Pages\Dashboard;
@@ -70,7 +71,68 @@ class PerformanceByLeadSourceTest extends TestCase
             ->assertSee('End Date')
             ->assertSee('Grand Hall')
             ->assertSee('Spring Showcase')
+            ->assertSee('Group by')
             ->assertSee('By Venue and Event');
+
+        Carbon::setTestNow();
+    }
+
+    public function test_report_page_can_group_by_event_only(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-10 15:00:00', 'America/New_York'));
+
+        $company = Company::factory()->create();
+        $admin = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Admin,
+            'active' => true,
+        ]);
+        $agent = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Agent,
+            'active' => true,
+        ]);
+
+        $leadOne = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045551001',
+            'status' => LeadStatus::Callable,
+            'lead_type' => 'standard',
+            'venue' => 'Grand Hall',
+            'event' => 'Spring Showcase',
+            'imported_at' => now(),
+        ]);
+        $leadTwo = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045551002',
+            'status' => LeadStatus::Callable,
+            'lead_type' => 'standard',
+            'venue' => 'Other Hall',
+            'event' => 'Spring Showcase',
+            'imported_at' => now(),
+        ]);
+
+        foreach ([$leadOne, $leadTwo] as $lead) {
+            LeadHistory::withoutGlobalScopes()->create([
+                'company_id' => $company->id,
+                'lead_id' => $lead->id,
+                'actor_id' => $agent->id,
+                'event_type' => LeadHistoryType::Disposition,
+                'occurred_at' => now(),
+                'payload' => ['disposition' => Disposition::Booked->value],
+            ]);
+        }
+
+        CompanyContext::set($company->id);
+
+        Livewire::actingAs($admin)
+            ->test(PerformanceByLeadSource::class)
+            ->set('filterData.group_by', LeadSourceGroupBy::Event->value)
+            ->call('applyFiltersAction')
+            ->assertSee('By Event')
+            ->assertSee('Spring Showcase')
+            ->assertDontSee('Grand Hall')
+            ->assertDontSee('Other Hall');
 
         Carbon::setTestNow();
     }

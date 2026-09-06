@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Enums\Disposition;
 use App\Enums\LeadHistoryType;
+use App\Enums\LeadSourceGroupBy;
 use App\Enums\LeadStatus;
 use App\Enums\UserRole;
 use App\Models\Company;
@@ -62,6 +63,72 @@ class LeadSourceReportServiceTest extends TestCase
         $this->assertSame('(none)', $report['rows'][2]['event']);
         $this->assertSame(0, $report['rows'][2]['booked']);
         $this->assertSame(0.0, $report['rows'][2]['booked_percent']);
+        $this->assertSame(LeadSourceGroupBy::VenueAndEvent, $report['group_by']);
+    }
+
+    public function test_report_groups_by_venue_only(): void
+    {
+        $company = Company::factory()->create();
+        $agent = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Agent,
+        ]);
+
+        $leadOne = $this->createLead($company->id, 'standard', venue: 'Venue A', event: 'Event 1');
+        $leadTwo = $this->createLead($company->id, 'standard', venue: 'Venue A', event: 'Event 2');
+
+        $this->createDisposition($company->id, $leadOne->id, $agent->id, Disposition::Booked);
+        $this->createDisposition($company->id, $leadTwo->id, $agent->id, Disposition::Booked);
+
+        $service = app(LeadSourceReportService::class);
+        $range = app(ManagerDashboardService::class)->todayRange($company->id);
+        $report = $service->report(
+            $company->id,
+            null,
+            null,
+            $range['start'],
+            $range['end'],
+            null,
+            LeadSourceGroupBy::Venue,
+        );
+
+        $this->assertCount(1, $report['rows']);
+        $this->assertSame('Venue A', $report['rows'][0]['venue']);
+        $this->assertNull($report['rows'][0]['event']);
+        $this->assertSame(2, $report['rows'][0]['booked']);
+    }
+
+    public function test_report_groups_by_event_only(): void
+    {
+        $company = Company::factory()->create();
+        $agent = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Agent,
+        ]);
+
+        $leadOne = $this->createLead($company->id, 'standard', venue: 'Venue A', event: 'Event 1');
+        $leadTwo = $this->createLead($company->id, 'standard', venue: 'Venue B', event: 'Event 1');
+
+        $this->createDisposition($company->id, $leadOne->id, $agent->id, Disposition::Booked);
+        $this->createDisposition($company->id, $leadTwo->id, $agent->id, Disposition::NotInterested);
+
+        $service = app(LeadSourceReportService::class);
+        $range = app(ManagerDashboardService::class)->todayRange($company->id);
+        $report = $service->report(
+            $company->id,
+            null,
+            null,
+            $range['start'],
+            $range['end'],
+            null,
+            LeadSourceGroupBy::Event,
+        );
+
+        $this->assertCount(1, $report['rows']);
+        $this->assertNull($report['rows'][0]['venue']);
+        $this->assertSame('Event 1', $report['rows'][0]['event']);
+        $this->assertSame(2, $report['rows'][0]['total_leads_called']);
+        $this->assertSame(1, $report['rows'][0]['booked']);
     }
 
     public function test_report_filters_by_agent(): void

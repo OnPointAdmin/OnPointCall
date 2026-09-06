@@ -4,6 +4,7 @@ namespace App\Services\Dashboard;
 
 use App\Enums\DispositionReportGroup;
 use App\Enums\LeadHistoryType;
+use App\Enums\LeadSourceGroupBy;
 use App\Models\DispositionDefinition;
 use App\Models\LeadHistory;
 use Carbon\Carbon;
@@ -16,8 +17,9 @@ class LeadSourceReportService
 
     /**
      * @return array{
+     *     group_by: LeadSourceGroupBy,
      *     totals: array{total_leads_called: int, booked: int, booked_percent: ?float},
-     *     rows: list<array{venue: string, event: string, total_leads_called: int, booked: int, booked_percent: ?float}>,
+     *     rows: list<array{venue: ?string, event: ?string, total_leads_called: int, booked: int, booked_percent: ?float}>,
      * }
      */
     public function report(
@@ -27,6 +29,7 @@ class LeadSourceReportService
         Carbon $start,
         Carbon $end,
         int|string|null $callingListId = null,
+        LeadSourceGroupBy $groupBy = LeadSourceGroupBy::VenueAndEvent,
     ): array {
         $history = $this->dashboardService->historyQuery($companyId, $actorId, $leadType, $start, $end, $callingListId)
             ->with(['lead' => function ($leadQuery): void {
@@ -46,12 +49,12 @@ class LeadSourceReportService
 
             $venue = $this->normalizeSourceValue($row->lead?->venue);
             $event = $this->normalizeSourceValue($row->lead?->event);
-            $key = $venue.'|'.$event;
+            $key = $this->bucketKey($groupBy, $venue, $event);
 
             if (! isset($buckets[$key])) {
                 $buckets[$key] = [
-                    'venue' => $venue,
-                    'event' => $event,
+                    'venue' => $groupBy->showsVenue() ? $venue : null,
+                    'event' => $groupBy->showsEvent() ? $event : null,
                     'total_leads_called' => 0,
                     'booked' => 0,
                 ];
@@ -80,21 +83,10 @@ class LeadSourceReportService
         }
         unset($row);
 
-        usort($rows, function (array $a, array $b): int {
-            if ($a['booked'] !== $b['booked']) {
-                return $b['booked'] <=> $a['booked'];
-            }
-
-            $venueCompare = strcasecmp($a['venue'], $b['venue']);
-
-            if ($venueCompare !== 0) {
-                return $venueCompare;
-            }
-
-            return strcasecmp($a['event'], $b['event']);
-        });
+        usort($rows, fn (array $a, array $b): int => $this->compareRows($a, $b, $groupBy));
 
         return [
+            'group_by' => $groupBy,
             'totals' => [
                 'total_leads_called' => $totalsCalled,
                 'booked' => $totalsBooked,
@@ -109,6 +101,40 @@ class LeadSourceReportService
     public function formatPercent(?float $percent): string
     {
         return $percent === null ? '—' : number_format($percent, 1).'%';
+    }
+
+    private function bucketKey(LeadSourceGroupBy $groupBy, string $venue, string $event): string
+    {
+        return match ($groupBy) {
+            LeadSourceGroupBy::Venue => $venue,
+            LeadSourceGroupBy::Event => $event,
+            LeadSourceGroupBy::VenueAndEvent => $venue.'|'.$event,
+        };
+    }
+
+    /**
+     * @param  array{venue: ?string, event: ?string, booked: int}  $a
+     * @param  array{venue: ?string, event: ?string, booked: int}  $b
+     */
+    private function compareRows(array $a, array $b, LeadSourceGroupBy $groupBy): int
+    {
+        if ($a['booked'] !== $b['booked']) {
+            return $b['booked'] <=> $a['booked'];
+        }
+
+        if ($groupBy->showsVenue()) {
+            $venueCompare = strcasecmp((string) $a['venue'], (string) $b['venue']);
+
+            if ($venueCompare !== 0) {
+                return $venueCompare;
+            }
+        }
+
+        if ($groupBy->showsEvent()) {
+            return strcasecmp((string) $a['event'], (string) $b['event']);
+        }
+
+        return 0;
     }
 
     private function normalizeSourceValue(?string $value): string
