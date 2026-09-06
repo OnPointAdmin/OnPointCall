@@ -3,32 +3,24 @@
 namespace App\Filament\Pages;
 
 use App\DataTransferObjects\DialableInventory;
-use App\Enums\UserRole;
-use App\Filament\Support\LeadTypeSelect;
+use App\Filament\Navigation\DashboardNavigation;
+use App\Filament\Pages\Concerns\HasDashboardFilters;
 use App\Models\CallingList;
-use App\Models\User;
 use App\Services\Dashboard\ManagerDashboardService;
 use App\Services\Leads\DialableInventoryService;
-use Carbon\Carbon;
-use Filament\Actions\Action;
-use Filament\Forms\Components\DatePicker;
-use Filament\Forms\Components\Select;
 use Filament\Pages\Dashboard as BaseDashboard;
-use Filament\Schemas\Components\Actions;
-use Filament\Schemas\Components\EmbeddedSchema;
-use Filament\Schemas\Components\Form;
-use Filament\Schemas\Components\Section;
 use Filament\Schemas\Concerns\InteractsWithSchemas;
 use Filament\Schemas\Contracts\HasSchemas;
-use Filament\Schemas\Schema;
-use Filament\Support\Enums\Alignment;
 use Illuminate\Contracts\Support\Htmlable;
 
 class Dashboard extends BaseDashboard implements HasSchemas
 {
+    use HasDashboardFilters;
     use InteractsWithSchemas;
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Dashboard';
+    protected static string|\UnitEnum|null $navigationGroup = DashboardNavigation::GROUP;
+
+    protected static ?string $navigationParentItem = DashboardNavigation::PARENT_DASHBOARDS;
 
     protected static ?string $navigationLabel = 'Agent Dashboard';
 
@@ -39,133 +31,14 @@ class Dashboard extends BaseDashboard implements HasSchemas
     protected string $view = 'filament.pages.dashboard';
 
     /**
-     * @var array<string, mixed>|null
-     */
-    public ?array $filterData = [];
-
-    /**
      * @var array{totals: array<string, array{label: string, count: int, percent: ?float}>, agents: list<array{user_id: int, name: string, metrics: array<string, array{count: int, percent: ?float}>, lists: list<array{calling_list_id: ?int, name: string, metrics: array<string, array{count: int, percent: ?float}>}>}>}|null
      */
     public ?array $report = null;
 
-    public ?string $runAt = null;
-
-    public string $datePreset = 'today';
-
     public function mount(ManagerDashboardService $dashboardService): void
     {
-        $companyId = (int) auth()->user()->company_id;
-        $timezone = $dashboardService->companyTimezone($companyId);
-        $today = Carbon::now($timezone)->toDateString();
-
-        $this->filterForm->fill([
-            'agent_id' => '',
-            'lead_type' => '',
-            'calling_list_id' => '',
-            'start_date' => $today,
-            'end_date' => $today,
-        ]);
-
-        $this->applyFilters($dashboardService);
-    }
-
-    public function filterForm(Schema $schema): Schema
-    {
-        return $schema
-            ->components([
-                Section::make()
-                    ->schema([
-                        Select::make('agent_id')
-                            ->label('Rep')
-                            ->options(fn (): array => ['' => 'All'] + User::query()
-                                ->where('role', UserRole::Agent)
-                                ->where('active', true)
-                                ->orderBy('name')
-                                ->pluck('name', 'id')
-                                ->all()),
-                        LeadTypeSelect::make(allowCreate: false)
-                            ->required(false)
-                            ->nullable()
-                            ->placeholder('All'),
-                        Select::make('calling_list_id')
-                            ->label('Calling list')
-                            ->options(fn (): array => ['' => 'All', 'holding' => 'Holding'] + CallingList::query()
-                                ->orderBy('name')
-                                ->pluck('name', 'id')
-                                ->all())
-                            ->searchable()
-                            ->nullable()
-                            ->placeholder('All'),
-                        DatePicker::make('start_date')
-                            ->label('Run dates')
-                            ->required(),
-                        DatePicker::make('end_date')
-                            ->hiddenLabel()
-                            ->required(),
-                    ])
-                    ->columns([
-                        'default' => 1,
-                        'md' => 2,
-                        'xl' => 5,
-                    ])
-                    ->extraAttributes(['class' => 'dashboard-filter-section']),
-            ])
-            ->statePath('filterData');
-    }
-
-    public function content(Schema $schema): Schema
-    {
-        return $schema
-            ->components([
-                Form::make([EmbeddedSchema::make('filterForm')])
-                    ->id('dashboardFilterForm')
-                    ->livewireSubmitHandler('applyFiltersAction')
-                    ->footer([
-                        Actions::make([
-                            Action::make('applyFilters')
-                                ->label('Apply')
-                                ->submit('applyFiltersAction')
-                                ->extraAttributes(['class' => 'dashboard-apply-btn']),
-                        ])->alignment(Alignment::End),
-                    ])
-                    ->extraAttributes(['class' => 'dashboard-filter-form']),
-            ]);
-    }
-
-    public function applyFiltersAction(ManagerDashboardService $dashboardService): void
-    {
-        $this->applyFilters($dashboardService);
-    }
-
-    public function applyPreset(string $preset, ManagerDashboardService $dashboardService): void
-    {
-        $companyId = (int) auth()->user()->company_id;
-        $timezone = $dashboardService->companyTimezone($companyId);
-        $range = $dashboardService->presetDates($preset, $timezone);
-
-        $this->datePreset = $preset;
-        $this->filterForm->fill([
-            'agent_id' => $this->filterData['agent_id'] ?? '',
-            'lead_type' => $this->filterData['lead_type'] ?? '',
-            'calling_list_id' => $this->filterData['calling_list_id'] ?? '',
-            'start_date' => $range['start']->toDateString(),
-            'end_date' => $range['end']->toDateString(),
-        ]);
-
-        $this->applyFilters($dashboardService);
-    }
-
-    /**
-     * @return list<array{key: string, label: string}>
-     */
-    public function datePresets(): array
-    {
-        return app(ManagerDashboardService::class)->datePresets();
-    }
-
-    public function refreshReport(ManagerDashboardService $dashboardService): void
-    {
-        $this->applyFilters($dashboardService);
+        $this->initializeDashboardFilters($dashboardService);
+        $this->applyDashboardFilters($dashboardService);
     }
 
     public function getHeading(): string|Htmlable|null
@@ -220,66 +93,24 @@ class Dashboard extends BaseDashboard implements HasSchemas
         return app(DialableInventoryService::class)->activeTodayForCompany($companyId);
     }
 
-    private function applyFilters(ManagerDashboardService $dashboardService): void
+    private function applyDashboardFilters(ManagerDashboardService $dashboardService): void
     {
-        $companyId = (int) auth()->user()->company_id;
-        $data = $this->filterForm->getState();
-        $timezone = $dashboardService->companyTimezone($companyId);
-
-        $startDate = Carbon::parse((string) $data['start_date'], $timezone);
-        $endDate = Carbon::parse((string) $data['end_date'], $timezone);
-
-        if ($endDate->lessThan($startDate)) {
-            [$startDate, $endDate] = [$endDate, $startDate];
-        }
-
-        $range = $dashboardService->dateRange($companyId, $startDate, $endDate);
-
-        $agentId = isset($data['agent_id']) && $data['agent_id'] !== ''
-            ? (int) $data['agent_id']
-            : null;
-
-        $leadType = isset($data['lead_type']) && $data['lead_type'] !== ''
-            ? (string) $data['lead_type']
-            : null;
-
-        $callingListId = $data['calling_list_id'] ?? '';
-        $callingListId = $callingListId === '' || $callingListId === null
-            ? null
-            : ($callingListId === 'holding' ? 'holding' : (int) $callingListId);
+        $filters = $this->parsedDashboardFilters($dashboardService);
 
         $this->report = $dashboardService->report(
-            $companyId,
-            $agentId,
-            $leadType,
-            $range['start'],
-            $range['end'],
-            $callingListId,
+            $filters['company_id'],
+            $filters['agent_id'],
+            $filters['lead_type'],
+            $filters['range']['start'],
+            $filters['range']['end'],
+            $filters['calling_list_id'],
         );
 
-        $this->runAt = Carbon::now($timezone)->format('M j, Y g:i A');
-        $this->datePreset = $this->matchingPreset(
+        $this->finalizeDashboardFilters(
             $dashboardService,
-            $timezone,
-            $startDate->toDateString(),
-            $endDate->toDateString(),
+            $filters['timezone'],
+            $filters['start_date'],
+            $filters['end_date'],
         );
-    }
-
-    private function matchingPreset(
-        ManagerDashboardService $dashboardService,
-        string $timezone,
-        string $startDate,
-        string $endDate,
-    ): string {
-        foreach ($dashboardService->datePresets() as $preset) {
-            $range = $dashboardService->presetDates($preset['key'], $timezone);
-
-            if ($range['start']->toDateString() === $startDate && $range['end']->toDateString() === $endDate) {
-                return $preset['key'];
-            }
-        }
-
-        return 'custom';
     }
 }

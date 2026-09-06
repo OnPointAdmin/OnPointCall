@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\DataTransferObjects\LeadDashboardSnapshot;
 use App\Enums\LeadStatus;
+use App\Filament\Navigation\DashboardNavigation;
 use App\Services\Dashboard\LeadDashboardService;
 use BackedEnum;
 use Filament\Pages\Page;
@@ -11,7 +12,9 @@ use Filament\Support\Icons\Heroicon;
 
 class LeadDashboard extends Page
 {
-    protected static string|\UnitEnum|null $navigationGroup = 'Dashboard';
+    protected static string|\UnitEnum|null $navigationGroup = DashboardNavigation::GROUP;
+
+    protected static ?string $navigationParentItem = DashboardNavigation::PARENT_DASHBOARDS;
 
     protected static ?string $navigationLabel = 'Lead Dashboard';
 

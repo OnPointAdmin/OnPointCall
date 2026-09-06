@@ -591,7 +591,7 @@ class ManagerDashboardService
         return $listNames->get((int) $key) ?? 'Unknown list';
     }
 
-    private function historyQuery(
+    public function historyQuery(
         int $companyId,
         ?int $actorId,
         ?string $leadType,
