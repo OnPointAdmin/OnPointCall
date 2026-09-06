@@ -25,7 +25,9 @@ class BlackoutDatesTable
                     ->formatStateUsing(fn (?string $state): string => UsStates::label($state))
                     ->sortable(),
                 TextColumn::make('label')
-                    ->searchable(),
+                    ->label('Description')
+                    ->searchable()
+                    ->sortable(),
                 TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()

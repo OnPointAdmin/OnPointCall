@@ -103,6 +103,22 @@ class BlackoutDateResourceTest extends TestCase
             ->exists());
     }
 
+    public function test_description_is_required(): void
+    {
+        $admin = $this->makeAdmin();
+
+        CompanyContext::clear();
+
+        Livewire::actingAs($admin)
+            ->test(CreateBlackoutDate::class)
+            ->fillForm([
+                'date' => '2026-09-07',
+                'state_code' => UsStates::ALL,
+            ])
+            ->call('create')
+            ->assertHasFormErrors(['label' => 'required']);
+    }
+
     private function makeAdmin(): User
     {
         $company = Company::factory()->create();

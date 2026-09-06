@@ -53,7 +53,11 @@ class BlackoutDateForm
                     ->live()
                     ->dehydrateStateUsing(fn (?string $state): string => strtoupper(trim((string) $state)) ?: UsStates::ALL)
                     ->helperText('Choosing a state blocks every lead in that state and every phone number with an area code assigned to that state, even when the lead address is in another state.'),
-                TextInput::make('label'),
+                TextInput::make('label')
+                    ->label('Description')
+                    ->placeholder('Labor Day 2026')
+                    ->required()
+                    ->maxLength(255),
             ]);
     }
 }
