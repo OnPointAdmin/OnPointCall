@@ -88,6 +88,7 @@ class DashboardDigestService
             'subtitle' => $rangeLabel,
             'periodLabel' => $period->getLabel(),
             'totals' => $report['totals'],
+            'breakdowns' => $report['breakdowns'] ?? [],
             'agents' => $report['agents'],
             'metricDefinitions' => $this->dashboard->metricDefinitions(),
             'dashboard' => $this->dashboard,

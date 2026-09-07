@@ -3,11 +3,13 @@
 namespace Tests\Feature;
 
 use App\Enums\Disposition;
+use App\Enums\DispositionOutcome;
 use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
 use App\Enums\UserRole;
 use App\Models\AppSetting;
 use App\Models\Company;
+use App\Models\DispositionDefinition;
 use App\Models\Lead;
 use App\Models\LeadHistory;
 use App\Models\User;
@@ -58,6 +60,12 @@ class ManagerDashboardServiceTest extends TestCase
         $this->assertSame(1, $totals['skipped']['count']);
         $this->assertSame(1, $totals['callbacks']['count']);
         $this->assertSame(10.0, $totals['booked']['percent']);
+
+        $this->assertArrayNotHasKey('booked', $report['breakdowns']);
+        $this->assertSame(['No Answer', 'Left VM'], array_column($report['breakdowns']['no_answer_vm'], 'label'));
+        $this->assertSame([1, 1], array_column($report['breakdowns']['no_answer_vm'], 'count'));
+        $this->assertSame([10.0, 10.0], array_column($report['breakdowns']['no_answer_vm'], 'percent'));
+        $this->assertSame(['Wrong Number', 'Bad Number', 'DNC'], array_column($report['breakdowns']['wrong_dnc'], 'label'));
     }
 
     public function test_report_filters_by_agent(): void
@@ -197,6 +205,124 @@ class ManagerDashboardServiceTest extends TestCase
         $this->assertSame(1, $lists['TNB']['metrics']['not_interested']['count']);
         $this->assertSame(1, $lists['Holding']['metrics']['no_answer_vm']['count']);
         $this->assertNull($lists['Holding']['calling_list_id']);
+    }
+
+    public function test_report_breaks_down_reasons_and_legacy_skip_reasons(): void
+    {
+        $company = Company::factory()->create();
+        $agent = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Agent,
+        ]);
+
+        $lead = $this->createLead($company->id, 'standard');
+
+        $this->createDisposition($company->id, $lead->id, $agent->id, Disposition::NotInterested, payload: ['reason' => 'Too Busy']);
+        $this->createDisposition($company->id, $lead->id, $agent->id, Disposition::NotInterested, payload: ['reason' => 'Travel Distance']);
+        $this->createDisposition($company->id, $lead->id, $agent->id, Disposition::NotQualified, payload: ['reason' => 'Income']);
+        $this->createDisposition($company->id, $lead->id, $agent->id, Disposition::NotQualified, payload: ['reason' => 'Age']);
+        $this->createSkip($company->id, $lead->id, $agent->id, ['reason' => 'Busy signal']);
+        $this->createSkip($company->id, $lead->id, $agent->id, ['skip_reason' => 'Already talking']);
+
+        $service = app(ManagerDashboardService::class);
+        $range = $service->todayRange($company->id);
+        $report = $service->report($company->id, null, null, $range['start'], $range['end']);
+
+        $this->assertSame(['Too Busy', 'Travel Distance'], array_column($report['breakdowns']['not_interested'], 'label'));
+        $this->assertSame(['Age', 'Income'], array_column($report['breakdowns']['not_qualified'], 'label'));
+        $this->assertSame(['Already talking', 'Busy signal'], array_column($report['breakdowns']['skipped'], 'label'));
+        $this->assertSame(1, $report['breakdowns']['skipped'][0]['count']);
+        $this->assertSame(16.7, $report['breakdowns']['not_interested'][0]['percent']);
+    }
+
+    public function test_report_breaks_down_custom_other_dispositions_and_respects_filters(): void
+    {
+        $company = Company::factory()->create();
+        $agent = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Agent,
+        ]);
+        $otherAgent = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Agent,
+        ]);
+
+        $list = $this->createCallingList($company->id, overrides: ['name' => 'Standard']);
+        $otherList = $this->createCallingList($company->id, overrides: ['name' => 'TNB']);
+
+        DispositionDefinition::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'slug' => 'language-barrier',
+            'label' => 'Language Barrier',
+            'sort_order' => 40,
+            'active' => true,
+            'is_system' => false,
+            'outcome' => DispositionOutcome::Terminal,
+            'increments_attempt' => true,
+            'requires_reason' => false,
+            'button_group' => 'negative',
+            'color' => 'red',
+            'report_group' => 'other',
+        ]);
+        DispositionDefinition::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'slug' => 'follow-up',
+            'label' => 'Follow Up',
+            'sort_order' => 41,
+            'active' => true,
+            'is_system' => false,
+            'outcome' => DispositionOutcome::Callable,
+            'increments_attempt' => true,
+            'requires_reason' => false,
+            'button_group' => 'contact',
+            'color' => 'slate',
+            'report_group' => 'other',
+        ]);
+
+        $lead = $this->createLead($company->id, 'standard', $list->id);
+        $otherLead = $this->createLead($company->id, 'tnb', $otherList->id);
+
+        $this->createDisposition($company->id, $lead->id, $agent->id, 'language-barrier');
+        $this->createDisposition($company->id, $lead->id, $agent->id, 'follow-up');
+        $this->createDisposition($company->id, $otherLead->id, $otherAgent->id, Disposition::NoAnswer);
+        $this->createDisposition($company->id, $otherLead->id, $otherAgent->id, Disposition::LeftVm);
+
+        $service = app(ManagerDashboardService::class);
+        $range = $service->todayRange($company->id);
+        $report = $service->report($company->id, $agent->id, null, $range['start'], $range['end'], $list->id);
+
+        $this->assertSame(['Language Barrier', 'Follow Up'], array_column($report['breakdowns']['other'], 'label'));
+        $this->assertArrayNotHasKey('no_answer_vm', $report['breakdowns']);
+        $this->assertSame(2, $report['totals']['total_leads_called']['count']);
+        $this->assertSame(2, $report['totals']['other']['count']);
+    }
+
+    public function test_report_nests_reasons_under_bucketed_dispositions(): void
+    {
+        $company = Company::factory()->create();
+        $agent = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Agent,
+        ]);
+        $lead = $this->createLead($company->id, 'standard');
+
+        DispositionDefinition::withoutGlobalScopes()
+            ->where('company_id', $company->id)
+            ->where('slug', Disposition::WrongNumber->value)
+            ->update(['requires_reason' => true]);
+
+        $this->createDisposition($company->id, $lead->id, $agent->id, Disposition::WrongNumber, payload: ['reason' => 'Fax']);
+        $this->createDisposition($company->id, $lead->id, $agent->id, Disposition::WrongNumber, payload: ['reason' => 'Business']);
+        $this->createDisposition($company->id, $lead->id, $agent->id, Disposition::Dnc);
+
+        $service = app(ManagerDashboardService::class);
+        $range = $service->todayRange($company->id);
+        $report = $service->report($company->id, null, null, $range['start'], $range['end']);
+
+        $labels = array_column($report['breakdowns']['wrong_dnc'], 'label');
+        $this->assertSame(['Wrong Number', 'DNC'], $labels);
+        $this->assertSame(['Business', 'Fax'], array_column($report['breakdowns']['wrong_dnc'][0]['items'], 'label'));
+        $this->assertSame([], $report['breakdowns']['wrong_dnc'][1]['items']);
     }
 
     public function test_overdue_callbacks_use_live_snapshot_not_history_range(): void
@@ -390,20 +516,23 @@ class ManagerDashboardServiceTest extends TestCase
         int $companyId,
         int $leadId,
         int $actorId,
-        Disposition $disposition,
+        Disposition|string $disposition,
         ?Carbon $occurredAt = null,
+        array $payload = [],
     ): void {
+        $slug = $disposition instanceof Disposition ? $disposition->value : $disposition;
+
         LeadHistory::withoutGlobalScopes()->create([
             'company_id' => $companyId,
             'lead_id' => $leadId,
             'actor_id' => $actorId,
             'event_type' => LeadHistoryType::Disposition,
             'occurred_at' => $occurredAt ?? now(),
-            'payload' => ['disposition' => $disposition->value],
+            'payload' => array_merge(['disposition' => $slug], $payload),
         ]);
     }
 
-    private function createSkip(int $companyId, int $leadId, int $actorId): void
+    private function createSkip(int $companyId, int $leadId, int $actorId, array $payload = []): void
     {
         LeadHistory::withoutGlobalScopes()->create([
             'company_id' => $companyId,
@@ -411,7 +540,7 @@ class ManagerDashboardServiceTest extends TestCase
             'actor_id' => $actorId,
             'event_type' => LeadHistoryType::Skip,
             'occurred_at' => now(),
-            'payload' => [],
+            'payload' => $payload,
         ]);
     }
 }

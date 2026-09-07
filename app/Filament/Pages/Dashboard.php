@@ -31,7 +31,7 @@ class Dashboard extends BaseDashboard implements HasSchemas
     protected string $view = 'filament.pages.dashboard';
 
     /**
-     * @var array{totals: array<string, array{label: string, count: int, percent: ?float}>, agents: list<array{user_id: int, name: string, metrics: array<string, array{count: int, percent: ?float}>, lists: list<array{calling_list_id: ?int, name: string, metrics: array<string, array{count: int, percent: ?float}>}>}>}|null
+     * @var array{totals: array<string, array{label: string, count: int, percent: ?float}>, breakdowns: array<string, list<array{kind: string, slug: ?string, label: string, count: int, percent: ?float, items: list<array{kind: string, slug: ?string, label: string, count: int, percent: ?float, items: list<empty>}>}>>, agents: list<array{user_id: int, name: string, metrics: array<string, array{count: int, percent: ?float}>, lists: list<array{calling_list_id: ?int, name: string, metrics: array<string, array{count: int, percent: ?float}>}>>}|null
      */
     public ?array $report = null;
 
