@@ -59,6 +59,7 @@ class HoldingReleaseServiceTest extends TestCase
         $this->assertSame(LeadStatus::Callable, $lead->status);
         $this->assertSame($list->id, $lead->calling_list_id);
         $this->assertSame(1, $lead->queue_rank);
+        $this->assertNotNull($lead->calling_list_assigned_at);
     }
 
     public function test_release_rejects_mismatched_lead_type(): void
@@ -944,6 +945,7 @@ class HoldingReleaseServiceTest extends TestCase
         $this->assertSame($targetList->id, $lead->calling_list_id);
         $this->assertSame(LeadStatus::Callable, $lead->status);
         $this->assertSame(1, $lead->queue_rank);
+        $this->assertNotNull($lead->calling_list_assigned_at);
 
         $this->assertDatabaseHas('lead_history', [
             'lead_id' => $lead->id,

@@ -130,8 +130,50 @@ class ViewCallingListTest extends TestCase
             ->assertOk()
             ->assertSee('External ID')
             ->assertSee('CRM-2001')
+            ->assertSee('Venue')
+            ->assertSee('Event')
+            ->assertSee('Added to list')
             ->assertCanSeeTableRecords([$onList])
             ->assertDontSee('4045552002');
+    }
+
+    public function test_list_leads_table_shows_and_filters_venue_and_event(): void
+    {
+        $admin = $this->makeAdmin();
+        $list = $this->createCallingList($admin->company_id, overrides: ['name' => 'Standard']);
+        $floridaPrime = $this->makeLead(
+            $admin->company_id,
+            $list->id,
+            '4045552001',
+            venue: 'Florida Event 1',
+            event: 'Prime Expo',
+        );
+        $georgiaSpring = $this->makeLead(
+            $admin->company_id,
+            $list->id,
+            '4045552002',
+            venue: 'Georgia Event 2',
+            event: 'Spring Show',
+        );
+
+        CompanyContext::set($admin->company_id);
+
+        Livewire::actingAs($admin)
+            ->test(LeadsRelationManager::class, [
+                'ownerRecord' => $list,
+                'pageClass' => ViewCallingList::class,
+            ])
+            ->assertOk()
+            ->assertSee('Florida Event 1')
+            ->assertSee('Prime Expo')
+            ->assertSee('Georgia Event 2')
+            ->assertSee('Spring Show')
+            ->filterTable('venue', 'Florida Event 1')
+            ->assertCanSeeTableRecords([$floridaPrime])
+            ->assertCanNotSeeTableRecords([$georgiaSpring])
+            ->filterTable('event', 'Prime Expo')
+            ->assertCanSeeTableRecords([$floridaPrime])
+            ->assertCanNotSeeTableRecords([$georgiaSpring]);
     }
 
     public function test_list_lead_view_opens_slide_over_with_full_record_and_history(): void
@@ -216,8 +258,14 @@ class ViewCallingListTest extends TestCase
         ]);
     }
 
-    private function makeLead(int $companyId, int $listId, string $phone, ?string $externalLeadId = null): Lead
-    {
+    private function makeLead(
+        int $companyId,
+        int $listId,
+        string $phone,
+        ?string $externalLeadId = null,
+        ?string $venue = null,
+        ?string $event = null,
+    ): Lead {
         return Lead::withoutGlobalScopes()->create([
             'company_id' => $companyId,
             'phone' => $phone,
@@ -230,6 +278,8 @@ class ViewCallingListTest extends TestCase
             'lead_type' => 'standard',
             'calling_list_id' => $listId,
             'imported_at' => now(),
+            'venue' => $venue,
+            'event' => $event,
         ]);
     }
 }

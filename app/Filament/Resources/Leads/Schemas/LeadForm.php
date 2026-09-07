@@ -77,6 +77,10 @@ class LeadForm
                 ->relationship('callbackOwner', 'name'),
             Select::make('calling_list_id')
                 ->relationship('callingList', 'name'),
+            DateTimePicker::make('calling_list_assigned_at')
+                ->label('Added to list')
+                ->disabled()
+                ->dehydrated(false),
             DateTimePicker::make('imported_at'),
             Select::make('import_batch_id')
                 ->relationship('importBatch', 'id'),

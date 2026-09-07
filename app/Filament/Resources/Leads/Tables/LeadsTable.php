@@ -53,6 +53,14 @@ class LeadsTable
                 ->searchable(),
             TextColumn::make('state')
                 ->searchable(),
+            TextColumn::make('venue')
+                ->searchable()
+                ->sortable()
+                ->placeholder('—'),
+            TextColumn::make('event')
+                ->searchable()
+                ->sortable()
+                ->placeholder('—'),
             TextColumn::make('status')
                 ->badge()
                 ->searchable(),
@@ -77,6 +85,11 @@ class LeadsTable
             TextColumn::make('attempt_count')
                 ->numeric()
                 ->sortable(),
+            TextColumn::make('calling_list_assigned_at')
+                ->label('Added to list')
+                ->dateTime()
+                ->sortable()
+                ->placeholder('—'),
         ];
 
         if (! $forCallingList) {
@@ -174,11 +187,11 @@ class LeadsTable
             ...$filters,
             SelectFilter::make('venue')
                 ->label('Venue')
-                ->options(fn (): array => self::distinctLeadValues('venue'))
+                ->options(fn (): array => self::distinctLeadValues('venue', $table, $forCallingList))
                 ->searchable(),
             SelectFilter::make('event')
                 ->label('Event')
-                ->options(fn (): array => self::distinctLeadValues('event'))
+                ->options(fn (): array => self::distinctLeadValues('event', $table, $forCallingList))
                 ->searchable(),
             SelectFilter::make('last_disposition')
                 ->label('Last Disp')
@@ -389,11 +402,21 @@ class LeadsTable
     /**
      * @return array<string, string>
      */
-    private static function distinctLeadValues(string $column): array
+    private static function distinctLeadValues(string $column, Table $table, bool $forCallingList): array
     {
-        return Lead::query()
+        $query = Lead::query()
             ->whereNotNull($column)
-            ->where($column, '!=', '')
+            ->where($column, '!=', '');
+
+        if ($forCallingList) {
+            $owner = $table->getLivewire()->getOwnerRecord();
+
+            if ($owner instanceof CallingList) {
+                $query->where('calling_list_id', $owner->id);
+            }
+        }
+
+        return $query
             ->distinct()
             ->orderBy($column)
             ->pluck($column, $column)

@@ -80,6 +80,8 @@ class LeadsTableTest extends TestCase
             ->assertOk()
             ->assertSee('External ID')
             ->assertSee('CRM-9001')
+            ->assertSee('Venue')
+            ->assertSee('Event')
             ->assertSee('Last Disp')
             ->assertSee('Last Call Date')
             ->assertSee('Left VM')

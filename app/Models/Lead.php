@@ -60,6 +60,7 @@ class Lead extends Model
         'callback_at',
         'callback_owner_id',
         'calling_list_id',
+        'calling_list_assigned_at',
         'imported_at',
         'import_batch_id',
         'partner_list',
@@ -90,6 +91,7 @@ class Lead extends Model
             'status' => LeadStatus::class,
             'last_attempt_at' => 'datetime',
             'callback_at' => 'datetime',
+            'calling_list_assigned_at' => 'datetime',
             'imported_at' => 'datetime',
             'extra_fields' => 'array',
             'soft_score_status' => SoftScoreStatus::class,
@@ -103,6 +105,21 @@ class Lead extends Model
             'dnc_checked_at' => 'datetime',
             'dnc_result' => 'array',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::saving(function (Lead $lead): void {
+            if (! $lead->isDirty('calling_list_id')) {
+                return;
+            }
+
+            if ($lead->isDirty('calling_list_assigned_at')) {
+                return;
+            }
+
+            $lead->calling_list_assigned_at = $lead->calling_list_id ? now() : null;
+        });
     }
 
     public function callingList(): BelongsTo
