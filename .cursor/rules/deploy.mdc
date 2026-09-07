@@ -1,0 +1,44 @@
+---
+description: How to deploy to local Docker and production when the user asks
+alwaysApply: true
+---
+
+# Deploy local and prod
+
+When the user asks to deploy (local, prod, or both), a **local agent** on the Windows repo (`D:\sf\OnPointCall`) should run the scripts below. Do not invent `migrate:fresh`, `docker compose down -v`, or other wipes.
+
+Cloud agents cannot reach Windows Docker or the VPS. Tell the user to run deploy from a local agent, or run the scripts themselves.
+
+## Commands (repo root)
+
+PowerShell (Windows local agent):
+
+```powershell
+powershell -File scripts/deploy.ps1 both
+powershell -File scripts/deploy.ps1 local
+powershell -File scripts/deploy.ps1 prod
+```
+
+Git Bash / WSL:
+
+```bash
+bash scripts/deploy.sh both
+bash scripts/deploy.sh local
+bash scripts/deploy.sh prod
+```
+
+## What they do
+
+- **local:** `git checkout master` + `git pull origin master`, then `php artisan migrate --force` and cache clear in Docker. Aborts if the working tree is dirty.
+- **prod:** SSH to host alias `onpoint-prod` (or `ONPOINT_PROD_SSH`), `git reset --hard origin/master` in `/opt/onpointcall`, then migrate + cache + restart. Forward-migrate only.
+
+## Prerequisites
+
+- Changes must already be on GitHub `master` (PR merged).
+- Docker Desktop running for local.
+- One-time SSH config for prod (`Host onpoint-prod` in `~/.ssh/config`). If SSH fails, print the config snippet from `scripts/deploy-prod.sh` and stop.
+
+## After deploy
+
+- Local: http://localhost/admin
+- Prod: health check is part of `scripts/prod-update.sh` (`curl http://localhost/up` on the VPS)

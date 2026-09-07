@@ -6,7 +6,13 @@ Run from the repo root (`D:\sf\OnPointCall`). Almost everything goes through Doc
 docker compose exec app <command>
 ```
 
-Edit code on `D:\`, save, refresh the browser. No local deploy.
+Edit code on `D:\`, save, refresh the browser. After a PR is merged to `master`, deploy with:
+
+```powershell
+powershell -File scripts/deploy.ps1 both
+```
+
+Or `bash scripts/deploy.sh both`. Use `local` or `prod` instead of `both` to do one side. Prod needs a one-time `~/.ssh/config` Host `onpoint-prod`.
 
 | Check | URL |
 |---|---|
@@ -16,6 +22,27 @@ Edit code on `D:\`, save, refresh the browser. No local deploy.
 | Agent window | http://localhost/agent |
 
 Sign in: `jason.paine@onpointcall.com` / `password`
+
+---
+
+## Deploy (after a PR is merged to master)
+
+One-time prod SSH setup on the Windows machine (`C:\Users\YOU\.ssh\config`):
+
+```
+Host onpoint-prod
+  HostName YOUR_VPS_IP_OR_DOMAIN
+  User YOUR_SSH_USER
+  IdentityFile ~/.ssh/id_ed25519
+```
+
+Then from `D:\sf\OnPointCall`:
+
+```powershell
+powershell -File scripts/deploy.ps1 both
+```
+
+That pulls `master` into local Docker (migrate + cache) and SSHs to the VPS (`/opt/onpointcall`) for the same. Forward-migrate only; never wipes the database. Local agent: if the user says deploy, run these scripts (see `.cursor/rules/deploy.mdc`).
 
 ---
 
