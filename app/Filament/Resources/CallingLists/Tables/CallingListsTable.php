@@ -32,6 +32,12 @@ class CallingListsTable
                     ->counts('leads')
                     ->numeric()
                     ->sortable(),
+                TextColumn::make('fresh_leads_count')
+                    ->label('Fresh')
+                    ->counts('freshLeads')
+                    ->numeric()
+                    ->sortable()
+                    ->tooltip('Leads that are new or have not been called yet.'),
                 TextColumn::make('ready_now')
                     ->label('Ready now')
                     ->numeric()

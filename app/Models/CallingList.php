@@ -48,6 +48,11 @@ class CallingList extends Model
         return $this->leads()->where('status', LeadStatus::Callable);
     }
 
+    public function freshLeads(): HasMany
+    {
+        return $this->availableLeads()->where('attempt_count', 0);
+    }
+
     public function listAssignments(): HasMany
     {
         return $this->hasMany(ListAssignment::class);

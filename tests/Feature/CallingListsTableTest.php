@@ -56,9 +56,10 @@ class CallingListsTableTest extends TestCase
         $this->makeLead($company->id, $list->id, LeadStatus::Booked, '4045551004');
         $this->makeLead($company->id, $list->id, LeadStatus::Terminal, '4045551005');
 
-        $list->loadCount('leads');
+        $list->loadCount(['leads', 'freshLeads']);
 
         $this->assertSame(5, $list->leads_count);
+        $this->assertSame(2, $list->fresh_leads_count);
 
         CompanyContext::set($company->id);
 
@@ -66,6 +67,7 @@ class CallingListsTableTest extends TestCase
             ->test(ListCallingLists::class)
             ->assertOk()
             ->assertSee('Total leads')
+            ->assertSee('Fresh')
             ->assertSee('Ready now')
             ->assertSee('Cadence wait')
             ->assertSee('Hours wait')
