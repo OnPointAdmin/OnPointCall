@@ -17,7 +17,6 @@ $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Set-Location $Root
 
 $ProdSshHost = "onpoint-prod"
-$Release = Join-Path $Root "scripts\prod-release.sh"
 
 function Invoke-Checked {
     param(
@@ -105,17 +104,25 @@ function Invoke-LocalDeploy {
 }
 
 function Invoke-ProdDeploy {
-    if (-not (Test-Path $Release)) {
-        throw "Missing $Release"
+    $relativeRelease = "scripts\prod-release.sh"
+    if (-not (Test-Path $relativeRelease)) {
+        throw "Missing $relativeRelease"
     }
     Assert-ProdSshAlias
 
     $remoteScript = "/tmp/prod-release.sh"
-    $sshOpts = @("-o", "BatchMode=yes", "-o", "ConnectTimeout=15")
 
     Write-Host "==== PROD: $ProdSshHost from origin/master ===="
-    Invoke-Checked scp @($sshOpts + @($Release, "${ProdSshHost}:${remoteScript}"))
-    Invoke-Checked ssh @($sshOpts + @($ProdSshHost, "sed -i 's/\r$//' $remoteScript && bash $remoteScript"))
+    # Relative path: Windows scp treats D:\... as host:path because of the colon.
+    # Call scp.exe/ssh.exe directly so -o is not eaten by PowerShell.
+    & scp.exe $relativeRelease "${ProdSshHost}:${remoteScript}"
+    if ($LASTEXITCODE -ne 0) {
+        throw "scp $relativeRelease ${ProdSshHost}:${remoteScript} failed (exit $LASTEXITCODE)"
+    }
+    & ssh.exe -o BatchMode=yes -o ConnectTimeout=15 $ProdSshHost "sed -i 's/\r$//' $remoteScript && bash $remoteScript"
+    if ($LASTEXITCODE -ne 0) {
+        throw "ssh $ProdSshHost prod-release failed (exit $LASTEXITCODE)"
+    }
 }
 
 Assert-CleanWorktree
