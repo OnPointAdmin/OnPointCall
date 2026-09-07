@@ -46,28 +46,36 @@ class LeadsTable
             TextColumn::make('external_lead_id')
                 ->label('External ID')
                 ->searchable()
-                ->placeholder('—'),
+                ->placeholder('—')
+                ->toggleable(),
             TextColumn::make('first_name')
-                ->searchable(),
+                ->searchable()
+                ->toggleable(),
             TextColumn::make('last_name')
-                ->searchable(),
+                ->searchable()
+                ->toggleable(),
             TextColumn::make('state')
-                ->searchable(),
+                ->searchable()
+                ->toggleable(),
             TextColumn::make('venue')
                 ->searchable()
                 ->sortable()
-                ->placeholder('—'),
+                ->placeholder('—')
+                ->toggleable(),
             TextColumn::make('event')
                 ->searchable()
                 ->sortable()
-                ->placeholder('—'),
+                ->placeholder('—')
+                ->toggleable(),
             TextColumn::make('status')
                 ->badge()
-                ->searchable(),
+                ->searchable()
+                ->toggleable(),
             TextColumn::make('last_disposition')
                 ->label('Last Disp')
                 ->badge()
                 ->placeholder('—')
+                ->toggleable()
                 ->getStateUsing(function (Lead $record): ?string {
                     $value = $record->latestDisposition?->payload['disposition'] ?? null;
 
@@ -81,21 +89,25 @@ class LeadsTable
                 ->label('Last Call Date')
                 ->dateTime()
                 ->sortable()
-                ->placeholder('—'),
+                ->placeholder('—')
+                ->toggleable(),
             TextColumn::make('attempt_count')
                 ->numeric()
-                ->sortable(),
+                ->sortable()
+                ->toggleable(),
             TextColumn::make('calling_list_assigned_at')
                 ->label('Added to list')
                 ->dateTime()
                 ->sortable()
-                ->placeholder('—'),
+                ->placeholder('—')
+                ->toggleable(),
         ];
 
         if (! $forCallingList) {
             $columns[] = TextColumn::make('callingList.name')
                 ->label('List')
-                ->searchable();
+                ->searchable()
+                ->toggleable();
         }
 
         $columns = [
@@ -105,7 +117,8 @@ class LeadsTable
                 ->searchable()
                 ->toggleable(isToggledHiddenByDefault: true),
             TextColumn::make('lead_type')
-                ->badge(),
+                ->badge()
+                ->toggleable(),
             TextColumn::make('soft_score_code')
                 ->label('Soft Score')
                 ->toggleable(),

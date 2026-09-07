@@ -16,4 +16,9 @@ class ListLeads extends ListRecords
             CreateAction::make(),
         ];
     }
+
+    public function getTableColumnsSessionKey(): string
+    {
+        return parent::getTableColumnsSessionKey().'_v2';
+    }
 }

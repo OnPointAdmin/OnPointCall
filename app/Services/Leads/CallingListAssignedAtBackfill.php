@@ -31,7 +31,7 @@ class CallingListAssignedAtBackfill
                     $assignedAt = $this->assignedAtFromHistory(
                         $histories->get($lead->id, collect()),
                         (int) $lead->calling_list_id,
-                    );
+                    ) ?? $lead->imported_at ?? $lead->created_at;
 
                     if ($assignedAt === null) {
                         continue;

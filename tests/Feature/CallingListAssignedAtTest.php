@@ -107,7 +107,7 @@ class CallingListAssignedAtTest extends TestCase
         $this->assertTrue($lead->calling_list_assigned_at->equalTo($assignedAt));
     }
 
-    public function test_backfill_uses_latest_matching_release_or_assign_history(): void
+    public function test_backfill_prefers_history_then_imported_at_then_created_at(): void
     {
         $company = Company::factory()->create();
         $firstList = $this->createCallingList($company->id, overrides: ['name' => 'First']);
@@ -115,7 +115,18 @@ class CallingListAssignedAtTest extends TestCase
 
         $released = $this->leadOnListWithoutTimestamp($company->id, $currentList->id, '4045551001');
         $moved = $this->leadOnListWithoutTimestamp($company->id, $currentList->id, '4045551002');
-        $noHistory = $this->leadOnListWithoutTimestamp($company->id, $currentList->id, '4045551003');
+        $noHistory = $this->leadOnListWithoutTimestamp(
+            $company->id,
+            $currentList->id,
+            '4045551003',
+            importedAt: now()->subDays(6),
+        );
+        $createdOnly = $this->leadOnListWithoutTimestamp(
+            $company->id,
+            $currentList->id,
+            '4045551005',
+            importedAt: null,
+        );
         $alreadyStamped = Lead::withoutGlobalScopes()->create([
             'company_id' => $company->id,
             'phone' => '4045551004',
@@ -162,27 +173,33 @@ class CallingListAssignedAtTest extends TestCase
 
         $updated = app(CallingListAssignedAtBackfill::class)->run();
 
-        $this->assertSame(2, $updated);
+        $this->assertSame(4, $updated);
         $this->assertTrue($released->fresh()->calling_list_assigned_at->equalTo(now()->subDays(4)));
         $this->assertTrue($moved->fresh()->calling_list_assigned_at->equalTo(now()->subDays(2)));
-        $this->assertNull($noHistory->fresh()->calling_list_assigned_at);
+        $this->assertTrue($noHistory->fresh()->calling_list_assigned_at->equalTo(now()->subDays(6)));
+        $this->assertTrue($createdOnly->fresh()->calling_list_assigned_at->equalTo($createdOnly->created_at));
         $this->assertTrue($alreadyStamped->fresh()->calling_list_assigned_at->equalTo(now()->subDays(9)));
     }
 
-    private function leadOnListWithoutTimestamp(int $companyId, int $listId, string $phone): Lead
-    {
+    private function leadOnListWithoutTimestamp(
+        int $companyId,
+        int $listId,
+        string $phone,
+        ?Carbon $importedAt = null,
+    ): Lead {
         $lead = Lead::withoutGlobalScopes()->create([
             'company_id' => $companyId,
             'phone' => $phone,
             'status' => LeadStatus::Holding,
             'lead_type' => 'standard',
-            'imported_at' => now(),
+            'imported_at' => $importedAt ?? now(),
         ]);
 
         DB::table('leads')->where('id', $lead->id)->update([
             'calling_list_id' => $listId,
             'status' => LeadStatus::Callable->value,
             'calling_list_assigned_at' => null,
+            'imported_at' => $importedAt,
         ]);
 
         return $lead->fresh();

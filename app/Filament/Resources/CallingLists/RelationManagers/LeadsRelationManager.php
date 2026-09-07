@@ -18,4 +18,9 @@ class LeadsRelationManager extends RelationManager
             ->recordTitleAttribute('phone')
             ->heading(null);
     }
+
+    public function getTableColumnsSessionKey(): string
+    {
+        return parent::getTableColumnsSessionKey().'_v2';
+    }
 }
