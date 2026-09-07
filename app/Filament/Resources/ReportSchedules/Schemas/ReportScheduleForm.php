@@ -37,15 +37,15 @@ class ReportScheduleForm
                     ->label('Date range')
                     ->options(ReportSchedulePeriod::class)
                     ->default(ReportSchedulePeriod::Yesterday->value)
-                    ->required(fn (Get $get): bool => $get('report_type') !== ReportScheduleType::LeadDashboard->value)
-                    ->visible(fn (Get $get): bool => $get('report_type') !== ReportScheduleType::LeadDashboard->value)
+                    ->required(fn (Get $get): bool => self::selectedType($get)?->usesPeriod() ?? true)
+                    ->visible(fn (Get $get): bool => self::selectedType($get)?->usesPeriod() ?? true)
                     ->helperText('Lead Dashboard is always a live snapshot.'),
                 Select::make('group_by')
                     ->label('Group by')
                     ->options(LeadSourceGroupBy::class)
                     ->default(LeadSourceGroupBy::VenueAndEvent->value)
-                    ->required(fn (Get $get): bool => $get('report_type') === ReportScheduleType::LeadSource->value)
-                    ->visible(fn (Get $get): bool => $get('report_type') === ReportScheduleType::LeadSource->value),
+                    ->required(fn (Get $get): bool => self::selectedType($get) === ReportScheduleType::LeadSource)
+                    ->visible(fn (Get $get): bool => self::selectedType($get) === ReportScheduleType::LeadSource),
                 Select::make('days_of_week')
                     ->label('Days')
                     ->multiple()
@@ -80,5 +80,18 @@ class ReportScheduleForm
                             ->defaultItems(1),
                     ]),
             ]);
+    }
+
+    private static function selectedType(Get $get): ?ReportScheduleType
+    {
+        $value = $get('report_type');
+
+        if ($value instanceof ReportScheduleType) {
+            return $value;
+        }
+
+        return is_string($value) && $value !== ''
+            ? ReportScheduleType::tryFrom($value)
+            : null;
     }
 }

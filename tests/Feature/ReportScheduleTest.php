@@ -10,6 +10,7 @@ use App\Enums\ReportScheduleType;
 use App\Enums\UserRole;
 use App\Filament\Resources\ReportSchedules\Pages\CreateReportSchedule;
 use App\Filament\Resources\ReportSchedules\Pages\EditReportSchedule;
+use App\Filament\Resources\ReportSchedules\Pages\ListReportSchedules;
 use App\Mail\DashboardDigestMail;
 use App\Models\AppSetting;
 use App\Models\Company;
@@ -279,6 +280,40 @@ class ReportScheduleTest extends TestCase
         $this->assertSame(ReportSchedulePeriod::ThisWeek, $schedule->period);
         $this->assertSame([1, 2, 3, 4, 5], $schedule->normalizedDaysOfWeek());
         $this->assertSame(['boss@example.com'], $schedule->recipientEmails());
+    }
+
+    public function test_list_page_shows_days_and_times(): void
+    {
+        $admin = $this->makeAdmin();
+        $company = Company::withoutGlobalScopes()->findOrFail($admin->company_id);
+        $this->makeSchedule($company, [
+            'name' => 'Morning leadership',
+            'days_of_week' => [1, 2, 3, 4, 5, 6, 7],
+            'send_times' => ['07:00'],
+        ]);
+        CompanyContext::clear();
+
+        Livewire::actingAs($admin)
+            ->test(ListReportSchedules::class)
+            ->assertSee('Morning leadership')
+            ->assertSee('Every day')
+            ->assertSee('07:00')
+            ->assertDontSee('—, —,');
+    }
+
+    public function test_lead_dashboard_hides_date_range(): void
+    {
+        $admin = $this->makeAdmin();
+        CompanyContext::clear();
+
+        Livewire::actingAs($admin)
+            ->test(CreateReportSchedule::class)
+            ->assertFormFieldExists('period')
+            ->fillForm([
+                'report_type' => ReportScheduleType::LeadDashboard->value,
+            ])
+            ->assertFormFieldIsHidden('period')
+            ->assertFormFieldIsHidden('group_by');
     }
 
     public function test_send_now_from_edit_page_ignores_schedule_time(): void

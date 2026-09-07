@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\ReportSchedules\Tables;
 
 use App\Filament\Resources\ReportSchedules\Actions\SendReportScheduleAction;
+use App\Models\ReportSchedule;
 use App\Support\Weekdays;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
@@ -28,19 +29,12 @@ class ReportSchedulesTable
                     ->label('Date range')
                     ->formatStateUsing(fn ($state): string => $state?->getLabel() ?? 'As of now')
                     ->sortable(),
-                TextColumn::make('days_of_week')
+                TextColumn::make('days_label')
                     ->label('Days')
-                    ->formatStateUsing(fn ($state): string => Weekdays::labels(is_array($state) ? $state : [])),
-                TextColumn::make('send_times')
+                    ->state(fn (ReportSchedule $record): string => Weekdays::labels($record->normalizedDaysOfWeek())),
+                TextColumn::make('times_label')
                     ->label('Times')
-                    ->formatStateUsing(function ($state): string {
-                        $times = is_array($state) ? $state : [];
-
-                        return collect($times)
-                            ->map(fn (mixed $time): string => is_string($time) ? $time : '')
-                            ->filter()
-                            ->implode(', ') ?: '—';
-                    }),
+                    ->state(fn (ReportSchedule $record): string => implode(', ', $record->normalizedSendTimes()) ?: '—'),
                 TextColumn::make('recipients_count')
                     ->label('Recipients')
                     ->counts('recipients')
