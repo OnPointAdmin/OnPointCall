@@ -51,7 +51,7 @@ Totals uses the **same wide grid** as Results by Rep: sticky first column, **Tot
 
 Section header: **Totals** plus **Expand all / Collapse all** (hidden if no metric has a breakdown). Chevrons sit on expandable **metric headers**, not on a stacked metric list.
 
-Indent child rows; disposition children one step, nested reasons a second step. Reuse the nested-row styles from `.list-row` in [`public/css/manager-dashboard.css`](../public/css/manager-dashboard.css). Child count/% belong only in the column that owns that child.
+Child label, count, and % sit in the owning metric column. Alternate Totals breakdown rows are striped. Reuse `.list-row` in [`public/css/manager-dashboard.css`](../public/css/manager-dashboard.css).
 
 ## Data
 
