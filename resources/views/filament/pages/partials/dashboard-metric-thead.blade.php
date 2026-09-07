@@ -14,7 +14,7 @@
 
             @php
                 $metricKey = $definition['key'];
-                $canExpand = $expandable && count($breakdowns[$metricKey] ?? []) > 1;
+                $canExpand = $expandable && ($breakdowns[$metricKey] ?? []) !== [];
             @endphp
 
             <th colspan="2" class="split">

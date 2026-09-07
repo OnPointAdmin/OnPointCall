@@ -3,12 +3,14 @@
 namespace Tests\Feature;
 
 use App\Enums\Disposition;
+use App\Enums\DispositionOutcome;
 use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
 use App\Enums\UserRole;
 use App\Filament\Pages\Dashboard;
 use App\Models\AppSetting;
 use App\Models\Company;
+use App\Models\DispositionDefinition;
 use App\Models\Lead;
 use App\Models\LeadHistory;
 use App\Models\StateRule;
@@ -87,14 +89,29 @@ class AdminDashboardTest extends TestCase
             'imported_at' => now(),
         ]);
 
-        foreach ([Disposition::Booked, Disposition::NoAnswer, Disposition::LeftVm] as $disposition) {
+        DispositionDefinition::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'slug' => 'language-barrier',
+            'label' => 'Language Barrier',
+            'sort_order' => 40,
+            'active' => true,
+            'is_system' => false,
+            'outcome' => DispositionOutcome::Terminal,
+            'increments_attempt' => true,
+            'requires_reason' => false,
+            'button_group' => 'negative',
+            'color' => 'red',
+            'report_group' => 'other',
+        ]);
+
+        foreach ([Disposition::Booked, Disposition::NoAnswer, Disposition::LeftVm, Disposition::WrongNumber, Disposition::Dnc, 'language-barrier'] as $disposition) {
             LeadHistory::withoutGlobalScopes()->create([
                 'company_id' => $company->id,
                 'lead_id' => $lead->id,
                 'actor_id' => $agent->id,
                 'event_type' => LeadHistoryType::Disposition,
                 'occurred_at' => now(),
-                'payload' => ['disposition' => $disposition->value],
+                'payload' => ['disposition' => $disposition instanceof Disposition ? $disposition->value : $disposition],
             ]);
         }
 
@@ -104,9 +121,14 @@ class AdminDashboardTest extends TestCase
             ->test(Dashboard::class)
             ->assertSeeHtml('<th rowspan="2">Total</th>')
             ->assertSeeHtml('toggle(\'no_answer_vm\')')
+            ->assertSeeHtml('toggle(\'wrong_dnc\')')
+            ->assertSeeHtml('toggle(\'other\')')
             ->assertDontSeeHtml('toggle(\'booked\')')
             ->assertSee('Left VM')
-            ->assertSee('No Answer');
+            ->assertSee('No Answer')
+            ->assertSee('Wrong Number')
+            ->assertSee('DNC')
+            ->assertSee('Language Barrier');
     }
 
     public function test_dashboard_shows_queue_status_for_active_lists_only(): void

@@ -297,6 +297,43 @@ class ManagerDashboardServiceTest extends TestCase
         $this->assertSame(2, $report['totals']['other']['count']);
     }
 
+    public function test_report_expands_single_other_and_wrong_dnc_dispositions(): void
+    {
+        $company = Company::factory()->create();
+        $agent = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Agent,
+        ]);
+        $lead = $this->createLead($company->id, 'standard');
+
+        DispositionDefinition::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'slug' => 'language-barrier',
+            'label' => 'Language Barrier',
+            'sort_order' => 40,
+            'active' => true,
+            'is_system' => false,
+            'outcome' => DispositionOutcome::Terminal,
+            'increments_attempt' => true,
+            'requires_reason' => false,
+            'button_group' => 'negative',
+            'color' => 'red',
+            'report_group' => 'other',
+        ]);
+
+        $this->createDisposition($company->id, $lead->id, $agent->id, 'language-barrier');
+        $this->createDisposition($company->id, $lead->id, $agent->id, Disposition::Dnc);
+        $this->createDisposition($company->id, $lead->id, $agent->id, Disposition::Booked);
+
+        $service = app(ManagerDashboardService::class);
+        $range = $service->todayRange($company->id);
+        $report = $service->report($company->id, null, null, $range['start'], $range['end']);
+
+        $this->assertSame(['Language Barrier'], array_column($report['breakdowns']['other'], 'label'));
+        $this->assertSame(['DNC'], array_column($report['breakdowns']['wrong_dnc'], 'label'));
+        $this->assertArrayNotHasKey('booked', $report['breakdowns']);
+    }
+
     public function test_report_nests_reasons_under_bucketed_dispositions(): void
     {
         $company = Company::factory()->create();

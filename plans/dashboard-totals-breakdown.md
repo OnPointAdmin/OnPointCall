@@ -37,10 +37,10 @@ flowchart TD
 - On expand, child rows are **sibling table rows** under that metric. Later metrics (and the footnote) shift down.
 - Child % uses the same rule as today: **% of total leads called**, so children add up to the parent’s %.
 - **What appears under a bucket** (omit zero-count rows):
-  - **More than one disposition slug** in the group: children are those dispositions (definition label, inactive still shown). If a disposition also has reasons, nest reasons under that disposition, always visible once the parent metric is open (no second click).
-  - **One disposition slug with reasons**: skip the redundant disposition row; children are the reasons.
-  - **One disposition slug and no reasons**: no chevron (Booked, Callback, a single-slug Other, etc.).
-- Chevron only when the metric has **more than one** child after omitting zeros. Same rule as Results by Rep (chevron only when a rep has more than one list).
+  - **Bundled buckets** (No Answer / VM, Wrong / DNC, Other): children are always the actual dispositions, even when only one slug has counts. If a disposition also has reasons, nest reasons under that disposition, always visible once the parent metric is open (no second click).
+  - **Single-slug buckets with reasons** (Not Interested, Not Qualified, Skipped): skip the redundant disposition row; children are the reasons.
+  - **Single-slug buckets with no reasons** (Booked, Callback): no chevron.
+- Chevron when the metric has a published breakdown. Bundled buckets get a chevron whenever the parent count is non-zero.
 - **Total Leads Called** and **Overdue Call Backs** never expand. Overdue is a live snapshot, not history.
 - Alpine.js on the existing Filament page (no Livewire round-trip). Filter/refresh re-renders and collapses again, which is fine.
 - Independent expand state from Results by Rep.
@@ -51,7 +51,7 @@ Totals uses the **same wide grid** as Results by Rep: sticky first column, **Tot
 
 Section header: **Totals** plus **Expand all / Collapse all** (hidden if no metric has a breakdown). Chevrons sit on expandable **metric headers**, not on a stacked metric list.
 
-Child label, count, and % sit in the owning metric column. Alternate Totals breakdown rows are striped. Reuse `.list-row` in [`public/css/manager-dashboard.css`](../public/css/manager-dashboard.css).
+Child **label sits in the sticky first column**; count and % sit in the owning metric’s # / % cells. Alternate Totals breakdown rows are striped. Reuse `.list-row` in [`public/css/manager-dashboard.css`](../public/css/manager-dashboard.css).
 
 ## Data
 
@@ -98,8 +98,8 @@ In [`resources/views/filament/pages/dashboard.blade.php`](../resources/views/fil
 
 ## Tests
 
-- [`tests/Feature/ManagerDashboardServiceTest.php`](../tests/Feature/ManagerDashboardServiceTest.php): No Answer + Left VM appear under `no_answer_vm`; Wrong Number / Bad Number / DNC under `wrong_dnc`; NI/NQ/Skip reasons from `payload.reason`; skip `skip_reason` still counted; single-slug Booked has no breakdown; custom slug in Other; filters still apply to children; percents are of total leads called.
-- [`tests/Feature/AdminDashboardTest.php`](../tests/Feature/AdminDashboardTest.php): shared wide headers (`Total`, # / %); chevron on No Answer / VM; no chevron on Booked.
+- [`tests/Feature/ManagerDashboardServiceTest.php`](../tests/Feature/ManagerDashboardServiceTest.php): No Answer + Left VM appear under `no_answer_vm`; Wrong Number / Bad Number / DNC under `wrong_dnc`; NI/NQ/Skip reasons from `payload.reason`; skip `skip_reason` still counted; single-slug Booked has no breakdown; a single custom slug in Other still expands; a single Wrong / DNC slug still expands; filters still apply to children; percents are of total leads called.
+- [`tests/Feature/AdminDashboardTest.php`](../tests/Feature/AdminDashboardTest.php): shared wide headers (`Total`, # / %); chevron on No Answer / VM, Wrong / DNC, and Other; no chevron on Booked.
 - [`tests/Feature/DashboardDigestServiceTest.php`](../tests/Feature/DashboardDigestServiceTest.php): digest HTML includes child labels when the prior day has a split bucket.
 
 ## Out of scope

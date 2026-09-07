@@ -7,21 +7,14 @@
 @endphp
 
 <tr class="{{ $rowClass }}" x-show="expandedKeys.includes('{{ $metricKey }}')" x-cloak>
-    <td class="col-start"></td>
+    <td class="col-start">{{ $item['label'] ?? '' }}</td>
     <td></td>
     @foreach ($metricDefinitions as $definition)
         @continue($definition['key'] === 'total_leads_called')
 
         @if ($definition['key'] === $metricKey)
-            <td class="split breakdown-fill" colspan="2">
-                <div class="dashboard-breakdown-cell">
-                    <span class="dashboard-breakdown-label">{{ $item['label'] ?? '' }}</span>
-                    <span class="dashboard-breakdown-stats">
-                        {{ number_format($item['count'] ?? 0) }}
-                        <span class="muted">{{ $percent === null ? '—' : number_format($percent, 1).'%' }}</span>
-                    </span>
-                </div>
-            </td>
+            <td class="split breakdown-fill">{{ number_format($item['count'] ?? 0) }}</td>
+            <td class="muted breakdown-fill">{{ $percent === null ? '—' : number_format($percent, 1).'%' }}</td>
         @else
             <td class="split"></td>
             <td></td>

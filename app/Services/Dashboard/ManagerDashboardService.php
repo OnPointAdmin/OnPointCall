@@ -568,14 +568,31 @@ class ManagerDashboardService
         $breakdowns = [];
 
         foreach ($breakdownCounts as $metricKey => $bySlug) {
-            $children = $this->childrenForMetric($bySlug, $totalCalled, $definitions, $reasonSortOrders);
+            $children = $this->childrenForMetric($metricKey, $bySlug, $totalCalled, $definitions, $reasonSortOrders);
 
-            if (count($children) > 1) {
+            if ($this->shouldPublishBreakdown($metricKey, $children)) {
                 $breakdowns[$metricKey] = $children;
             }
         }
 
         return $breakdowns;
+    }
+
+    /**
+     * @param  list<array{kind: string, slug: ?string, label: string, count: int, percent: ?float, items: list<array{kind: string, slug: ?string, label: string, count: int, percent: ?float, items: list<empty>}>}>  $children
+     */
+    private function shouldPublishBreakdown(string $metricKey, array $children): bool
+    {
+        if ($children === []) {
+            return false;
+        }
+
+        return count($children) > 1 || $this->metricExpandsToDispositions($metricKey);
+    }
+
+    private function metricExpandsToDispositions(string $metricKey): bool
+    {
+        return in_array($metricKey, ['no_answer_vm', 'wrong_dnc', 'other'], true);
     }
 
     /**
@@ -585,6 +602,7 @@ class ManagerDashboardService
      * @return list<array{kind: string, slug: ?string, label: string, count: int, percent: ?float, items: list<array{kind: string, slug: ?string, label: string, count: int, percent: ?float, items: list<empty>}>}>
      */
     private function childrenForMetric(
+        string $metricKey,
         array $bySlug,
         int $totalCalled,
         Collection $definitions,
@@ -606,8 +624,23 @@ class ManagerDashboardService
 
         if (count($slugCounts) === 1) {
             $slug = (string) array_key_first($slugCounts);
+            $reasonCounts = $bySlug[$slug] ?? [];
+            $reasons = $this->reasonChildren($slug, $reasonCounts, $totalCalled, $reasonSortOrders);
 
-            return $this->reasonChildren($slug, $bySlug[$slug] ?? [], $totalCalled, $reasonSortOrders);
+            if (! $this->metricExpandsToDispositions($metricKey)) {
+                return $reasons;
+            }
+
+            return [
+                $this->breakdownRow(
+                    kind: 'disposition',
+                    slug: $slug,
+                    label: $this->dispositionLabel($slug, $definitions),
+                    count: $slugCounts[$slug],
+                    totalCalled: $totalCalled,
+                    items: $reasons,
+                ),
+            ];
         }
 
         $dispositions = [];

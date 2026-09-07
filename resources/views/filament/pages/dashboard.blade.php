@@ -116,7 +116,7 @@
                                 $metricKey = $definition['key'];
                                 $metricItems = $breakdowns[$metricKey] ?? [];
                             @endphp
-                            @continue(count($metricItems) <= 1)
+                            @continue($metricItems === [])
 
                             @foreach ($metricItems as $item)
                                 @include('filament.pages.partials.dashboard-metric-breakdown-row', [

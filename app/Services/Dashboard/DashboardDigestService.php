@@ -40,6 +40,7 @@ class DashboardDigestService
             'subtitle' => $day->format('l, F j, Y'),
             'periodLabel' => null,
             'totals' => $report['totals'],
+            'breakdowns' => $report['breakdowns'] ?? [],
             'agents' => $report['agents'],
             'metricDefinitions' => $this->dashboard->metricDefinitions(),
             'dashboard' => $this->dashboard,

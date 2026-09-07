@@ -30,8 +30,9 @@ Totals and Results by Rep are the **same report**, two rollups. They must use th
 ## Expand
 
 - Expand **grows the table downward**: sibling `<tr>` rows, same columns. Not a dropdown, extra columns, or a nested table in a cell.
-- Chevron only when there is more than one child. Collapsed by default. Expand all / Collapse all.
-- Child rows use `.list-row` (and `.reason-row` for a second indent). Put the **child label, count, and % in the owning metric column** (colspan 2). Leave the first column and other metric cells blank.
+- Chevron when the metric has a breakdown. Collapsed by default. Expand all / Collapse all.
+- Child rows use `.list-row` (and `.reason-row` for a second indent). Put the **child label in the sticky first column**. Put **count and % in that metric’s # / % cells**. Leave other metric cells blank.
+- Bundled buckets (No Answer / VM, Wrong / DNC, Other) always expand to the actual disposition names, even when only one slug has counts.
 - Stripe Totals breakdown rows (`.is-stripe`) so stacked children are easy to scan.
 
 ## Do not
