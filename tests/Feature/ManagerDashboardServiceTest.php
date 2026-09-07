@@ -60,6 +60,10 @@ class ManagerDashboardServiceTest extends TestCase
         $this->assertSame(1, $totals['skipped']['count']);
         $this->assertSame(1, $totals['callbacks']['count']);
         $this->assertSame(10.0, $totals['booked']['percent']);
+        $this->assertSame(
+            ['total_leads_called', 'booked', 'not_interested', 'not_qualified', 'no_answer_vm', 'wrong_dnc', 'skipped', 'callbacks', 'other'],
+            array_column($service->metricDefinitions(), 'key'),
+        );
 
         $this->assertArrayNotHasKey('booked', $report['breakdowns']);
         $this->assertSame(['No Answer', 'Left VM'], array_column($report['breakdowns']['no_answer_vm'], 'label'));

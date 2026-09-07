@@ -13,6 +13,7 @@ Totals and Results by Rep are the **same report**, two rollups. They must use th
 - Next column: **Total** (total leads called)
 - Then every report-group metric from `metricDefinitions()`, left to right, each as **#** and **%**
 - Skip rendering `total_leads_called` as its own metric column — that value is the Total column
+- Do not add **Overdue Call Backs** to Totals, Results by Rep, or the digest table. That metric is a live snapshot and stays on the agent workspace scoreboard only.
 - Percentages are **% of total leads called**
 - Shared header: `resources/views/filament/pages/partials/dashboard-metric-thead.blade.php`
 

@@ -57,6 +57,7 @@ class AdminDashboardTest extends TestCase
             ->assertSeeHtml('<th rowspan="2">Total</th>')
             ->assertSee('No Answer / VM')
             ->assertSee('Wrong / DNC')
+            ->assertDontSee('Overdue Call Backs')
             ->assertSee('Calling list');
     }
 

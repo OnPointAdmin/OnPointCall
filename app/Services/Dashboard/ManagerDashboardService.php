@@ -417,6 +417,16 @@ class ManagerDashboardService
             ['key' => 'skipped', 'label' => 'Skipped', 'show_percent' => true],
             ['key' => 'callbacks', 'label' => 'Call Backs', 'show_percent' => true],
             ['key' => 'other', 'label' => 'Other', 'show_percent' => true],
+        ];
+    }
+
+    /**
+     * @return list<array{key: string, label: string, show_percent: bool}>
+     */
+    public function scoreboardDefinitions(): array
+    {
+        return [
+            ...$this->metricDefinitions(),
             ['key' => 'overdue_callbacks', 'label' => 'Overdue Call Backs', 'show_percent' => true],
         ];
     }
@@ -438,7 +448,7 @@ class ManagerDashboardService
     {
         $metrics = [];
 
-        foreach ($this->metricDefinitions() as $definition) {
+        foreach ($this->scoreboardDefinitions() as $definition) {
             $metrics[$definition['key']] = [
                 'label' => $definition['label'],
                 'count' => 0,

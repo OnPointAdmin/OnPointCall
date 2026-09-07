@@ -588,7 +588,7 @@ class Workspace extends Component
      */
     public function getScoreboardDefinitionsProperty(): array
     {
-        return app(ManagerDashboardService::class)->metricDefinitions();
+        return app(ManagerDashboardService::class)->scoreboardDefinitions();
     }
 
     public function scoreboardPresetLabel(): string

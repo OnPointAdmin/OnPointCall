@@ -73,6 +73,7 @@ class DashboardDigestServiceTest extends TestCase
         $this->assertStringContainsString('Bob Rep', $digest['html']);
         $this->assertStringContainsString('Left VM', $digest['html']);
         $this->assertStringContainsString('No Answer', $digest['html']);
+        $this->assertStringNotContainsString('Overdue Call Backs', $digest['html']);
         $this->assertStringNotContainsString('Solo List', $digest['html']);
         $this->assertSame(5, $digest['stats']['total_leads_called']);
         $this->assertSame(2, $digest['stats']['booked']);
