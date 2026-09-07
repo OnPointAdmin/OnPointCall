@@ -350,11 +350,19 @@
     font-weight: 500;
 }
 
+.dashboard-table table.dashboard-totals-table {
+    min-width: 28rem;
+}
+
 .dashboard-table tbody tr.list-row td.col-start {
     background: #f8fafc;
     font-weight: 500;
     padding-left: 2.35rem;
     color: #475569;
+}
+
+.dashboard-table tbody tr.list-row.reason-row td.col-start {
+    padding-left: 3.5rem;
 }
 
 .dashboard-table tbody tr.list-row:hover td,

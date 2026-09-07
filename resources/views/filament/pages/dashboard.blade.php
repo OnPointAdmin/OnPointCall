@@ -1,9 +1,11 @@
 <x-filament-panels::page>
     @php
-        $report = $this->report ?? ['totals' => [], 'agents' => []];
+        $report = $this->report ?? ['totals' => [], 'breakdowns' => [], 'agents' => []];
         $totals = $report['totals'] ?? [];
+        $breakdowns = $report['breakdowns'] ?? [];
         $agents = $report['agents'] ?? [];
         $metricDefinitions = $this->metricDefinitions();
+        $expandableMetricKeys = array_keys($breakdowns);
         $multiListAgentIds = collect($agents)
             ->filter(fn (array $agent): bool => count($agent['lists'] ?? []) > 1)
             ->pluck('user_id')
@@ -53,25 +55,97 @@
             {{ $this->content }}
         </div>
 
-        <div class="dashboard-card dashboard-totals">
-            <h2 class="dashboard-section-title">Totals</h2>
+        <div
+            class="dashboard-card dashboard-table dashboard-totals"
+            x-data="{
+                expandedKeys: [],
+                expandableKeys: @js(array_values($expandableMetricKeys)),
+                toggle(key) {
+                    const index = this.expandedKeys.indexOf(key);
+                    if (index === -1) {
+                        this.expandedKeys.push(key);
+                    } else {
+                        this.expandedKeys.splice(index, 1);
+                    }
+                },
+                expandAll() {
+                    this.expandedKeys = [...this.expandableKeys];
+                },
+                collapseAll() {
+                    this.expandedKeys = [];
+                }
+            }"
+        >
+            <div class="dashboard-section-header">
+                <h2 class="dashboard-section-title">Totals</h2>
 
-            <div class="dashboard-stat-row">
-                @foreach ($metricDefinitions as $definition)
-                    @php
-                        $metric = $totals[$definition['key']] ?? ['count' => 0, 'percent' => null];
-                    @endphp
+                <div class="dashboard-expand-actions" x-show="expandableKeys.length > 0" x-cloak>
+                    <button type="button" class="dashboard-expand-btn" x-on:click="expandAll()">Expand all</button>
+                    <button type="button" class="dashboard-expand-btn" x-on:click="collapseAll()">Collapse all</button>
+                </div>
+            </div>
 
-                    <div class="dashboard-stat-card">
-                        <p class="dashboard-stat-label">{{ $definition['label'] }}</p>
-                        <p class="dashboard-stat-value">{{ number_format($metric['count'] ?? 0) }}</p>
-                        <p class="dashboard-stat-percent">
-                            @if ($definition['show_percent'])
-                                {{ $this->formatPercent($totals, $definition['key']) }}
+            <div class="dashboard-table-scroll">
+                <table class="dashboard-totals-table">
+                    <thead>
+                        <tr>
+                            <th class="col-start">Metric</th>
+                            <th>Count</th>
+                            <th>%</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach ($metricDefinitions as $definition)
+                            @php
+                                $metricKey = $definition['key'];
+                                $metric = $totals[$metricKey] ?? ['count' => 0, 'percent' => null];
+                                $metricItems = $breakdowns[$metricKey] ?? [];
+                                $canExpand = count($metricItems) > 1;
+                            @endphp
+                            <tr>
+                                <td class="col-start">
+                                    @if ($canExpand)
+                                        <button
+                                            type="button"
+                                            class="dashboard-rep-toggle"
+                                            x-on:click="toggle('{{ $metricKey }}')"
+                                            :aria-expanded="expandedKeys.includes('{{ $metricKey }}')"
+                                        >
+                                            <svg class="dashboard-rep-chevron" :class="{ 'is-open': expandedKeys.includes('{{ $metricKey }}') }" width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M7 5l6 5-6 5" />
+                                            </svg>
+                                            {{ $definition['label'] }}
+                                        </button>
+                                    @else
+                                        {{ $definition['label'] }}
+                                    @endif
+                                </td>
+                                <td>{{ number_format($metric['count'] ?? 0) }}</td>
+                                <td class="muted">
+                                    @if ($definition['show_percent'])
+                                        {{ $this->formatPercent($totals, $metricKey) }}
+                                    @endif
+                                </td>
+                            </tr>
+                            @if ($canExpand)
+                                @foreach ($metricItems as $item)
+                                    <tr class="list-row" x-show="expandedKeys.includes('{{ $metricKey }}')" x-cloak>
+                                        <td class="col-start">{{ $item['label'] }}</td>
+                                        <td>{{ number_format($item['count'] ?? 0) }}</td>
+                                        <td class="muted">{{ $item['percent'] === null ? '—' : number_format($item['percent'], 1).'%' }}</td>
+                                    </tr>
+                                    @foreach ($item['items'] ?? [] as $nested)
+                                        <tr class="list-row reason-row" x-show="expandedKeys.includes('{{ $metricKey }}')" x-cloak>
+                                            <td class="col-start">{{ $nested['label'] }}</td>
+                                            <td>{{ number_format($nested['count'] ?? 0) }}</td>
+                                            <td class="muted">{{ $nested['percent'] === null ? '—' : number_format($nested['percent'], 1).'%' }}</td>
+                                        </tr>
+                                    @endforeach
+                                @endforeach
                             @endif
-                        </p>
-                    </div>
-                @endforeach
+                        @endforeach
+                    </tbody>
+                </table>
             </div>
 
             <p class="dashboard-footnote">

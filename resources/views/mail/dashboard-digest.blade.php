@@ -16,6 +16,7 @@
         $listMuted = $muted.' background: #f8fafc;';
         $totalCell = $cell.' background: #1e3a5f; color: #fff; font-weight: 800; text-align: center;';
         $totalLeft = $cell.' background: #1e3a5f; color: #fff; font-weight: 800; text-align: left;';
+        $breakdowns = $breakdowns ?? [];
     @endphp
 
     <h1 style="font-size: 20px; margin: 0 0 4px;">{{ $company->name }} — Daily Summary</h1>
@@ -34,6 +35,7 @@
             @foreach ($metricDefinitions as $definition)
                 @php
                     $metric = $totals[$definition['key']] ?? ['count' => 0, 'percent' => null];
+                    $metricItems = $breakdowns[$definition['key']] ?? [];
                 @endphp
                 <tr>
                     <td style="{{ $left }}">{{ $definition['label'] }}</td>
@@ -44,6 +46,20 @@
                         @endif
                     </td>
                 </tr>
+                @foreach ($metricItems as $item)
+                    <tr>
+                        <td style="{{ $listLeft }}">{{ $item['label'] }}</td>
+                        <td style="{{ $listCell }}">{{ number_format($item['count'] ?? 0) }}</td>
+                        <td style="{{ $listMuted }}">{{ $item['percent'] === null ? '—' : number_format($item['percent'], 1).'%' }}</td>
+                    </tr>
+                    @foreach ($item['items'] ?? [] as $nested)
+                        <tr>
+                            <td style="{{ $listLeft }} padding-left: 32px;">{{ $nested['label'] }}</td>
+                            <td style="{{ $listCell }}">{{ number_format($nested['count'] ?? 0) }}</td>
+                            <td style="{{ $listMuted }}">{{ $nested['percent'] === null ? '—' : number_format($nested['percent'], 1).'%' }}</td>
+                        </tr>
+                    @endforeach
+                @endforeach
             @endforeach
         </tbody>
     </table>
