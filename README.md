@@ -66,7 +66,7 @@ docker compose exec app php artisan filament:cache-components
 docker compose exec app php artisan optimize:clear
 ```
 
-`vendor/` and compiled views run from Linux Docker volumes (not the Windows bind mount). Edit code on `D:\` as usual — no local deploy. After `composer.lock` changes, run `docker compose exec app composer install`.
+`vendor/` and compiled views run from Linux Docker volumes (not the Windows bind mount). After a PR is merged to `master`, deploy with `powershell -File scripts/deploy.ps1 both` (see [Docs/COMMANDS.md](Docs/COMMANDS.md)). After `composer.lock` changes, run `docker compose exec app composer install`.
 
 Do **not** run `php artisan optimize` locally. It caches config/routes, can 500 Filament after login, and can make `php artisan test` wipe Postgres. Use `icons:cache` / `filament:cache-components` instead.
 
