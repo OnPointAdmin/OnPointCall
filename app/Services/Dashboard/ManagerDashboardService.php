@@ -6,6 +6,7 @@ use App\Enums\Disposition;
 use App\Enums\DispositionReportGroup;
 use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
+use App\Enums\ReportSchedulePeriod;
 use App\Enums\UserRole;
 use App\Models\AppSetting;
 use App\Models\CallingList;
@@ -226,6 +227,46 @@ class ManagerDashboardService
         $end = Carbon::parse($endDate->toDateString(), $timezone)->endOfDay()->utc();
 
         return ['start' => $start, 'end' => $end];
+    }
+
+    /**
+     * @return array{start: Carbon, end: Carbon, start_local: Carbon, end_local: Carbon}
+     */
+    public function periodRange(int $companyId, ReportSchedulePeriod $period, ?Carbon $now = null): array
+    {
+        $timezone = $this->companyTimezone($companyId);
+        $now = ($now ?? Carbon::now($timezone))->copy()->timezone($timezone);
+
+        if ($period === ReportSchedulePeriod::TodaySoFar) {
+            $startLocal = $now->copy()->startOfDay();
+
+            return [
+                'start' => $startLocal->copy()->utc(),
+                'end' => $now->copy()->utc(),
+                'start_local' => $startLocal,
+                'end_local' => $now->copy(),
+            ];
+        }
+
+        $preset = $period->presetKey() ?? 'yesterday';
+        $dates = $this->presetDates($preset, $timezone, $now);
+        $range = $this->dateRange($companyId, $dates['start'], $dates['end']);
+
+        return [
+            'start' => $range['start'],
+            'end' => $range['end'],
+            'start_local' => $dates['start']->copy()->timezone($timezone)->startOfDay(),
+            'end_local' => $dates['end']->copy()->timezone($timezone)->startOfDay(),
+        ];
+    }
+
+    public function periodRangeLabel(Carbon $startLocal, Carbon $endLocal): string
+    {
+        if ($startLocal->toDateString() === $endLocal->toDateString()) {
+            return $startLocal->format('M j, Y');
+        }
+
+        return $startLocal->format('M j, Y').' – '.$endLocal->format('M j, Y');
     }
 
     /**
