@@ -2,87 +2,59 @@
 
 namespace App\Console\Commands;
 
-use App\Mail\DashboardDigestMail;
-use App\Models\AppSetting;
-use App\Models\Company;
-use App\Models\DashboardEmailRecipient;
-use App\Services\Dashboard\DashboardDigestService;
-use Carbon\Carbon;
+use App\Models\ReportSchedule;
+use App\Services\Dashboard\ReportScheduleSender;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 
 class DashboardEmailDigestCommand extends Command
 {
-    protected $signature = 'dashboard:email-digest {--company= : Company ID to send for} {--force : Skip send-time check}';
+    protected $signature = 'dashboard:email-digest
+        {--company= : Company ID to send for}
+        {--schedule= : Report schedule ID to send}
+        {--force : Skip day, time, and already-sent checks}';
 
-    protected $description = 'Send prior-day dashboard summary email to configured recipients';
+    protected $description = 'Send scheduled dashboard and report emails';
 
-    public function handle(DashboardDigestService $digestService): int
+    public function handle(ReportScheduleSender $sender): int
     {
-        $companyQuery = Company::query();
+        $query = ReportSchedule::withoutGlobalScopes()->with('recipients');
 
         if ($this->option('company')) {
-            $companyQuery->whereKey($this->option('company'));
+            $query->where('company_id', $this->option('company'));
         }
 
-        foreach ($companyQuery->get() as $company) {
-            $this->sendForCompany($company, $digestService);
+        if ($this->option('schedule')) {
+            $query->whereKey($this->option('schedule'));
+        } elseif (! $this->option('force')) {
+            $query->where('enabled', true);
+        }
+
+        $schedules = $query->get();
+
+        if ($schedules->isEmpty()) {
+            $this->info('No report schedules to send.');
+
+            return self::SUCCESS;
+        }
+
+        foreach ($schedules as $schedule) {
+            $result = $sender->send($schedule, (bool) $this->option('force'));
+
+            if ($result['sent']) {
+                $this->info($result['message']);
+
+                continue;
+            }
+
+            if ($result['skipped']) {
+                $this->line("Skipped {$schedule->name}: {$result['message']}");
+
+                continue;
+            }
+
+            $this->error("Failed {$schedule->name}: {$result['message']}");
         }
 
         return self::SUCCESS;
-    }
-
-    private function sendForCompany(Company $company, DashboardDigestService $digestService): void
-    {
-        $settings = AppSetting::withoutGlobalScopes()
-            ->where('company_id', $company->id)
-            ->first();
-
-        if (! $settings?->dashboard_email_enabled) {
-            return;
-        }
-
-        $recipients = DashboardEmailRecipient::withoutGlobalScopes()
-            ->where('company_id', $company->id)
-            ->pluck('email')
-            ->filter()
-            ->all();
-
-        if ($recipients === []) {
-            return;
-        }
-
-        $timezone = $settings->dashboard_email_timezone ?? 'America/New_York';
-        $now = Carbon::now($timezone);
-
-        if (! $this->option('force')) {
-            $sendTime = Carbon::parse($settings->dashboard_email_send_time ?? '07:00:00', $timezone)
-                ->setDate($now->year, $now->month, $now->day);
-
-            if ($now->format('H:i') !== $sendTime->format('H:i')) {
-                return;
-            }
-        }
-
-        $day = $now->copy()->subDay();
-        $digest = $digestService->buildForCompany($company, $day);
-
-        try {
-            $mail = new DashboardDigestMail($digest['subject'], $digest['html']);
-
-            Mail::to($recipients[0])
-                ->bcc(array_slice($recipients, 1))
-                ->send($mail);
-
-            $this->info("Digest sent for {$company->name} to ".count($recipients).' recipient(s).');
-        } catch (\Throwable $e) {
-            Log::error('Dashboard digest failed', [
-                'company_id' => $company->id,
-                'error' => $e->getMessage(),
-            ]);
-
-            $this->error("Digest failed for {$company->name}: {$e->getMessage()}");
-        }
     }
 }

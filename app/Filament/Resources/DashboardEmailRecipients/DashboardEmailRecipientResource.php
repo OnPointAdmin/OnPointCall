@@ -22,7 +22,7 @@ class DashboardEmailRecipientResource extends Resource
 
     protected static ?int $navigationSort = 6;
 
-    protected static ?string $navigationLabel = 'Dashboard Email Recipients';
+    protected static bool $shouldRegisterNavigation = false;
 
     protected static ?string $recordTitleAttribute = 'email';
 

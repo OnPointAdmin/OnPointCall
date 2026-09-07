@@ -1,0 +1,43 @@
+---
+description: Keep Agent Dashboard metric tables on one wide grid
+globs: resources/views/filament/pages/dashboard.blade.php,resources/views/filament/pages/partials/dashboard-metric*.blade.php,resources/views/mail/dashboard-digest.blade.php,public/css/manager-dashboard.css
+---
+
+# Agent Dashboard metric tables
+
+Totals and Results by Rep are the **same report**, two rollups. They must use the same wide grid. Do not invent a second orientation or a second set of labels.
+
+## Layout
+
+- Sticky first column: the entity (`Rep`, `Totals`, list name, disposition, or reason)
+- Next column: **Total** (total leads called)
+- Then every report-group metric from `metricDefinitions()`, left to right, each as **#** and **%**
+- Skip rendering `total_leads_called` as its own metric column — that value is the Total column
+- Percentages are **% of total leads called**
+- Shared header: `resources/views/filament/pages/partials/dashboard-metric-thead.blade.php`
+
+```blade
+{{-- BAD — vertical Metric / Count / % table for the same buckets --}}
+<th>Metric</th><th>Count</th><th>%</th>
+
+{{-- GOOD --}}
+@include('filament.pages.partials.dashboard-metric-thead', [
+    'firstColumnLabel' => 'Rep',
+    'metricDefinitions' => $metricDefinitions,
+])
+```
+
+## Expand
+
+- Expand **grows the table downward**: sibling `<tr>` rows, same columns. Not a dropdown, extra columns, or a nested table in a cell.
+- Chevron only when there is more than one child. Collapsed by default. Expand all / Collapse all.
+- Child rows use `.list-row` (and `.reason-row` for a second indent). Put the **child label, count, and % in the owning metric column** (colspan 2). Leave the first column and other metric cells blank.
+- Stripe Totals breakdown rows (`.is-stripe`) so stacked children are easy to scan.
+
+## Do not
+
+- Put Totals in a card grid or a stacked Metric / Count / % list
+- Give the same metric two names (`Total Leads Called` vs `Total`, `Callbacks` vs `Call Backs`)
+- Rebuild this header inline in Totals or Results by Rep
+
+Agent workspace scoreboard and Lead Dashboard cards are a different surface; leave those as cards.

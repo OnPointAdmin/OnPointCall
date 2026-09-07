@@ -135,7 +135,10 @@ Or: Admin → Users → **Invite user**.
 
 ```bash
 docker compose exec app php artisan claims:expire
+docker compose exec app php artisan dashboard:email-digest
 docker compose exec app php artisan dashboard:email-digest --force
+docker compose exec app php artisan dashboard:email-digest --schedule=1 --force
+docker compose exec app php artisan dashboard:email-digest --company=1
 docker compose exec app php artisan db:backup --local-only
 docker compose exec app php artisan schedule:list
 docker compose exec app php artisan queue:restart

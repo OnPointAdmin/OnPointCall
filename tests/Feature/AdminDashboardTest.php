@@ -51,12 +51,62 @@ class AdminDashboardTest extends TestCase
 
         Livewire::actingAs($user)
             ->test(Dashboard::class)
-            ->assertSet('report', fn (?array $report): bool => is_array($report) && isset($report['totals'], $report['agents']))
-            ->assertSee('Total Leads Called')
+            ->assertSet('report', fn (?array $report): bool => is_array($report) && isset($report['totals'], $report['breakdowns'], $report['agents']))
             ->assertSeeHtml('<th rowspan="2">Total</th>')
             ->assertSee('No Answer / VM')
             ->assertSee('Wrong / DNC')
             ->assertSee('Calling list');
+    }
+
+    public function test_dashboard_totals_table_expands_bucketed_dispositions(): void
+    {
+        $company = Company::factory()->create();
+        $admin = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Admin,
+            'active' => true,
+        ]);
+        $agent = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Agent,
+            'active' => true,
+        ]);
+
+        AppSetting::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'max_attempts' => 6,
+            'claim_ttl_minutes' => 20,
+            'dashboard_email_timezone' => 'America/New_York',
+        ]);
+
+        $lead = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045559401',
+            'status' => LeadStatus::Callable,
+            'lead_type' => 'standard',
+            'imported_at' => now(),
+        ]);
+
+        foreach ([Disposition::Booked, Disposition::NoAnswer, Disposition::LeftVm] as $disposition) {
+            LeadHistory::withoutGlobalScopes()->create([
+                'company_id' => $company->id,
+                'lead_id' => $lead->id,
+                'actor_id' => $agent->id,
+                'event_type' => LeadHistoryType::Disposition,
+                'occurred_at' => now(),
+                'payload' => ['disposition' => $disposition->value],
+            ]);
+        }
+
+        CompanyContext::set($company->id);
+
+        Livewire::actingAs($admin)
+            ->test(Dashboard::class)
+            ->assertSeeHtml('<th rowspan="2">Total</th>')
+            ->assertSeeHtml('toggle(\'no_answer_vm\')')
+            ->assertDontSeeHtml('toggle(\'booked\')')
+            ->assertSee('Left VM')
+            ->assertSee('No Answer');
     }
 
     public function test_dashboard_shows_queue_status_for_active_lists_only(): void

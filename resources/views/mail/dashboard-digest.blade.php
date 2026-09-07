@@ -16,34 +16,93 @@
         $listMuted = $muted.' background: #f8fafc;';
         $totalCell = $cell.' background: #1e3a5f; color: #fff; font-weight: 800; text-align: center;';
         $totalLeft = $cell.' background: #1e3a5f; color: #fff; font-weight: 800; text-align: left;';
+        $breakdowns = $breakdowns ?? [];
     @endphp
 
-    <h1 style="font-size: 20px; margin: 0 0 4px;">{{ $company->name }} — Daily Summary</h1>
-    <p style="color: #64748b; margin: 0 0 20px;">{{ $day->format('l, F j, Y') }}</p>
+    <h1 style="font-size: 20px; margin: 0 0 4px;">{{ $company->name }} — Agent Dashboard</h1>
+    <p style="color: #64748b; margin: 0 0 20px;">
+        {{ $subtitle ?? $day->format('l, F j, Y') }}
+        @if (! empty($periodLabel))
+            ({{ $periodLabel }})
+        @endif
+    </p>
 
     <h2 style="font-size: 16px; margin: 0 0 8px;">Totals</h2>
     <table style="border-collapse: collapse; margin-bottom: 24px;">
         <thead>
             <tr>
-                <th style="{{ $head }} text-align: left;">Metric</th>
-                <th style="{{ $head }}">Count</th>
-                <th style="{{ $head }}">%</th>
+                <th rowspan="2" style="{{ $head }} text-align: left;"></th>
+                <th rowspan="2" style="{{ $head }}">Total</th>
+                @foreach ($metricDefinitions as $definition)
+                    @continue($definition['key'] === 'total_leads_called')
+                    <th colspan="2" style="{{ $head }}">{{ $definition['label'] }}</th>
+                @endforeach
+            </tr>
+            <tr>
+                @foreach ($metricDefinitions as $definition)
+                    @continue($definition['key'] === 'total_leads_called')
+                    <th style="{{ $head }}">#</th>
+                    <th style="{{ $head }}">%</th>
+                @endforeach
             </tr>
         </thead>
         <tbody>
+            <tr>
+                <td style="{{ $totalLeft }}">Totals</td>
+                <td style="{{ $totalCell }}">{{ number_format($totals['total_leads_called']['count'] ?? 0) }}</td>
+                @foreach ($metricDefinitions as $definition)
+                    @continue($definition['key'] === 'total_leads_called')
+                    @php
+                        $metric = $totals[$definition['key']] ?? ['count' => 0, 'percent' => null];
+                    @endphp
+                    <td style="{{ $totalCell }}">{{ number_format($metric['count'] ?? 0) }}</td>
+                    <td style="{{ $totalCell }}">{{ $dashboard->formatPercent($totals, $definition['key']) }}</td>
+                @endforeach
+            </tr>
             @foreach ($metricDefinitions as $definition)
                 @php
-                    $metric = $totals[$definition['key']] ?? ['count' => 0, 'percent' => null];
+                    $metricItems = $breakdowns[$definition['key']] ?? [];
                 @endphp
-                <tr>
-                    <td style="{{ $left }}">{{ $definition['label'] }}</td>
-                    <td style="{{ $center }}">{{ number_format($metric['count'] ?? 0) }}</td>
-                    <td style="{{ $muted }}">
-                        @if ($definition['show_percent'])
-                            {{ $dashboard->formatPercent($totals, $definition['key']) }}
-                        @endif
-                    </td>
-                </tr>
+                @continue(count($metricItems) <= 1)
+                @foreach ($metricItems as $item)
+                    @php
+                        $stripe = $loop->odd ? ' background: #e8eef5;' : ' background: #f8fafc;';
+                    @endphp
+                    <tr>
+                        <td style="{{ $listLeft.$stripe }}"></td>
+                        <td style="{{ $listCell.$stripe }}"></td>
+                        @foreach ($metricDefinitions as $column)
+                            @continue($column['key'] === 'total_leads_called')
+                            @if ($column['key'] === $definition['key'])
+                                <td colspan="2" style="{{ $listCell.$stripe }} text-align: center;">
+                                    <div style="font-weight: 650; color: #0f172a;">{{ $item['label'] }}</div>
+                                    <div>{{ number_format($item['count'] ?? 0) }} <span style="color: #64748b;">{{ $item['percent'] === null ? '—' : number_format($item['percent'], 1).'%' }}</span></div>
+                                </td>
+                            @else
+                                <td style="{{ $listCell.$stripe }}"></td>
+                                <td style="{{ $listMuted.$stripe }}"></td>
+                            @endif
+                        @endforeach
+                    </tr>
+                    @foreach ($item['items'] ?? [] as $nested)
+                        <tr>
+                            <td style="{{ $listLeft.$stripe }}"></td>
+                            <td style="{{ $listCell.$stripe }}"></td>
+                            @foreach ($metricDefinitions as $column)
+                                @continue($column['key'] === 'total_leads_called')
+                                @if ($column['key'] === $definition['key'])
+                                    <td colspan="2" style="{{ $listCell.$stripe }} text-align: center;">
+                                        <div style="color: #475569;">{{ $nested['label'] }}</div>
+                                        <div>{{ number_format($nested['count'] ?? 0) }} <span style="color: #64748b;">{{ $nested['percent'] === null ? '—' : number_format($nested['percent'], 1).'%' }}</span></div>
+                                    </td>
+                                @else
+                                    <td style="{{ $listCell.$stripe }}"></td>
+                                    <td style="{{ $listMuted.$stripe }}"></td>
+                                @endif
+                            @endforeach
+                        </tr>
+                    @endforeach
+                @endforeach
             @endforeach
         </tbody>
     </table>
@@ -55,7 +114,7 @@
             <thead>
                 <tr>
                     <th rowspan="2" style="{{ $head }} text-align: left;">Rep</th>
-                    <th rowspan="2" style="{{ $head }}">Total Leads Called</th>
+                    <th rowspan="2" style="{{ $head }}">Total</th>
                     @foreach ($metricDefinitions as $definition)
                         @continue($definition['key'] === 'total_leads_called')
                         <th colspan="2" style="{{ $head }}">{{ $definition['label'] }}</th>

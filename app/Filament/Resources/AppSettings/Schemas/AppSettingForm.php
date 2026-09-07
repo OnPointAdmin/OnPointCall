@@ -7,8 +7,6 @@ use Filament\Forms\Components\KeyValue;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\TimePicker;
-use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Schema;
 
 class AppSettingForm
@@ -33,10 +31,6 @@ class AppSettingForm
                     ->required()
                     ->numeric()
                     ->default(20),
-                Toggle::make('dashboard_email_enabled')
-                    ->required(),
-                TimePicker::make('dashboard_email_send_time')
-                    ->required(),
                 Select::make('dashboard_email_timezone')
                     ->label('Agent timezone')
                     ->options(CompanyTimezone::options())

@@ -56,6 +56,8 @@ class DashboardDigestServiceTest extends TestCase
         $this->createDisposition($company->id, $aliceStandard->id, $alice->id, Disposition::Booked, $occurredAt);
         $this->createDisposition($company->id, $aliceTnb->id, $alice->id, Disposition::NotInterested, $occurredAt);
         $this->createDisposition($company->id, $bobSolo->id, $bob->id, Disposition::Booked, $occurredAt);
+        $this->createDisposition($company->id, $aliceStandard->id, $alice->id, Disposition::NoAnswer, $occurredAt);
+        $this->createDisposition($company->id, $aliceTnb->id, $alice->id, Disposition::LeftVm, $occurredAt);
 
         $digest = app(DashboardDigestService::class)->buildForCompany(
             $company,
@@ -69,8 +71,9 @@ class DashboardDigestServiceTest extends TestCase
         $this->assertStringContainsString('Standard AM', $digest['html']);
         $this->assertStringContainsString('TNB', $digest['html']);
         $this->assertStringContainsString('Bob Rep', $digest['html']);
+        $this->assertStringContainsString('Left VM', $digest['html']);
         $this->assertStringNotContainsString('Solo List', $digest['html']);
-        $this->assertSame(3, $digest['stats']['total_leads_called']);
+        $this->assertSame(5, $digest['stats']['total_leads_called']);
         $this->assertSame(2, $digest['stats']['booked']);
 
         Carbon::setTestNow();

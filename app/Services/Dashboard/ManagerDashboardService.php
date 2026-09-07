@@ -6,10 +6,12 @@ use App\Enums\Disposition;
 use App\Enums\DispositionReportGroup;
 use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
+use App\Enums\ReportSchedulePeriod;
 use App\Enums\UserRole;
 use App\Models\AppSetting;
 use App\Models\CallingList;
 use App\Models\DispositionDefinition;
+use App\Models\DispositionReason;
 use App\Models\Lead;
 use App\Models\LeadHistory;
 use App\Models\User;
@@ -69,7 +71,11 @@ class ManagerDashboardService
     }
 
     /**
-     * @return array{totals: array<string, array{label: string, count: int, percent: ?float}>, agents: list<array{user_id: int, name: string, metrics: array<string, array{count: int, percent: ?float}>, lists: list<array{calling_list_id: ?int, name: string, metrics: array<string, array{count: int, percent: ?float}>}>}>}
+     * @return array{
+     *     totals: array<string, array{label: string, count: int, percent: ?float}>,
+     *     breakdowns: array<string, list<array{kind: string, slug: ?string, label: string, count: int, percent: ?float, items: list<array{kind: string, slug: ?string, label: string, count: int, percent: ?float, items: list<empty>}>}>>,
+     *     agents: list<array{user_id: int, name: string, metrics: array<string, array{count: int, percent: ?float}>, lists: list<array{calling_list_id: ?int, name: string, metrics: array<string, array{count: int, percent: ?float}>}>>
+     * }
      */
     public function report(
         int $companyId,
@@ -90,8 +96,10 @@ class ManagerDashboardService
         $agentListBuckets = [];
         $listIds = [];
         $totals = $this->emptyMetrics();
+        $breakdownCounts = [];
 
-        $reportGroupMap = $this->reportGroupMap($companyId);
+        $definitions = DispositionDefinition::indexedForCompany($companyId);
+        $reportGroupMap = $this->reportGroupMapFrom($definitions);
 
         foreach ($history as $row) {
             if ($row->actor_id === null) {
@@ -119,6 +127,7 @@ class ManagerDashboardService
             $this->applyHistoryRow($totals, $row, $reportGroupMap);
             $this->applyHistoryRow($agentBuckets[$actorKey], $row, $reportGroupMap);
             $this->applyHistoryRow($agentListBuckets[$actorKey][$listKey], $row, $reportGroupMap);
+            $this->countBreakdown($breakdownCounts, $row, $reportGroupMap);
         }
 
         foreach ($overdueByOwnerAndList as $byList) {
@@ -175,6 +184,12 @@ class ManagerDashboardService
 
         return [
             'totals' => $totals,
+            'breakdowns' => $this->buildBreakdowns(
+                $breakdownCounts,
+                $totals['total_leads_called']['count'],
+                $definitions,
+                $this->reasonSortOrders($companyId),
+            ),
             'agents' => $agents,
         ];
     }
@@ -226,6 +241,46 @@ class ManagerDashboardService
         $end = Carbon::parse($endDate->toDateString(), $timezone)->endOfDay()->utc();
 
         return ['start' => $start, 'end' => $end];
+    }
+
+    /**
+     * @return array{start: Carbon, end: Carbon, start_local: Carbon, end_local: Carbon}
+     */
+    public function periodRange(int $companyId, ReportSchedulePeriod $period, ?Carbon $now = null): array
+    {
+        $timezone = $this->companyTimezone($companyId);
+        $now = ($now ?? Carbon::now($timezone))->copy()->timezone($timezone);
+
+        if ($period === ReportSchedulePeriod::TodaySoFar) {
+            $startLocal = $now->copy()->startOfDay();
+
+            return [
+                'start' => $startLocal->copy()->utc(),
+                'end' => $now->copy()->utc(),
+                'start_local' => $startLocal,
+                'end_local' => $now->copy(),
+            ];
+        }
+
+        $preset = $period->presetKey() ?? 'yesterday';
+        $dates = $this->presetDates($preset, $timezone, $now);
+        $range = $this->dateRange($companyId, $dates['start'], $dates['end']);
+
+        return [
+            'start' => $range['start'],
+            'end' => $range['end'],
+            'start_local' => $dates['start']->copy()->timezone($timezone)->startOfDay(),
+            'end_local' => $dates['end']->copy()->timezone($timezone)->startOfDay(),
+        ];
+    }
+
+    public function periodRangeLabel(Carbon $startLocal, Carbon $endLocal): string
+    {
+        if ($startLocal->toDateString() === $endLocal->toDateString()) {
+            return $startLocal->format('M j, Y');
+        }
+
+        return $startLocal->format('M j, Y').' – '.$endLocal->format('M j, Y');
     }
 
     /**
@@ -396,44 +451,306 @@ class ManagerDashboardService
 
     private function applyHistoryRow(array &$metrics, LeadHistory $row, array $reportGroupMap): void
     {
-        if ($row->event_type === LeadHistoryType::Skip) {
-            $metrics['skipped']['count']++;
-            $metrics['total_leads_called']['count']++;
+        $metricKey = $this->metricKeyForHistoryRow($row, $reportGroupMap);
 
-            return;
-        }
-
-        if ($row->event_type !== LeadHistoryType::Disposition) {
+        if ($metricKey === null) {
             return;
         }
 
         $metrics['total_leads_called']['count']++;
+        $metrics[$metricKey]['count']++;
+    }
+
+    /**
+     * @param  array<string, array<string, array<string, int>>>  $breakdownCounts
+     */
+    private function countBreakdown(array &$breakdownCounts, LeadHistory $row, array $reportGroupMap): void
+    {
+        $metricKey = $this->metricKeyForHistoryRow($row, $reportGroupMap);
+
+        if ($metricKey === null) {
+            return;
+        }
+
+        $slug = $row->event_type === LeadHistoryType::Skip
+            ? Disposition::Skip->value
+            : (string) ($row->payload['disposition'] ?? '');
+        $reason = $this->historyReason($row);
+
+        $breakdownCounts[$metricKey][$slug][$reason] = ($breakdownCounts[$metricKey][$slug][$reason] ?? 0) + 1;
+    }
+
+    /**
+     * @param  array<string, string>  $reportGroupMap
+     */
+    private function metricKeyForHistoryRow(LeadHistory $row, array $reportGroupMap): ?string
+    {
+        if ($row->event_type === LeadHistoryType::Skip) {
+            return 'skipped';
+        }
+
+        if ($row->event_type !== LeadHistoryType::Disposition) {
+            return null;
+        }
 
         $slug = (string) ($row->payload['disposition'] ?? '');
         $group = $reportGroupMap[$slug] ?? DispositionReportGroup::Other->value;
 
-        match ($group) {
-            DispositionReportGroup::Booked->value => $metrics['booked']['count']++,
-            DispositionReportGroup::NotInterested->value => $metrics['not_interested']['count']++,
-            DispositionReportGroup::NotQualified->value => $metrics['not_qualified']['count']++,
-            DispositionReportGroup::NoAnswerVm->value => $metrics['no_answer_vm']['count']++,
-            DispositionReportGroup::WrongDnc->value => $metrics['wrong_dnc']['count']++,
-            DispositionReportGroup::Callbacks->value => $metrics['callbacks']['count']++,
-            DispositionReportGroup::Other->value => $metrics['other']['count']++,
-            default => $metrics['other']['count']++,
+        return match ($group) {
+            DispositionReportGroup::Booked->value => 'booked',
+            DispositionReportGroup::NotInterested->value => 'not_interested',
+            DispositionReportGroup::NotQualified->value => 'not_qualified',
+            DispositionReportGroup::NoAnswerVm->value => 'no_answer_vm',
+            DispositionReportGroup::WrongDnc->value => 'wrong_dnc',
+            DispositionReportGroup::Callbacks->value => 'callbacks',
+            default => 'other',
         };
     }
 
+    private function historyReason(LeadHistory $row): string
+    {
+        $payload = $row->payload ?? [];
+
+        foreach (['reason', 'skip_reason'] as $key) {
+            $value = $payload[$key] ?? null;
+
+            if (is_string($value) && trim($value) !== '') {
+                return trim($value);
+            }
+        }
+
+        return '';
+    }
+
     /**
+     * @param  Collection<string, DispositionDefinition>  $definitions
      * @return array<string, string>
      */
-    private function reportGroupMap(int $companyId): array
+    private function reportGroupMapFrom(Collection $definitions): array
     {
-        return DispositionDefinition::indexedForCompany($companyId)
+        return $definitions
             ->mapWithKeys(fn (DispositionDefinition $definition): array => [
                 $definition->slug => $definition->report_group->value,
             ])
             ->all();
+    }
+
+    /**
+     * @return array<string, array<string, int>>
+     */
+    private function reasonSortOrders(int $companyId): array
+    {
+        $orders = [];
+
+        $reasons = DispositionReason::withoutGlobalScopes()
+            ->where('company_id', $companyId)
+            ->get(['disposition', 'label', 'sort_order']);
+
+        foreach ($reasons as $reason) {
+            $orders[(string) $reason->disposition][(string) $reason->label] = (int) $reason->sort_order;
+        }
+
+        return $orders;
+    }
+
+    /**
+     * @param  array<string, array<string, array<string, int>>>  $breakdownCounts
+     * @param  Collection<string, DispositionDefinition>  $definitions
+     * @param  array<string, array<string, int>>  $reasonSortOrders
+     * @return array<string, list<array{kind: string, slug: ?string, label: string, count: int, percent: ?float, items: list<array{kind: string, slug: ?string, label: string, count: int, percent: ?float, items: list<empty>}>}>>
+     */
+    private function buildBreakdowns(
+        array $breakdownCounts,
+        int $totalCalled,
+        Collection $definitions,
+        array $reasonSortOrders,
+    ): array {
+        $breakdowns = [];
+
+        foreach ($breakdownCounts as $metricKey => $bySlug) {
+            $children = $this->childrenForMetric($bySlug, $totalCalled, $definitions, $reasonSortOrders);
+
+            if (count($children) > 1) {
+                $breakdowns[$metricKey] = $children;
+            }
+        }
+
+        return $breakdowns;
+    }
+
+    /**
+     * @param  array<string, array<string, int>>  $bySlug
+     * @param  Collection<string, DispositionDefinition>  $definitions
+     * @param  array<string, array<string, int>>  $reasonSortOrders
+     * @return list<array{kind: string, slug: ?string, label: string, count: int, percent: ?float, items: list<array{kind: string, slug: ?string, label: string, count: int, percent: ?float, items: list<empty>}>}>
+     */
+    private function childrenForMetric(
+        array $bySlug,
+        int $totalCalled,
+        Collection $definitions,
+        array $reasonSortOrders,
+    ): array {
+        $slugCounts = [];
+
+        foreach ($bySlug as $slug => $reasons) {
+            $count = array_sum($reasons);
+
+            if ($count > 0) {
+                $slugCounts[(string) $slug] = $count;
+            }
+        }
+
+        if ($slugCounts === []) {
+            return [];
+        }
+
+        if (count($slugCounts) === 1) {
+            $slug = (string) array_key_first($slugCounts);
+
+            return $this->reasonChildren($slug, $bySlug[$slug] ?? [], $totalCalled, $reasonSortOrders);
+        }
+
+        $dispositions = [];
+
+        foreach ($slugCounts as $slug => $count) {
+            $reasonCounts = $bySlug[$slug] ?? [];
+            $dispositions[] = $this->breakdownRow(
+                kind: 'disposition',
+                slug: $slug,
+                label: $this->dispositionLabel($slug, $definitions),
+                count: $count,
+                totalCalled: $totalCalled,
+                items: $this->reasonChildren($slug, $reasonCounts, $totalCalled, $reasonSortOrders),
+            );
+        }
+
+        usort($dispositions, function (array $a, array $b) use ($definitions): int {
+            $aOrder = $definitions->get((string) $a['slug'])?->sort_order ?? PHP_INT_MAX;
+            $bOrder = $definitions->get((string) $b['slug'])?->sort_order ?? PHP_INT_MAX;
+
+            if ($aOrder !== $bOrder) {
+                return $aOrder <=> $bOrder;
+            }
+
+            return strcasecmp($a['label'], $b['label']);
+        });
+
+        return $dispositions;
+    }
+
+    /**
+     * @param  array<string, int>  $reasonCounts
+     * @param  array<string, array<string, int>>  $reasonSortOrders
+     * @return list<array{kind: string, slug: ?string, label: string, count: int, percent: ?float, items: list<empty>}>
+     */
+    private function reasonChildren(string $slug, array $reasonCounts, int $totalCalled, array $reasonSortOrders): array
+    {
+        $named = [];
+        $blank = 0;
+
+        foreach ($reasonCounts as $reason => $count) {
+            if ($count <= 0) {
+                continue;
+            }
+
+            if ((string) $reason === '') {
+                $blank += $count;
+
+                continue;
+            }
+
+            $named[] = $this->breakdownRow(
+                kind: 'reason',
+                slug: null,
+                label: (string) $reason,
+                count: $count,
+                totalCalled: $totalCalled,
+                items: [],
+            );
+        }
+
+        if ($named === []) {
+            return [];
+        }
+
+        if ($blank > 0) {
+            $named[] = $this->breakdownRow(
+                kind: 'reason',
+                slug: null,
+                label: 'No reason',
+                count: $blank,
+                totalCalled: $totalCalled,
+                items: [],
+            );
+        }
+
+        if (count($named) <= 1) {
+            return [];
+        }
+
+        $orders = $reasonSortOrders[$slug] ?? [];
+
+        usort($named, function (array $a, array $b) use ($orders): int {
+            $aNoReason = $a['label'] === 'No reason';
+            $bNoReason = $b['label'] === 'No reason';
+
+            if ($aNoReason !== $bNoReason) {
+                return $aNoReason ? 1 : -1;
+            }
+
+            $aHasOrder = array_key_exists($a['label'], $orders);
+            $bHasOrder = array_key_exists($b['label'], $orders);
+
+            if ($aHasOrder !== $bHasOrder) {
+                return $aHasOrder ? -1 : 1;
+            }
+
+            if ($aHasOrder && $bHasOrder && $orders[$a['label']] !== $orders[$b['label']]) {
+                return $orders[$a['label']] <=> $orders[$b['label']];
+            }
+
+            return strcasecmp($a['label'], $b['label']);
+        });
+
+        return $named;
+    }
+
+    /**
+     * @param  list<array{kind: string, slug: ?string, label: string, count: int, percent: ?float, items: list<array{kind: string, slug: ?string, label: string, count: int, percent: ?float, items: list<empty>}>}>  $items
+     * @return array{kind: string, slug: ?string, label: string, count: int, percent: ?float, items: list<array{kind: string, slug: ?string, label: string, count: int, percent: ?float, items: list<empty>}>}
+     */
+    private function breakdownRow(
+        string $kind,
+        ?string $slug,
+        string $label,
+        int $count,
+        int $totalCalled,
+        array $items,
+    ): array {
+        return [
+            'kind' => $kind,
+            'slug' => $slug,
+            'label' => $label,
+            'count' => $count,
+            'percent' => $totalCalled > 0
+                ? round(($count / $totalCalled) * 100, 1)
+                : null,
+            'items' => $items,
+        ];
+    }
+
+    /**
+     * @param  Collection<string, DispositionDefinition>  $definitions
+     */
+    private function dispositionLabel(string $slug, Collection $definitions): string
+    {
+        $definition = $definitions->get($slug);
+
+        if ($definition instanceof DispositionDefinition && $definition->label !== '') {
+            return $definition->label;
+        }
+
+        return Disposition::tryFrom($slug)?->label() ?? $slug;
     }
 
     /**
