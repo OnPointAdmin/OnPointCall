@@ -2,21 +2,17 @@
 
 The Agent Dashboard **Totals** strip currently shows one number per **report group** (Booked, Not Interested, No Answer / VM, Wrong / DNC, and so on). Managers cannot see which dispositions sit inside a bucket, or which **reasons** make up Not Interested / Not Qualified / Skip.
 
-Keep those combined numbers as the parent rows. Expanding a total **grows the section downward**: extra rows insert under that metric, same Count / % columns. Not a dropdown overlay, not extra columns, not a nested table inside a card. Collapsed by default, with **Expand all / Collapse all**.
+Keep those combined numbers as **one parent row** on the same wide grid as Results by Rep. Expanding a metric header **grows the table downward**: extra rows insert under Totals, with the child count/% only in that metric’s columns. Not a dropdown overlay, not a vertical Metric / Count / % table. Collapsed by default, with **Expand all / Collapse all**.
 
 Example after expanding Not Interested and No Answer / VM:
 
 ```
-Metric              Count   %
-Total Leads Called  140
-Booked              8       5.7%
-Not Interested  ▼   12      8.6%
-  Too Busy          7       5.0%
-  Travel Distance   5       3.6%
-No Answer / VM  ▼   40     28.6%
-  No Answer         25     17.9%
-  Left VM           15     10.7%
-Wrong / DNC         15     10.7%
+         Total  Booked  NI ▼     NA/VM ▼   Wrong/DNC
+Totals   140    8       12       40        15
+  Too Busy              7
+  Travel Distance       5
+  No Answer                      25
+  Left VM                        15
 ```
 
 ```mermaid
@@ -53,13 +49,11 @@ flowchart TD
 
 ## Totals layout
 
-The current Totals UI is a tight horizontal card grid (`minmax(5.5rem)`). Reason labels such as `Home Owner Less Then 3 Years` will not fit inside those cards.
+Totals uses the **same wide grid** as Results by Rep: sticky first column, **Total**, then each report-group metric as # / %. Shared header: [`resources/views/filament/pages/partials/dashboard-metric-thead.blade.php`](../resources/views/filament/pages/partials/dashboard-metric-thead.blade.php). Cursor rule: [`.cursor/rules/dashboard-tables.mdc`](../.cursor/rules/dashboard-tables.mdc).
 
-Replace the Totals **card grid** with a compact three-column table: **Metric / Count / %**. That matches the daily digest Totals table and the expand-down pattern already used on Results by Rep.
+Section header: **Totals** plus **Expand all / Collapse all** (hidden if no metric has a breakdown). Chevrons sit on expandable **metric headers**, not on a stacked metric list.
 
-Section header: **Totals** plus **Expand all / Collapse all** (hidden if no metric has a breakdown).
-
-Indent child rows; disposition children one step, nested reasons a second step. Reuse the nested-row styles from `.list-row` in [`public/css/manager-dashboard.css`](../public/css/manager-dashboard.css).
+Indent child rows; disposition children one step, nested reasons a second step. Reuse the nested-row styles from `.list-row` in [`public/css/manager-dashboard.css`](../public/css/manager-dashboard.css). Child count/% belong only in the column that owns that child.
 
 ## Data
 
@@ -98,16 +92,16 @@ Same date / rep / lead type / calling-list filters as today’s totals. No extra
 
 ## UI
 
-In [`resources/views/filament/pages/dashboard.blade.php`](../resources/views/filament/pages/dashboard.blade.php), wrap the Totals card in Alpine state (`expandedKeys`, `toggle`, `expandAll`, `collapseAll`). Emit child `<tr>`s with `x-show` immediately after each expandable metric.
+In [`resources/views/filament/pages/dashboard.blade.php`](../resources/views/filament/pages/dashboard.blade.php), wrap the Totals card in Alpine state (`expandedKeys`, `toggle`, `expandAll`, `collapseAll`). One parent Totals row uses the shared metric header. Child `<tr>`s with `x-show` follow that row.
 
 ## Daily dashboard email
 
-[`resources/views/mail/dashboard-digest.blade.php`](../resources/views/mail/dashboard-digest.blade.php) already renders Totals as Metric / Count / %. After each expandable metric, always stack the same child rows (email has no Alpine). Nested rows only when that metric has a breakdown. Pass `$report['breakdowns']` from [`DashboardDigestService`](../app/Services/Dashboard/DashboardDigestService.php).
+[`resources/views/mail/dashboard-digest.blade.php`](../resources/views/mail/dashboard-digest.blade.php) renders Totals on the same wide grid as Results by Rep. After the Totals row, always stack child rows (email has no Alpine), with counts only in the owning metric columns. Nested rows only when that metric has a breakdown. Pass `$report['breakdowns']` from [`DashboardDigestService`](../app/Services/Dashboard/DashboardDigestService.php).
 
 ## Tests
 
 - [`tests/Feature/ManagerDashboardServiceTest.php`](../tests/Feature/ManagerDashboardServiceTest.php): No Answer + Left VM appear under `no_answer_vm`; Wrong Number / Bad Number / DNC under `wrong_dnc`; NI/NQ/Skip reasons from `payload.reason`; skip `skip_reason` still counted; single-slug Booked has no breakdown; custom slug in Other; filters still apply to children; percents are of total leads called.
-- [`tests/Feature/AdminDashboardTest.php`](../tests/Feature/AdminDashboardTest.php): Totals table headers; chevron markup when a bucket has multiple children; no chevron on Booked.
+- [`tests/Feature/AdminDashboardTest.php`](../tests/Feature/AdminDashboardTest.php): shared wide headers (`Total`, # / %); chevron on No Answer / VM; no chevron on Booked.
 - [`tests/Feature/DashboardDigestServiceTest.php`](../tests/Feature/DashboardDigestServiceTest.php): digest HTML includes child labels when the prior day has a split bucket.
 
 ## Out of scope

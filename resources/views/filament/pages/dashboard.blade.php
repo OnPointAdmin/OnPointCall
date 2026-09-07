@@ -86,63 +86,51 @@
             </div>
 
             <div class="dashboard-table-scroll">
-                <table class="dashboard-totals-table">
-                    <thead>
-                        <tr>
-                            <th class="col-start">Metric</th>
-                            <th>Count</th>
-                            <th>%</th>
-                        </tr>
-                    </thead>
+                <table>
+                    @include('filament.pages.partials.dashboard-metric-thead', [
+                        'firstColumnLabel' => '',
+                        'metricDefinitions' => $metricDefinitions,
+                        'breakdowns' => $breakdowns,
+                        'expandable' => true,
+                    ])
                     <tbody>
+                        <tr>
+                            <td class="col-start">Totals</td>
+                            <td>{{ number_format($totals['total_leads_called']['count'] ?? 0) }}</td>
+                            @foreach ($metricDefinitions as $definition)
+                                @continue($definition['key'] === 'total_leads_called')
+
+                                @php
+                                    $metric = $totals[$definition['key']] ?? ['count' => 0, 'percent' => null];
+                                @endphp
+
+                                <td class="split">{{ number_format($metric['count'] ?? 0) }}</td>
+                                <td class="muted">{{ $this->formatPercent($totals, $definition['key']) }}</td>
+                            @endforeach
+                        </tr>
                         @foreach ($metricDefinitions as $definition)
                             @php
                                 $metricKey = $definition['key'];
-                                $metric = $totals[$metricKey] ?? ['count' => 0, 'percent' => null];
                                 $metricItems = $breakdowns[$metricKey] ?? [];
-                                $canExpand = count($metricItems) > 1;
                             @endphp
-                            <tr>
-                                <td class="col-start">
-                                    @if ($canExpand)
-                                        <button
-                                            type="button"
-                                            class="dashboard-rep-toggle"
-                                            x-on:click="toggle('{{ $metricKey }}')"
-                                            :aria-expanded="expandedKeys.includes('{{ $metricKey }}')"
-                                        >
-                                            <svg class="dashboard-rep-chevron" :class="{ 'is-open': expandedKeys.includes('{{ $metricKey }}') }" width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
-                                                <path stroke-linecap="round" stroke-linejoin="round" d="M7 5l6 5-6 5" />
-                                            </svg>
-                                            {{ $definition['label'] }}
-                                        </button>
-                                    @else
-                                        {{ $definition['label'] }}
-                                    @endif
-                                </td>
-                                <td>{{ number_format($metric['count'] ?? 0) }}</td>
-                                <td class="muted">
-                                    @if ($definition['show_percent'])
-                                        {{ $this->formatPercent($totals, $metricKey) }}
-                                    @endif
-                                </td>
-                            </tr>
-                            @if ($canExpand)
-                                @foreach ($metricItems as $item)
-                                    <tr class="list-row" x-show="expandedKeys.includes('{{ $metricKey }}')" x-cloak>
-                                        <td class="col-start">{{ $item['label'] }}</td>
-                                        <td>{{ number_format($item['count'] ?? 0) }}</td>
-                                        <td class="muted">{{ $item['percent'] === null ? '—' : number_format($item['percent'], 1).'%' }}</td>
-                                    </tr>
-                                    @foreach ($item['items'] ?? [] as $nested)
-                                        <tr class="list-row reason-row" x-show="expandedKeys.includes('{{ $metricKey }}')" x-cloak>
-                                            <td class="col-start">{{ $nested['label'] }}</td>
-                                            <td>{{ number_format($nested['count'] ?? 0) }}</td>
-                                            <td class="muted">{{ $nested['percent'] === null ? '—' : number_format($nested['percent'], 1).'%' }}</td>
-                                        </tr>
-                                    @endforeach
+                            @continue(count($metricItems) <= 1)
+
+                            @foreach ($metricItems as $item)
+                                @include('filament.pages.partials.dashboard-metric-breakdown-row', [
+                                    'item' => $item,
+                                    'metricKey' => $metricKey,
+                                    'metricDefinitions' => $metricDefinitions,
+                                    'rowClass' => 'list-row',
+                                ])
+                                @foreach ($item['items'] ?? [] as $nested)
+                                    @include('filament.pages.partials.dashboard-metric-breakdown-row', [
+                                        'item' => $nested,
+                                        'metricKey' => $metricKey,
+                                        'metricDefinitions' => $metricDefinitions,
+                                        'rowClass' => 'list-row reason-row',
+                                    ])
                                 @endforeach
-                            @endif
+                            @endforeach
                         @endforeach
                     </tbody>
                 </table>
@@ -185,25 +173,10 @@
 
             <div class="dashboard-table-scroll">
                 <table>
-                    <thead>
-                        <tr>
-                            <th rowspan="2" class="col-start">Rep</th>
-                            <th rowspan="2">Total</th>
-                            @foreach ($metricDefinitions as $definition)
-                                @continue($definition['key'] === 'total_leads_called')
-
-                                <th colspan="2" class="split">{{ $definition['label'] }}</th>
-                            @endforeach
-                        </tr>
-                        <tr>
-                            @foreach ($metricDefinitions as $definition)
-                                @continue($definition['key'] === 'total_leads_called')
-
-                                <th class="split">#</th>
-                                <th>%</th>
-                            @endforeach
-                        </tr>
-                    </thead>
+                    @include('filament.pages.partials.dashboard-metric-thead', [
+                        'firstColumnLabel' => 'Rep',
+                        'metricDefinitions' => $metricDefinitions,
+                    ])
                     <tbody>
                         @forelse ($agents as $agent)
                             @php

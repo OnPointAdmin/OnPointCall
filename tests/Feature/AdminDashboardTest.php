@@ -52,9 +52,7 @@ class AdminDashboardTest extends TestCase
         Livewire::actingAs($user)
             ->test(Dashboard::class)
             ->assertSet('report', fn (?array $report): bool => is_array($report) && isset($report['totals'], $report['breakdowns'], $report['agents']))
-            ->assertSee('Total Leads Called')
             ->assertSeeHtml('<th rowspan="2">Total</th>')
-            ->assertSeeHtml('<th class="col-start">Metric</th>')
             ->assertSee('No Answer / VM')
             ->assertSee('Wrong / DNC')
             ->assertSee('Calling list');
@@ -104,7 +102,7 @@ class AdminDashboardTest extends TestCase
 
         Livewire::actingAs($admin)
             ->test(Dashboard::class)
-            ->assertSeeHtml('<th class="col-start">Metric</th>')
+            ->assertSeeHtml('<th rowspan="2">Total</th>')
             ->assertSeeHtml('toggle(\'no_answer_vm\')')
             ->assertDontSeeHtml('toggle(\'booked\')')
             ->assertSee('Left VM')

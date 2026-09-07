@@ -350,8 +350,14 @@
     font-weight: 500;
 }
 
-.dashboard-table table.dashboard-totals-table {
-    min-width: 28rem;
+.dashboard-table thead .dashboard-metric-toggle {
+    justify-content: center;
+    width: 100%;
+    font-size: inherit;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: inherit;
 }
 
 .dashboard-table tbody tr.list-row td.col-start {
