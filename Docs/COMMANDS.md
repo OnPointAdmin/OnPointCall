@@ -6,7 +6,7 @@ Run from the repo root (`D:\sf\OnPointCall`). Almost everything goes through Doc
 docker compose exec app <command>
 ```
 
-Edit code on `D:\`, save, refresh the browser. No local deploy.
+Edit PHP/Blade on `D:\`, save, refresh the browser. Use `scripts/deploy.ps1` when you need composer, migrations, or production.
 
 | Check | URL |
 |---|---|
@@ -34,6 +34,24 @@ Rebuild after Dockerfile / compose / PHP ini changes:
 ```bash
 docker compose up -d --build
 ```
+
+---
+
+## Deploy
+
+Always ship **GitHub `master`**. Run from a **local** agent on this Windows PC (cloud agents cannot see Docker or the VPS). The script stops if you have unsaved git changes. Forward migrations only — never wipes the database.
+
+One-time SSH alias (already on this PC): `ssh onpoint-prod`
+
+```powershell
+powershell -File scripts/deploy.ps1 both
+powershell -File scripts/deploy.ps1 local
+powershell -File scripts/deploy.ps1 prod
+```
+
+Or tell the local agent: **deploy both**.
+
+Frontend: run `npm run build` and commit `public/build` before a prod deploy that includes CSS/JS changes.
 
 ---
 

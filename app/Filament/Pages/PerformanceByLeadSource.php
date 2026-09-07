@@ -83,6 +83,7 @@ class PerformanceByLeadSource extends Page implements HasSchemas
             Select::make('group_by')
                 ->label('Group by')
                 ->options(LeadSourceGroupBy::class)
+                ->native(false)
                 ->required(),
         ];
     }

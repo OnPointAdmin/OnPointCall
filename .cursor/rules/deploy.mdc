@@ -1,0 +1,27 @@
+---
+description: Use scripts/deploy.ps1 for local and prod updates from master
+alwaysApply: true
+---
+
+# Deploys from master
+
+Run this **from a local agent on the Windows PC**, not a cloud agent. Cloud agents cannot see Docker on `D:\` or SSH to the VPS.
+
+When the user says **deploy**, **deploy both**, **deploy local**, or **deploy prod**, run:
+
+```powershell
+powershell -File scripts/deploy.ps1 both
+powershell -File scripts/deploy.ps1 local
+powershell -File scripts/deploy.ps1 prod
+```
+
+Do **not** invent one-off `tmp-prod-deploy.sh` files, `scp` ad-hoc bash, or `ssh root@…` command soups. Use SSH host alias `onpoint-prod`.
+
+The script pulls GitHub `master`, migrates forward, and refreshes caches. It **stops if the working tree is dirty**. It does **not** wipe the database.
+
+## Invariants
+
+- Forward migrations only (`php artisan migrate --force`)
+- Never `migrate:fresh`, `migrate:refresh`, `db:wipe`, or `docker compose down -v`
+- Never `php artisan optimize` locally
+- Vite output lives in committed `public/build` — run `npm run build` before committing frontend changes

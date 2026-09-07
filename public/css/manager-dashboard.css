@@ -426,6 +426,19 @@
     color-scheme: light;
 }
 
+.dashboard-report .dashboard-filter-form .fi-fo-select-native select {
+    background: #fff;
+    color: #0f172a;
+    -webkit-text-fill-color: #0f172a;
+    border-color: #cbd5e1;
+    border-radius: 0.5rem;
+}
+
+.dashboard-report .dashboard-filter-form .fi-fo-select-native select option {
+    background: #fff;
+    color: #0f172a;
+}
+
 .dashboard-report .dashboard-filter-form .fi-input,
 .dashboard-report .dashboard-filter-form .fi-select-input,
 .dashboard-report .dashboard-filter-form .fi-select-input-btn,
