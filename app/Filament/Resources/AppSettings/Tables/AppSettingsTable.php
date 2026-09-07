@@ -5,7 +5,6 @@ namespace App\Filament\Resources\AppSettings\Tables;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
-use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 
@@ -20,11 +19,6 @@ class AppSettingsTable
                     ->sortable(),
                 TextColumn::make('claim_ttl_minutes')
                     ->numeric()
-                    ->sortable(),
-                IconColumn::make('dashboard_email_enabled')
-                    ->boolean(),
-                TextColumn::make('dashboard_email_send_time')
-                    ->time()
                     ->sortable(),
                 TextColumn::make('dashboard_email_timezone')
                     ->label('Agent timezone')

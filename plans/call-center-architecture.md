@@ -167,7 +167,9 @@ erDiagram
 - `state_rules` — `state_code`, window start/end, permitted weekdays, `manual_dial_only`; `company_id`
 - `blackout_dates` — holidays/blackouts; `company_id`
 - `app_settings` — default booking templates/maps, max attempts, claim TTL, dashboard email knobs, **`soft_score_originator`** (configurable; Salesforce uses `KALEO`), Soft Score base URL for stage/prod; `company_id`
-- `dashboard_email_recipients` — email addresses in the daily digest group; `company_id`
+- `dashboard_email_recipients` — legacy daily digest emails (migrated into report schedules; kept for this pass); `company_id`
+- `report_schedules` — named report emails (type, period, days, send times); `company_id`
+- `report_schedule_recipients` — emails per schedule; `company_id`
 - `settings_history` — append-only config audit; `company_id`
 
 **Lead `status`:** `holding` | `callable` | `callback` | `booked` | `terminal` | `dnc`
@@ -257,17 +259,14 @@ Disposition labels match the spreadsheet: Booked, Callback, No Answer, Left VM, 
 - `active=false`; revoke sessions; delete leases (non-callback leads return to pool).
 - Callbacks owned by that user remain `callback` and show on manager board as **needs reassignment** until a manager reassigns.
 
-### H. Daily dashboard email
+### H. Report scheduler (dashboard / report email)
 
-- Cron (host or container) runs once daily per company at `dashboard_email_send_time` in `dashboard_email_timezone`.
-- If `dashboard_email_enabled` and ≥1 recipient: build HTML digest for the **previous local calendar day**:
-  - Totals: bookings, calls/attempts, outcome breakdown, skips
-  - Per-agent table: calls, bookings, callbacks pending, skip count
-  - Overdue callbacks count (as of send time)
-  - Optional split by Standard vs TNB if both lists are active
-- Send one email to the **recipient group** (BCC or To-all — use BCC to avoid leaking addresses across external stakeholders if the group mixes roles).
-- Log send success/failure (simple `lead_history`-style ops log or mail log table scoped by `company_id`); do not block the app if mail fails — alert via log.
-- Recipient list and schedule changes go through admin settings → `settings_history`.
+- Cron runs `dashboard:email-digest` every minute. Each enabled [`report_schedules`](../app/Models/ReportSchedule.php) row sends when the company timezone (`dashboard_email_timezone`) matches one of its `send_times` on a selected weekday.
+- Report types: Agent Dashboard, Lead Dashboard (live snapshot), Performance by Lead Source.
+- Date ranges for Agent Dashboard and Lead Source: today so far, yesterday, this week (Mon–today), last week (Mon–Sun).
+- Recipients are per schedule (`report_schedule_recipients`). Send `To` first address, `BCC` the rest.
+- Configure in Filament **Dashboards and Reports → Reports → Report Scheduler**. Changes go through `settings_history`.
+- Log send success/failure; do not block the app if mail fails.
 
 ---
 

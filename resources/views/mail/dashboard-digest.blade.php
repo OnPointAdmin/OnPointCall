@@ -18,8 +18,13 @@
         $totalLeft = $cell.' background: #1e3a5f; color: #fff; font-weight: 800; text-align: left;';
     @endphp
 
-    <h1 style="font-size: 20px; margin: 0 0 4px;">{{ $company->name }} — Daily Summary</h1>
-    <p style="color: #64748b; margin: 0 0 20px;">{{ $day->format('l, F j, Y') }}</p>
+    <h1 style="font-size: 20px; margin: 0 0 4px;">{{ $company->name }} — Agent Dashboard</h1>
+    <p style="color: #64748b; margin: 0 0 20px;">
+        {{ $subtitle ?? $day->format('l, F j, Y') }}
+        @if (! empty($periodLabel))
+            ({{ $periodLabel }})
+        @endif
+    </p>
 
     <h2 style="font-size: 16px; margin: 0 0 8px;">Totals</h2>
     <table style="border-collapse: collapse; margin-bottom: 24px;">
