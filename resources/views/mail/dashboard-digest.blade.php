@@ -60,32 +60,39 @@
                 @endphp
                 @continue(count($metricItems) <= 1)
                 @foreach ($metricItems as $item)
+                    @php
+                        $stripe = $loop->odd ? ' background: #e8eef5;' : ' background: #f8fafc;';
+                    @endphp
                     <tr>
-                        <td style="{{ $listLeft }}">{{ $item['label'] }}</td>
-                        <td style="{{ $listCell }}"></td>
+                        <td style="{{ $listLeft.$stripe }}"></td>
+                        <td style="{{ $listCell.$stripe }}"></td>
                         @foreach ($metricDefinitions as $column)
                             @continue($column['key'] === 'total_leads_called')
                             @if ($column['key'] === $definition['key'])
-                                <td style="{{ $listCell }}">{{ number_format($item['count'] ?? 0) }}</td>
-                                <td style="{{ $listMuted }}">{{ $item['percent'] === null ? '—' : number_format($item['percent'], 1).'%' }}</td>
+                                <td colspan="2" style="{{ $listCell.$stripe }} text-align: center;">
+                                    <div style="font-weight: 650; color: #0f172a;">{{ $item['label'] }}</div>
+                                    <div>{{ number_format($item['count'] ?? 0) }} <span style="color: #64748b;">{{ $item['percent'] === null ? '—' : number_format($item['percent'], 1).'%' }}</span></div>
+                                </td>
                             @else
-                                <td style="{{ $listCell }}"></td>
-                                <td style="{{ $listMuted }}"></td>
+                                <td style="{{ $listCell.$stripe }}"></td>
+                                <td style="{{ $listMuted.$stripe }}"></td>
                             @endif
                         @endforeach
                     </tr>
                     @foreach ($item['items'] ?? [] as $nested)
                         <tr>
-                            <td style="{{ $listLeft }} padding-left: 32px;">{{ $nested['label'] }}</td>
-                            <td style="{{ $listCell }}"></td>
+                            <td style="{{ $listLeft.$stripe }}"></td>
+                            <td style="{{ $listCell.$stripe }}"></td>
                             @foreach ($metricDefinitions as $column)
                                 @continue($column['key'] === 'total_leads_called')
                                 @if ($column['key'] === $definition['key'])
-                                    <td style="{{ $listCell }}">{{ number_format($nested['count'] ?? 0) }}</td>
-                                    <td style="{{ $listMuted }}">{{ $nested['percent'] === null ? '—' : number_format($nested['percent'], 1).'%' }}</td>
+                                    <td colspan="2" style="{{ $listCell.$stripe }} text-align: center;">
+                                        <div style="color: #475569;">{{ $nested['label'] }}</div>
+                                        <div>{{ number_format($nested['count'] ?? 0) }} <span style="color: #64748b;">{{ $nested['percent'] === null ? '—' : number_format($nested['percent'], 1).'%' }}</span></div>
+                                    </td>
                                 @else
-                                    <td style="{{ $listCell }}"></td>
-                                    <td style="{{ $listMuted }}"></td>
+                                    <td style="{{ $listCell.$stripe }}"></td>
+                                    <td style="{{ $listMuted.$stripe }}"></td>
                                 @endif
                             @endforeach
                         </tr>

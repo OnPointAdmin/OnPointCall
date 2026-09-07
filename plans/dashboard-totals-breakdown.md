@@ -7,12 +7,10 @@ Keep those combined numbers as **one parent row** on the same wide grid as Resul
 Example after expanding Not Interested and No Answer / VM:
 
 ```
-         Total  Booked  NI ▼     NA/VM ▼   Wrong/DNC
-Totals   140    8       12       40        15
-  Too Busy              7
-  Travel Distance       5
-  No Answer                      25
-  Left VM                        15
+         Total  Booked  NI ▼           NA/VM ▼
+Totals   140    8       12             40
+                        Too Busy 7     No Answer 25
+                        Travel Dist 5  Left VM 15
 ```
 
 ```mermaid

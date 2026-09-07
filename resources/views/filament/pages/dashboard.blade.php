@@ -108,6 +108,9 @@
                                 <td class="muted">{{ $this->formatPercent($totals, $definition['key']) }}</td>
                             @endforeach
                         </tr>
+                        @php
+                            $breakdownIndex = 0;
+                        @endphp
                         @foreach ($metricDefinitions as $definition)
                             @php
                                 $metricKey = $definition['key'];
@@ -120,15 +123,17 @@
                                     'item' => $item,
                                     'metricKey' => $metricKey,
                                     'metricDefinitions' => $metricDefinitions,
-                                    'rowClass' => 'list-row',
+                                    'rowClass' => 'list-row'.($breakdownIndex % 2 === 1 ? ' is-stripe' : ''),
                                 ])
+                                @php $breakdownIndex++; @endphp
                                 @foreach ($item['items'] ?? [] as $nested)
                                     @include('filament.pages.partials.dashboard-metric-breakdown-row', [
                                         'item' => $nested,
                                         'metricKey' => $metricKey,
                                         'metricDefinitions' => $metricDefinitions,
-                                        'rowClass' => 'list-row reason-row',
+                                        'rowClass' => 'list-row reason-row'.($breakdownIndex % 2 === 1 ? ' is-stripe' : ''),
                                     ])
+                                    @php $breakdownIndex++; @endphp
                                 @endforeach
                             @endforeach
                         @endforeach
