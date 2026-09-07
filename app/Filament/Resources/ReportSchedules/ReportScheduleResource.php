@@ -21,8 +21,6 @@ class ReportScheduleResource extends Resource
 
     protected static string|\UnitEnum|null $navigationGroup = DashboardNavigation::GROUP;
 
-    protected static ?string $navigationParentItem = DashboardNavigation::PARENT_REPORTS;
-
     protected static ?int $navigationSort = 12;
 
     protected static ?string $navigationLabel = 'Report Scheduler';

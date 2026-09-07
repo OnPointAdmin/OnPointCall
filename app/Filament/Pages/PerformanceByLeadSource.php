@@ -22,8 +22,6 @@ class PerformanceByLeadSource extends Page implements HasSchemas
 
     protected static string|\UnitEnum|null $navigationGroup = DashboardNavigation::GROUP;
 
-    protected static ?string $navigationParentItem = DashboardNavigation::PARENT_REPORTS;
-
     protected static ?string $navigationLabel = 'Performance by Lead Source';
 
     protected static ?string $title = 'Performance by Lead Source';
