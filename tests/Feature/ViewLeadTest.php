@@ -6,6 +6,8 @@ use App\Enums\Disposition;
 use App\Enums\DncStatus;
 use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
+use App\Enums\QualificationStatus;
+use App\Enums\RndStatus;
 use App\Enums\UserRole;
 use App\Filament\Resources\Leads\Pages\ListLeads;
 use App\Filament\Resources\Leads\Pages\ViewLead;
@@ -87,6 +89,8 @@ class ViewLeadTest extends TestCase
             ->assertSee('Pat')
             ->assertSee('Edit')
             ->assertDontSee('Save changes')
+            ->assertSee('Contact')
+            ->assertSee('Qualification')
             ->assertSee('History');
 
         Livewire::actingAs($admin)
@@ -95,9 +99,59 @@ class ViewLeadTest extends TestCase
                 'pageClass' => ViewLead::class,
             ])
             ->assertOk()
+            ->assertSee('When')
+            ->assertSee('Event')
+            ->assertSee('Actor')
+            ->assertSee('Details')
+            ->assertSee('Note')
             ->assertSee('Left VM')
             ->assertSee('Admin User')
             ->assertSee('Left a voicemail about the tour.');
+    }
+
+    public function test_lead_view_shows_qualified_partners_and_rnd_status(): void
+    {
+        $company = Company::factory()->create();
+        $admin = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Admin,
+            'active' => true,
+        ]);
+
+        $lead = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045559002',
+            'first_name' => 'Quinn',
+            'last_name' => 'Partner',
+            'state' => 'FL',
+            'timezone' => 'America/New_York',
+            'status' => LeadStatus::Callable,
+            'lead_type' => 'standard',
+            'imported_at' => now(),
+            'qualification_status' => QualificationStatus::Qualified,
+            'qualification_checked_at' => now(),
+            'qualification_result' => [
+                'request' => ['surveyCompanyId' => 'test'],
+                'response' => [
+                    'qualifiedCompaniesLead' => [],
+                    'qualifiedCompaniesBooking' => [
+                        ['companyName' => 'Travel Partner', 'vertical' => 'Vacation'],
+                    ],
+                ],
+            ],
+            'rnd_status' => RndStatus::Clear,
+            'rnd_checked_at' => now(),
+        ]);
+
+        CompanyContext::set($company->id);
+
+        Livewire::actingAs($admin)
+            ->test(ViewLead::class, ['record' => $lead->getRouteKey()])
+            ->assertOk()
+            ->assertSee('Currently qualified partners')
+            ->assertSee('Travel Partner')
+            ->assertSee('RND')
+            ->assertSee('Clear');
     }
 
     public function test_lead_history_detail_label_formats_disposition_and_status_change(): void

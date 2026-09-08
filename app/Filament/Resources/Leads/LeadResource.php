@@ -8,6 +8,7 @@ use App\Filament\Resources\Leads\Pages\ListLeads;
 use App\Filament\Resources\Leads\Pages\ViewLead;
 use App\Filament\Resources\Leads\RelationManagers\HistoryRelationManager;
 use App\Filament\Resources\Leads\Schemas\LeadForm;
+use App\Filament\Resources\Leads\Schemas\LeadInfolist;
 use App\Filament\Resources\Leads\Tables\LeadsTable;
 use App\Models\Lead;
 use BackedEnum;
@@ -31,6 +32,11 @@ class LeadResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return LeadForm::configure($schema);
+    }
+
+    public static function infolist(Schema $schema): Schema
+    {
+        return LeadInfolist::configure($schema);
     }
 
     public static function table(Table $table): Table
