@@ -132,7 +132,7 @@
             @endif
 
             <p class="dashboard-footnote">
-                One row per call in the date range. A lead called more than once appears more than once. Use the Columns filter to add qualified partners, demographics, Soft Score, and other lead fields. Export CSV matches the selected columns.
+                One row per call in the date range. A lead called more than once appears more than once. Use Columns to add any lead fields and drag them to reorder. Export CSV matches the selected columns.
             </p>
         </div>
     </div>

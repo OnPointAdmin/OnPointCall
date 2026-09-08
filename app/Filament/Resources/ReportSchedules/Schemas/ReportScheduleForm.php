@@ -94,9 +94,10 @@ class ReportScheduleForm
                             ->options(fn (): array => CallDetailReportService::columnOptions())
                             ->multiple()
                             ->searchable()
+                            ->reorderable()
                             ->nullable()
                             ->placeholder('Standard CSV columns')
-                            ->helperText('Leave blank for the standard CSV. Add qualified partners, demographics, or Soft Score here.')
+                            ->helperText('Leave blank for the standard CSV. Choose any fields and drag selected chips to set CSV order.')
                             ->columnSpanFull(),
                     ])
                     ->columns(3),

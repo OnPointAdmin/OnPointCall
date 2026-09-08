@@ -153,6 +153,61 @@ class CallDetailReportTest extends TestCase
         Carbon::setTestNow();
     }
 
+    public function test_csv_preserves_selected_column_order(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-10 15:00:00', 'America/New_York'));
+
+        [$admin, $agent] = $this->makeUsers();
+        $lead = $this->createLead($admin->company_id, ['first_name' => 'Pat', 'last_name' => 'Booked']);
+        $this->createDisposition($admin->company_id, $lead->id, $agent->id, Disposition::Booked);
+
+        $range = app(ManagerDashboardService::class)->todayRange($admin->company_id);
+        $csv = app(CallDetailReportService::class)->toCsv(
+            $admin->company_id,
+            ['columns' => ['soft_score', 'qualified_partners', 'name']],
+            $range['start'],
+            $range['end'],
+        );
+
+        $headerLine = explode("\n", ltrim($csv, "\xEF\xBB\xBF"), 2)[0];
+        $header = str_getcsv(trim($headerLine), ',', '"', '');
+
+        $this->assertSame(['Soft Score', 'Qualified Partners', 'Name'], $header);
+
+        Carbon::setTestNow();
+    }
+
+    public function test_report_page_can_select_all_columns_and_keep_custom_order(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-10 15:00:00', 'America/New_York'));
+
+        [$admin, $agent] = $this->makeUsers();
+        $lead = $this->createLead($admin->company_id, [
+            'first_name' => 'Pat',
+            'last_name' => 'Booked',
+            'address' => '123 Main St',
+        ]);
+        $this->createDisposition($admin->company_id, $lead->id, $agent->id, Disposition::Booked);
+
+        CompanyContext::set($admin->company_id);
+
+        Livewire::actingAs($admin)
+            ->test(CallDetail::class)
+            ->assertDontSee('123 Main St')
+            ->call('selectAllColumns')
+            ->assertSee('123 Main St')
+            ->assertSee('Address')
+            ->assertSee('Qualification')
+            ->assertSee('DNC')
+            ->fillForm([
+                'columns' => ['address', 'name', 'disposition'],
+            ], 'filterForm')
+            ->assertSeeInOrder(['Address', 'Name', 'Disposition'])
+            ->assertSee('123 Main St');
+
+        Carbon::setTestNow();
+    }
+
     public function test_report_page_can_toggle_optional_columns(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-08-10 15:00:00', 'America/New_York'));

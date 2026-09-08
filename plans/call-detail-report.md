@@ -14,9 +14,7 @@ One row per matching history event (a lead called twice in the range appears twi
 
 ## Columns
 
-A **Columns** multi-select sits with the other Call Detail filters. Default table columns stay Called At, Rep, Name, Phone, Disposition, Reason, Calling List, Venue, Event. CSV export matches the selected columns. Scheduled emails with no columns selected keep the original standard CSV.
-
-Available extras include contact fields, notes, callback time, **qualified partners**, demographics (age range, annual income, marital status, gender, homeowner), and **Soft Score**.
+A **Columns** multi-select sits with the other Call Detail filters. Choose any lead fields, including qualified partners, demographics, Soft Score, DNC, RND, and tour fields. Drag the selected chips to reorder the table and CSV. Default table columns stay Called At, Rep, Name, Phone, Disposition, Reason, Calling List, Venue, Event. **All columns** / **Default columns** shortcuts sit under the picker. Scheduled emails with no columns selected keep the original standard CSV.
 
 UTF-8 with BOM for Excel.
 

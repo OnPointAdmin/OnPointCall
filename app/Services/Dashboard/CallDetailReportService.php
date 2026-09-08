@@ -51,6 +51,21 @@ class CallDetailReportService
             'home_owner' => ['label' => 'Homeowner', 'table_default' => false, 'csv_default' => false],
             'soft_score' => ['label' => 'Soft Score', 'table_default' => false, 'csv_default' => false],
             'qualified_partners' => ['label' => 'Qualified Partners', 'table_default' => false, 'csv_default' => false, 'wrap' => true],
+            'qualification_status' => ['label' => 'Qualification', 'table_default' => false, 'csv_default' => false],
+            'dnc_status' => ['label' => 'DNC', 'table_default' => false, 'csv_default' => false],
+            'rnd_status' => ['label' => 'RND', 'table_default' => false, 'csv_default' => false],
+            'address' => ['label' => 'Address', 'table_default' => false, 'csv_default' => false, 'wrap' => true],
+            'address_2' => ['label' => 'Address 2', 'table_default' => false, 'csv_default' => false],
+            'first_name_2' => ['label' => 'First name 2', 'table_default' => false, 'csv_default' => false],
+            'last_name_2' => ['label' => 'Last name 2', 'table_default' => false, 'csv_default' => false],
+            'original_lead_submit_date' => ['label' => 'Original submit date', 'table_default' => false, 'csv_default' => false],
+            'tour_location' => ['label' => 'Tour location', 'table_default' => false, 'csv_default' => false],
+            'tour_date_start' => ['label' => 'Tour date start', 'table_default' => false, 'csv_default' => false],
+            'tour_date' => ['label' => 'Tour date', 'table_default' => false, 'csv_default' => false],
+            'premiums' => ['label' => 'Premiums', 'table_default' => false, 'csv_default' => false],
+            'tour_result' => ['label' => 'Tour result', 'table_default' => false, 'csv_default' => false],
+            'tour_or_no_show' => ['label' => 'Tour / no show', 'table_default' => false, 'csv_default' => false],
+            'file_name' => ['label' => 'Source file', 'table_default' => false, 'csv_default' => false],
             'external_lead_id' => ['label' => 'Lead ID', 'table_default' => false, 'csv_default' => true],
             'booking_id' => ['label' => 'Booking ID', 'table_default' => false, 'csv_default' => true],
             'status' => ['label' => 'Current Status', 'table_default' => false, 'csv_default' => true],
@@ -113,6 +128,14 @@ class CallDetailReportService
     }
 
     /**
+     * @return list<string>
+     */
+    public static function allColumnKeys(): array
+    {
+        return array_keys(self::columnDefinitions());
+    }
+
+    /**
      * @param  list<string>|null  $columns
      * @return list<string>
      */
@@ -130,10 +153,7 @@ class CallDetailReportService
             return $fallbackToCsv ? self::defaultCsvColumnKeys() : self::defaultTableColumnKeys();
         }
 
-        return array_values(array_filter(
-            $known,
-            fn (string $key): bool => in_array($key, $selected, true),
-        ));
+        return $selected;
     }
 
     /**
@@ -386,6 +406,21 @@ class CallDetailReportService
             'home_owner' => (string) ($lead?->home_owner ?? ''),
             'soft_score' => (string) ($lead?->soft_score_code ?? ''),
             'qualified_partners' => implode(', ', $partners),
+            'qualification_status' => $lead?->qualification_status?->label() ?? '',
+            'dnc_status' => $lead?->dnc_status?->label() ?? '',
+            'rnd_status' => $lead?->rnd_status?->label() ?? '',
+            'address' => (string) ($lead?->address ?? ''),
+            'address_2' => (string) ($lead?->address_2 ?? ''),
+            'first_name_2' => (string) ($lead?->first_name_2 ?? ''),
+            'last_name_2' => (string) ($lead?->last_name_2 ?? ''),
+            'original_lead_submit_date' => (string) ($lead?->original_lead_submit_date ?? ''),
+            'tour_location' => (string) ($lead?->tour_location ?? ''),
+            'tour_date_start' => (string) ($lead?->tour_date_start ?? ''),
+            'tour_date' => (string) ($lead?->tour_date ?? ''),
+            'premiums' => (string) ($lead?->premiums ?? ''),
+            'tour_result' => (string) ($lead?->tour_result ?? ''),
+            'tour_or_no_show' => (string) ($lead?->tour_or_no_show ?? ''),
+            'file_name' => (string) ($lead?->file_name ?? ''),
             'external_lead_id' => (string) ($lead?->external_lead_id ?? ''),
             'booking_id' => (string) ($lead?->booking_id ?? ''),
             'status' => $lead?->status?->label() ?? '',

@@ -9,11 +9,14 @@ use App\Models\DispositionDefinition;
 use App\Services\Dashboard\CallDetailReportService;
 use App\Services\Dashboard\ManagerDashboardService;
 use BackedEnum;
+use Filament\Actions\Action;
 use Filament\Forms\Components\Component;
 use Filament\Forms\Components\Select;
 use Filament\Pages\Page;
+use Filament\Schemas\Components\Actions;
 use Filament\Schemas\Concerns\InteractsWithSchemas;
 use Filament\Schemas\Contracts\HasSchemas;
+use Filament\Support\Enums\Alignment;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Contracts\Support\Htmlable;
@@ -122,6 +125,17 @@ class CallDetail extends Page implements HasSchemas
     public function resetColumns(): void
     {
         $this->visibleColumns = CallDetailReportService::defaultTableColumnKeys();
+        $this->syncColumnFilter();
+    }
+
+    public function selectAllColumns(): void
+    {
+        $this->visibleColumns = CallDetailReportService::allColumnKeys();
+        $this->syncColumnFilter();
+    }
+
+    private function syncColumnFilter(): void
+    {
         $this->filterForm->fill(array_merge($this->filterData ?? [], [
             'columns' => $this->visibleColumns,
         ]));
@@ -164,9 +178,22 @@ class CallDetail extends Page implements HasSchemas
                 ->options(fn (): array => CallDetailReportService::columnOptions())
                 ->multiple()
                 ->searchable()
+                ->reorderable()
                 ->live()
                 ->columnSpanFull()
-                ->helperText('Add qualified partners, demographics, Soft Score, and other lead fields. Export CSV uses the same columns.'),
+                ->helperText('Choose any fields. Drag the selected chips to reorder the table and CSV.'),
+            Actions::make([
+                Action::make('selectAllColumns')
+                    ->label('All columns')
+                    ->color('gray')
+                    ->action(fn (): mixed => $this->selectAllColumns()),
+                Action::make('resetColumns')
+                    ->label('Default columns')
+                    ->color('gray')
+                    ->action(fn (): mixed => $this->resetColumns()),
+            ])
+                ->alignment(Alignment::Start)
+                ->columnSpanFull(),
         ];
     }
 
