@@ -60,7 +60,10 @@ class CallDetailReportTest extends TestCase
             ->assertSee('Grand Hall')
             ->assertSee('Export CSV')
             ->assertSee('Dispositions')
-            ->assertSee('Columns');
+            ->assertSee('Columns')
+            ->assertSee('Qualified Partners')
+            ->assertSee('Soft Score')
+            ->assertSee('Age range');
 
         Carbon::setTestNow();
     }
@@ -177,7 +180,9 @@ class CallDetailReportTest extends TestCase
             ->assertDontSee('Travel Partner')
             ->assertDontSee('45-54')
             ->assertDontSee('B2')
-            ->set('visibleColumns', ['name', 'qualified_partners', 'age_range', 'soft_score'])
+            ->fillForm([
+                'columns' => ['name', 'qualified_partners', 'age_range', 'soft_score'],
+            ], 'filterForm')
             ->assertSee('Travel Partner')
             ->assertSee('45-54')
             ->assertSee('B2')

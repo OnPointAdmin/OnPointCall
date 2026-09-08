@@ -47,16 +47,14 @@ class CallDetail extends Page implements HasSchemas
     #[Session]
     public array $visibleColumns = [];
 
-    public bool $columnsMenuOpen = false;
-
     public function mount(ManagerDashboardService $dashboardService): void
     {
-        $this->initializeDashboardFilters($dashboardService);
-        $this->applyDashboardFilters($dashboardService);
-
         if ($this->visibleColumns === []) {
             $this->visibleColumns = CallDetailReportService::defaultTableColumnKeys();
         }
+
+        $this->initializeDashboardFilters($dashboardService);
+        $this->applyDashboardFilters($dashboardService);
     }
 
     public function getHeading(): string|Htmlable|null
@@ -114,14 +112,6 @@ class CallDetail extends Page implements HasSchemas
     }
 
     /**
-     * @return array<string, string>
-     */
-    public function columnOptions(): array
-    {
-        return CallDetailReportService::columnOptions();
-    }
-
-    /**
      * @return list<array{key: string, label: string, wrap: bool}>
      */
     public function visibleColumnDefs(): array
@@ -132,11 +122,9 @@ class CallDetail extends Page implements HasSchemas
     public function resetColumns(): void
     {
         $this->visibleColumns = CallDetailReportService::defaultTableColumnKeys();
-    }
-
-    public function updatedVisibleColumns(): void
-    {
-        $this->visibleColumns = CallDetailReportService::normalizeColumns($this->visibleColumns);
+        $this->filterForm->fill(array_merge($this->filterData ?? [], [
+            'columns' => $this->visibleColumns,
+        ]));
     }
 
     public function cellIsLinked(string $key): bool
@@ -151,6 +139,7 @@ class CallDetail extends Page implements HasSchemas
     {
         return [
             'dispositions' => [],
+            'columns' => CallDetailReportService::normalizeColumns($this->visibleColumns),
         ];
     }
 
@@ -170,6 +159,14 @@ class CallDetail extends Page implements HasSchemas
                 ->nullable()
                 ->placeholder('All')
                 ->columnSpanFull(),
+            Select::make('columns')
+                ->label('Columns')
+                ->options(fn (): array => CallDetailReportService::columnOptions())
+                ->multiple()
+                ->searchable()
+                ->live()
+                ->columnSpanFull()
+                ->helperText('Add qualified partners, demographics, Soft Score, and other lead fields. Export CSV uses the same columns.'),
         ];
     }
 
@@ -179,6 +176,8 @@ class CallDetail extends Page implements HasSchemas
      */
     protected function extraParsedDashboardFilters(array $data): array
     {
+        $this->visibleColumns = CallDetailReportService::normalizeColumns($data['columns'] ?? $this->visibleColumns);
+
         return [
             'dispositions' => collect($data['dispositions'] ?? [])
                 ->map(fn (mixed $slug): string => is_string($slug) ? trim($slug) : '')
@@ -186,6 +185,7 @@ class CallDetail extends Page implements HasSchemas
                 ->unique()
                 ->values()
                 ->all(),
+            'columns' => $this->visibleColumns,
         ];
     }
 

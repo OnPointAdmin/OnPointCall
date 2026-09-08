@@ -28,45 +28,6 @@
                     Refresh
                 </button>
 
-                <div
-                    class="dashboard-columns"
-                    x-data
-                    @keydown.escape.window="$wire.set('columnsMenuOpen', false)"
-                    @click.outside="$wire.set('columnsMenuOpen', false)"
-                >
-                    <button
-                        type="button"
-                        class="dashboard-refresh"
-                        wire:click="$toggle('columnsMenuOpen')"
-                        aria-haspopup="true"
-                        aria-expanded="{{ $this->columnsMenuOpen ? 'true' : 'false' }}"
-                    >
-                        Columns
-                    </button>
-
-                    @if ($this->columnsMenuOpen)
-                        <div class="dashboard-columns-menu">
-                            <div class="dashboard-columns-menu-header">
-                                <span>Show columns</span>
-                                <button type="button" class="dashboard-columns-reset" wire:click="resetColumns">
-                                    Reset
-                                </button>
-                            </div>
-
-                            @foreach ($this->columnOptions() as $key => $label)
-                                <label class="dashboard-columns-option">
-                                    <input
-                                        type="checkbox"
-                                        value="{{ $key }}"
-                                        wire:model.live="visibleColumns"
-                                    >
-                                    {{ $label }}
-                                </label>
-                            @endforeach
-                        </div>
-                    @endif
-                </div>
-
                 <button
                     type="button"
                     wire:click="exportCsv"
@@ -171,7 +132,7 @@
             @endif
 
             <p class="dashboard-footnote">
-                One row per call in the date range. A lead called more than once appears more than once. Use Columns to add qualified partners, demographics, Soft Score, and other lead fields. Export CSV matches the selected columns.
+                One row per call in the date range. A lead called more than once appears more than once. Use the Columns filter to add qualified partners, demographics, Soft Score, and other lead fields. Export CSV matches the selected columns.
             </p>
         </div>
     </div>
