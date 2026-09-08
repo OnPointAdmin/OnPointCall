@@ -531,6 +531,128 @@ class ManagerDashboardServiceTest extends TestCase
         Carbon::setTestNow();
     }
 
+    public function test_leads_for_metric_returns_distinct_current_leads_and_event_count(): void
+    {
+        $company = Company::factory()->create();
+        $agent = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Agent,
+        ]);
+
+        $bookedLead = $this->createLead($company->id, 'standard');
+        $otherLead = $this->createLead($company->id, 'standard');
+
+        $this->createDisposition($company->id, $bookedLead->id, $agent->id, Disposition::Booked);
+        $this->createDisposition($company->id, $bookedLead->id, $agent->id, Disposition::Booked);
+        $this->createDisposition($company->id, $otherLead->id, $agent->id, Disposition::NotInterested, payload: ['reason' => 'Too Busy']);
+
+        $service = app(ManagerDashboardService::class);
+        $range = $service->todayRange($company->id);
+
+        $booked = $service->leadsForMetric(
+            $company->id,
+            null,
+            null,
+            $range['start'],
+            $range['end'],
+            null,
+            'metric',
+            'booked',
+        );
+
+        $this->assertSame(2, $booked['eventCount']);
+        $this->assertSame(1, $booked['leads']->total());
+        $this->assertTrue($booked['leads']->pluck('id')->contains($bookedLead->id));
+
+        $reason = $service->leadsForMetric(
+            $company->id,
+            null,
+            null,
+            $range['start'],
+            $range['end'],
+            null,
+            'reason',
+            'not_interested',
+            Disposition::NotInterested->value,
+            'Too Busy',
+        );
+
+        $this->assertSame(1, $reason['eventCount']);
+        $this->assertSame(1, $reason['leads']->total());
+        $this->assertTrue($reason['leads']->pluck('id')->contains($otherLead->id));
+    }
+
+    public function test_leads_for_metric_respects_dashboard_filters(): void
+    {
+        $company = Company::factory()->create();
+        $agentOne = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Agent,
+        ]);
+        $agentTwo = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Agent,
+        ]);
+
+        $list = $this->createCallingList($company->id, overrides: ['name' => 'Standard']);
+        $otherList = $this->createCallingList($company->id, overrides: ['name' => 'TNB']);
+
+        $standardLead = $this->createLead($company->id, 'standard', $list->id);
+        $tnbLead = $this->createLead($company->id, 'tnb', $otherList->id);
+
+        $this->createDisposition($company->id, $standardLead->id, $agentOne->id, Disposition::NoAnswer);
+        $this->createDisposition($company->id, $tnbLead->id, $agentTwo->id, Disposition::LeftVm);
+        $this->createSkip($company->id, $standardLead->id, $agentOne->id, ['reason' => 'Busy signal']);
+
+        $service = app(ManagerDashboardService::class);
+        $range = $service->todayRange($company->id);
+
+        $filtered = $service->leadsForMetric(
+            $company->id,
+            $agentOne->id,
+            'standard',
+            $range['start'],
+            $range['end'],
+            $list->id,
+            'metric',
+            'no_answer_vm',
+        );
+
+        $this->assertSame(1, $filtered['eventCount']);
+        $this->assertSame(1, $filtered['leads']->total());
+        $this->assertTrue($filtered['leads']->pluck('id')->contains($standardLead->id));
+
+        $skipped = $service->leadsForMetric(
+            $company->id,
+            $agentOne->id,
+            'standard',
+            $range['start'],
+            $range['end'],
+            $list->id,
+            'metric',
+            'skipped',
+        );
+
+        $this->assertSame(1, $skipped['eventCount']);
+        $this->assertTrue($skipped['leads']->pluck('id')->contains($standardLead->id));
+
+        $reason = $service->leadsForMetric(
+            $company->id,
+            $agentOne->id,
+            'standard',
+            $range['start'],
+            $range['end'],
+            $list->id,
+            'reason',
+            'skipped',
+            Disposition::Skip->value,
+            'Busy signal',
+        );
+
+        $this->assertSame(1, $reason['eventCount']);
+        $this->assertTrue($reason['leads']->pluck('id')->contains($standardLead->id));
+    }
+
     private function createLead(int $companyId, string $leadType, ?int $callingListId = null): Lead
     {
         return Lead::withoutGlobalScopes()->create([

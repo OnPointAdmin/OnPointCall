@@ -96,7 +96,14 @@
                     <tbody>
                         <tr>
                             <td class="col-start">Totals</td>
-                            <td>{{ number_format($totals['total_leads_called']['count'] ?? 0) }}</td>
+                            <td>
+                                @include('filament.pages.partials.dashboard-totals-count-button', [
+                                    'count' => $totals['total_leads_called']['count'] ?? 0,
+                                    'metricKey' => 'total_leads_called',
+                                    'kind' => 'metric',
+                                    'label' => 'Total Leads Called',
+                                ])
+                            </td>
                             @foreach ($metricDefinitions as $definition)
                                 @continue($definition['key'] === 'total_leads_called')
 
@@ -104,7 +111,14 @@
                                     $metric = $totals[$definition['key']] ?? ['count' => 0, 'percent' => null];
                                 @endphp
 
-                                <td class="split">{{ number_format($metric['count'] ?? 0) }}</td>
+                                <td class="split">
+                                    @include('filament.pages.partials.dashboard-totals-count-button', [
+                                        'count' => $metric['count'] ?? 0,
+                                        'metricKey' => $definition['key'],
+                                        'kind' => 'metric',
+                                        'label' => $definition['label'],
+                                    ])
+                                </td>
                                 <td class="muted">{{ $this->formatPercent($totals, $definition['key']) }}</td>
                             @endforeach
                         </tr>
@@ -131,6 +145,7 @@
                                         'item' => $nested,
                                         'metricKey' => $metricKey,
                                         'metricDefinitions' => $metricDefinitions,
+                                        'parentDispositionSlug' => $item['slug'] ?? null,
                                         'rowClass' => 'list-row reason-row'.($breakdownIndex % 2 === 1 ? ' is-stripe' : ''),
                                     ])
                                     @php $breakdownIndex++; @endphp

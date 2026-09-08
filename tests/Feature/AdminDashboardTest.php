@@ -521,4 +521,79 @@ class AdminDashboardTest extends TestCase
             ->assertSee('Expand all')
             ->assertSee('Collapse all');
     }
+
+    public function test_dashboard_totals_counts_are_clickable_and_open_leads_modal(): void
+    {
+        $company = Company::factory()->create();
+        $admin = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Admin,
+            'active' => true,
+        ]);
+        $agent = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Agent,
+            'active' => true,
+        ]);
+
+        AppSetting::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'max_attempts' => 6,
+            'claim_ttl_minutes' => 20,
+            'dashboard_email_timezone' => 'America/New_York',
+        ]);
+
+        $bookedLead = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045559601',
+            'first_name' => 'Booked',
+            'last_name' => 'Lead',
+            'status' => LeadStatus::Booked,
+            'lead_type' => 'standard',
+            'imported_at' => now(),
+        ]);
+        $niLead = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045559602',
+            'first_name' => 'Not',
+            'last_name' => 'Interested',
+            'status' => LeadStatus::Terminal,
+            'lead_type' => 'standard',
+            'imported_at' => now(),
+        ]);
+
+        LeadHistory::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'lead_id' => $bookedLead->id,
+            'actor_id' => $agent->id,
+            'event_type' => LeadHistoryType::Disposition,
+            'occurred_at' => now(),
+            'payload' => ['disposition' => Disposition::Booked->value],
+        ]);
+        LeadHistory::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'lead_id' => $niLead->id,
+            'actor_id' => $agent->id,
+            'event_type' => LeadHistoryType::Disposition,
+            'occurred_at' => now(),
+            'payload' => [
+                'disposition' => Disposition::NotInterested->value,
+                'reason' => 'Too Busy',
+            ],
+        ]);
+
+        CompanyContext::set($company->id);
+
+        Livewire::actingAs($admin)
+            ->test(Dashboard::class)
+            ->assertSeeHtml('dashboard-totals-drilldown')
+            ->assertSeeHtml("openTotalsLeads('metric', 'booked'")
+            ->call('openTotalsLeads', 'metric', 'booked', 'Booked')
+            ->assertSet('totalsLeadsArguments.metricKey', 'booked')
+            ->assertSet('totalsLeadsArguments.label', 'Booked')
+            ->call('openTotalsLeads', 'reason', 'not_interested', 'Too Busy', Disposition::NotInterested->value, 'Too Busy')
+            ->assertSet('totalsLeadsArguments.kind', 'reason')
+            ->assertSet('totalsLeadsArguments.reasonLabel', 'Too Busy')
+            ->assertSet('totalsLeadsArguments.dispositionSlug', Disposition::NotInterested->value);
+    }
 }

@@ -951,6 +951,53 @@ class ManagerDashboardService
         return $listNames->get((int) $key) ?? 'Unknown list';
     }
 
+    /**
+     * @return array{leads: \Illuminate\Contracts\Pagination\LengthAwarePaginator, eventCount: int}
+     */
+    public function leadsForMetric(
+        int $companyId,
+        ?int $actorId,
+        ?string $leadType,
+        Carbon $start,
+        Carbon $end,
+        int|string|null $callingListId,
+        string $kind,
+        ?string $metricKey = null,
+        ?string $dispositionSlug = null,
+        ?string $reasonLabel = null,
+        int $page = 1,
+        int $perPage = 25,
+    ): array {
+        $historyQuery = $this->historyQuery($companyId, $actorId, $leadType, $start, $end, $callingListId);
+        $this->applyTotalsLeadsConstraint(
+            $historyQuery,
+            $companyId,
+            $kind,
+            $metricKey,
+            $dispositionSlug,
+            $reasonLabel,
+        );
+
+        $eventCount = (clone $historyQuery)->count();
+
+        $leadIdsSubquery = (clone $historyQuery)
+            ->select('lead_id')
+            ->whereNotNull('lead_id')
+            ->distinct();
+
+        $leads = Lead::withoutGlobalScopes()
+            ->whereIn('id', $leadIdsSubquery)
+            ->with(['latestDisposition', 'callingList'])
+            ->orderByDesc('last_attempt_at')
+            ->orderByDesc('id')
+            ->paginate($perPage, ['*'], 'page', $page);
+
+        return [
+            'leads' => $leads,
+            'eventCount' => $eventCount,
+        ];
+    }
+
     public function historyQuery(
         int $companyId,
         ?int $actorId,
@@ -1010,5 +1057,145 @@ class ManagerDashboardService
     private function timezone(?AppSetting $settings): string
     {
         return CompanyTimezone::normalize($settings?->dashboard_email_timezone);
+    }
+
+    /**
+     * @param  Builder<LeadHistory>  $query
+     */
+    private function applyTotalsLeadsConstraint(
+        Builder $query,
+        int $companyId,
+        string $kind,
+        ?string $metricKey,
+        ?string $dispositionSlug,
+        ?string $reasonLabel,
+    ): void {
+        $query->whereNotNull('actor_id');
+
+        if ($kind === 'metric') {
+            $this->applyMetricKeyConstraint($query, $companyId, (string) $metricKey);
+
+            return;
+        }
+
+        if ($kind === 'disposition') {
+            $this->applyDispositionSlugConstraint($query, (string) $dispositionSlug);
+
+            return;
+        }
+
+        if ($kind === 'reason') {
+            $slug = $dispositionSlug ?? $this->defaultDispositionSlugForMetric((string) $metricKey);
+            $this->applyDispositionSlugConstraint($query, $slug);
+            $this->applyReasonLabelConstraint($query, (string) $reasonLabel);
+        }
+    }
+
+    /**
+     * @param  Builder<LeadHistory>  $query
+     */
+    private function applyMetricKeyConstraint(Builder $query, int $companyId, string $metricKey): void
+    {
+        if ($metricKey === 'total_leads_called') {
+            return;
+        }
+
+        if ($metricKey === 'skipped') {
+            $query->where('event_type', LeadHistoryType::Skip->value);
+
+            return;
+        }
+
+        $definitions = DispositionDefinition::indexedForCompany($companyId);
+        $reportGroupMap = $this->reportGroupMapFrom($definitions);
+
+        if ($metricKey === 'other') {
+            $nonOtherSlugs = [];
+
+            foreach ($definitions as $slug => $definition) {
+                $group = $reportGroupMap[$slug] ?? DispositionReportGroup::Other->value;
+
+                if ($this->metricKeyFromReportGroup($group) !== 'other') {
+                    $nonOtherSlugs[] = $slug;
+                }
+            }
+
+            $query->where('event_type', LeadHistoryType::Disposition->value);
+
+            if ($nonOtherSlugs !== []) {
+                $query->whereNotIn('payload->disposition', $nonOtherSlugs);
+            }
+
+            return;
+        }
+
+        $slugs = [];
+
+        foreach ($definitions as $slug => $definition) {
+            $group = $reportGroupMap[$slug] ?? DispositionReportGroup::Other->value;
+
+            if ($this->metricKeyFromReportGroup($group) === $metricKey) {
+                $slugs[] = $slug;
+            }
+        }
+
+        $query->where('event_type', LeadHistoryType::Disposition->value)
+            ->whereIn('payload->disposition', $slugs);
+    }
+
+    /**
+     * @param  Builder<LeadHistory>  $query
+     */
+    private function applyDispositionSlugConstraint(Builder $query, string $dispositionSlug): void
+    {
+        if ($dispositionSlug === Disposition::Skip->value) {
+            $query->where('event_type', LeadHistoryType::Skip->value);
+
+            return;
+        }
+
+        $query->where('event_type', LeadHistoryType::Disposition->value)
+            ->where('payload->disposition', $dispositionSlug);
+    }
+
+    /**
+     * @param  Builder<LeadHistory>  $query
+     */
+    private function applyReasonLabelConstraint(Builder $query, string $reasonLabel): void
+    {
+        if ($reasonLabel === 'No reason') {
+            $query->whereRaw("COALESCE(TRIM(payload->>'reason'), '') = ''")
+                ->whereRaw("COALESCE(TRIM(payload->>'skip_reason'), '') = ''");
+
+            return;
+        }
+
+        $query->where(function (Builder $reasonQuery) use ($reasonLabel): void {
+            $reasonQuery->where('payload->reason', $reasonLabel)
+                ->orWhere('payload->skip_reason', $reasonLabel);
+        });
+    }
+
+    private function defaultDispositionSlugForMetric(string $metricKey): string
+    {
+        return match ($metricKey) {
+            'not_interested' => Disposition::NotInterested->value,
+            'not_qualified' => Disposition::NotQualified->value,
+            'skipped' => Disposition::Skip->value,
+            default => '',
+        };
+    }
+
+    private function metricKeyFromReportGroup(string $group): string
+    {
+        return match ($group) {
+            DispositionReportGroup::Booked->value => 'booked',
+            DispositionReportGroup::NotInterested->value => 'not_interested',
+            DispositionReportGroup::NotQualified->value => 'not_qualified',
+            DispositionReportGroup::NoAnswerVm->value => 'no_answer_vm',
+            DispositionReportGroup::WrongDnc->value => 'wrong_dnc',
+            DispositionReportGroup::Callbacks->value => 'callbacks',
+            default => 'other',
+        };
     }
 }
