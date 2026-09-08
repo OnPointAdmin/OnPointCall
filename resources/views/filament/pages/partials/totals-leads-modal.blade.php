@@ -21,6 +21,8 @@
                         <a
                             href="{{ LeadResource::getUrl('view', ['record' => $lead]) }}"
                             class="dashboard-totals-leads-link"
+                            target="_blank"
+                            rel="noopener noreferrer"
                         >
                             {{ $lead->fullName() ?: '—' }}
                         </a>
@@ -29,6 +31,8 @@
                         <a
                             href="{{ LeadResource::getUrl('view', ['record' => $lead]) }}"
                             class="dashboard-totals-leads-link"
+                            target="_blank"
+                            rel="noopener noreferrer"
                         >
                             {{ $lead->phone }}
                         </a>
