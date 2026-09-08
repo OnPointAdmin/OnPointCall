@@ -710,6 +710,71 @@ class HoldingReleaseServiceTest extends TestCase
         );
     }
 
+    public function test_qualified_partners_filter_matches_one_name_from_a_multi_partner_lead(): void
+    {
+        $company = Company::factory()->create();
+
+        $multi = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045551717',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'qualification_status' => QualificationStatus::Qualified,
+            'qualification_result' => [
+                'request' => [],
+                'response' => [
+                    'qualifiedCompaniesBooking' => [
+                        ['companyName' => 'Wyndham Destinations'],
+                        ['companyName' => 'Preferred Guest Resorts, LLC'],
+                    ],
+                ],
+            ],
+            'imported_at' => now(),
+        ]);
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045551818',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'qualification_status' => QualificationStatus::Qualified,
+            'qualification_result' => [
+                'request' => [],
+                'response' => [
+                    'qualifiedCompaniesBooking' => [
+                        ['companyName' => 'Other Partner'],
+                    ],
+                ],
+            ],
+            'imported_at' => now(),
+        ]);
+
+        $service = app(HoldingReleaseService::class);
+
+        $this->assertSame(
+            [
+                'Other Partner' => 'Other Partner',
+                'Preferred Guest Resorts, LLC' => 'Preferred Guest Resorts, LLC',
+                'Wyndham Destinations' => 'Wyndham Destinations',
+            ],
+            $service->distinctQualifiedPartners($company->id, 'standard'),
+        );
+
+        foreach (['Wyndham Destinations', 'Preferred Guest Resorts, LLC'] as $partner) {
+            $filter = new HoldingFilter(
+                leadType: 'standard',
+                qualifiedPartners: [$partner],
+            );
+
+            $this->assertSame(1, $service->countHolding($company->id, $filter), $partner);
+            $this->assertSame(
+                [$multi->id],
+                $service->queryHolding($company->id, $filter)->pluck('id')->all(),
+                $partner,
+            );
+        }
+    }
+
     public function test_release_fresh_assigns_n_newest_leads_by_imported_at(): void
     {
         $company = Company::factory()->create();

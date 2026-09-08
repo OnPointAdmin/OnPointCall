@@ -318,17 +318,19 @@ class HoldingReleaseService
             foreach ($partners as $partner) {
                 $group->orWhere(function (Builder $match) use ($partner, $driver): void {
                     if ($driver === 'pgsql') {
+                        // qualification_result is json (not jsonb). COALESCE arms must
+                        // share a type — mixing json with '[]'::jsonb raises SQLSTATE 42846.
                         $match->whereRaw(
                             "EXISTS (
                                 SELECT 1
-                                FROM jsonb_array_elements(
+                                FROM json_array_elements(
                                     COALESCE(
                                         qualification_result->'response'->'qualifiedCompaniesBooking',
                                         qualification_result->'qualifiedCompaniesBooking',
-                                        '[]'::jsonb
+                                        '[]'::json
                                     )
                                 ) AS company
-                                WHERE company->>'companyName' = ?
+                                WHERE btrim(company->>'companyName') = ?
                             )",
                             [$partner],
                         );
@@ -346,7 +348,7 @@ class HoldingReleaseService
                                     '[]'
                                 )
                             ) AS company
-                            WHERE json_extract(company.value, '$.companyName') = ?
+                            WHERE trim(json_extract(company.value, '$.companyName')) = ?
                         )",
                         [$partner],
                     );
