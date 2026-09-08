@@ -17,10 +17,11 @@ class ReportScheduleMailService
         private readonly DashboardDigestService $agentDigest,
         private readonly LeadDashboardService $leadDashboard,
         private readonly LeadSourceReportService $leadSource,
+        private readonly CallDetailReportService $callDetail,
     ) {}
 
     /**
-     * @return array{subject: string, html: string}
+     * @return array{subject: string, html: string, attachments?: list<array{filename: string, content: string, mime: string}>}
      */
     public function build(ReportSchedule $schedule, ?Carbon $now = null): array
     {
@@ -30,6 +31,7 @@ class ReportScheduleMailService
         return match ($schedule->report_type) {
             ReportScheduleType::LeadDashboard => $this->buildLeadDashboard($company),
             ReportScheduleType::LeadSource => $this->buildLeadSource($company, $schedule, $now),
+            ReportScheduleType::CallDetail => $this->buildCallDetail($company, $schedule, $now),
             default => $this->agentDigest->buildForPeriod(
                 $company,
                 $schedule->period ?? ReportSchedulePeriod::Yesterday,
@@ -105,5 +107,48 @@ class ReportScheduleMailService
         ])->render();
 
         return ['subject' => $subject, 'html' => $html];
+    }
+
+    /**
+     * @return array{subject: string, html: string, attachments: list<array{filename: string, content: string, mime: string}>}
+     */
+    private function buildCallDetail(Company $company, ReportSchedule $schedule, ?Carbon $now): array
+    {
+        $period = $schedule->period ?? ReportSchedulePeriod::Yesterday;
+        $range = $this->dashboard->periodRange($company->id, $period, $now);
+        $filters = $schedule->callDetailFilters();
+        $rangeLabel = $this->dashboard->periodRangeLabel($range['start_local'], $range['end_local']);
+        $rowCount = $this->callDetail->count($company->id, $filters, $range['start'], $range['end']);
+        $csv = $this->callDetail->toCsv($company->id, $filters, $range['start'], $range['end']);
+        $filename = sprintf(
+            'call-detail-%s-to-%s.csv',
+            $range['start_local']->toDateString(),
+            $range['end_local']->toDateString(),
+        );
+
+        $subject = sprintf(
+            '%s — Call Detail %s (%s)',
+            config('app.name'),
+            $rangeLabel,
+            $period->getLabel(),
+        );
+
+        $html = view('mail.call-detail-digest', [
+            'company' => $company,
+            'rangeLabel' => $rangeLabel,
+            'periodLabel' => $period->getLabel(),
+            'rowCount' => $rowCount,
+            'filename' => $filename,
+        ])->render();
+
+        return [
+            'subject' => $subject,
+            'html' => $html,
+            'attachments' => [[
+                'filename' => $filename,
+                'content' => $csv,
+                'mime' => 'text/csv',
+            ]],
+        ];
     }
 }

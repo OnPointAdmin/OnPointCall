@@ -4,6 +4,7 @@ namespace App\Providers\Filament;
 
 use App\Filament\Navigation\DashboardNavigation;
 use App\Filament\Pages\Auth\EditProfile;
+use App\Filament\Pages\CallDetail;
 use App\Filament\Pages\Dashboard;
 use App\Http\Middleware\EnsurePasswordChanged;
 use App\Http\Middleware\SetCompanyContext;
@@ -68,6 +69,12 @@ class AdminPanelProvider extends PanelProvider
                     ->url(fn (): string => Dashboard::getUrl())
                     ->group(DashboardNavigation::GROUP)
                     ->sort(0),
+                NavigationItem::make('reports')
+                    ->label(DashboardNavigation::PARENT_REPORTS)
+                    ->icon(Heroicon::OutlinedDocumentChartBar)
+                    ->url(fn (): string => CallDetail::getUrl())
+                    ->group(DashboardNavigation::GROUP)
+                    ->sort(10),
             ])
             ->navigationGroups([
                 NavigationGroup::make(DashboardNavigation::GROUP),

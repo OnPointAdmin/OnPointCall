@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\Dashboard\ManagerDashboardService;
 use Carbon\Carbon;
 use Filament\Actions\Action;
+use Filament\Forms\Components\Component;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Schemas\Components\Actions;
@@ -53,7 +54,7 @@ trait HasDashboardFilters
     }
 
     /**
-     * @return list<\Filament\Forms\Components\Component>
+     * @return list<Component>
      */
     protected function extraDashboardFilterFields(): array
     {
@@ -214,7 +215,7 @@ trait HasDashboardFilters
             ? null
             : ($callingListId === 'holding' ? 'holding' : (int) $callingListId);
 
-        return [
+        return array_merge([
             'company_id' => $companyId,
             'agent_id' => $agentId,
             'lead_type' => $leadType,
@@ -223,7 +224,16 @@ trait HasDashboardFilters
             'timezone' => $timezone,
             'start_date' => $startDate->toDateString(),
             'end_date' => $endDate->toDateString(),
-        ];
+        ], $this->extraParsedDashboardFilters($data));
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    protected function extraParsedDashboardFilters(array $data): array
+    {
+        return [];
     }
 
     protected function finalizeDashboardFilters(ManagerDashboardService $dashboardService, string $timezone, string $startDate, string $endDate): void

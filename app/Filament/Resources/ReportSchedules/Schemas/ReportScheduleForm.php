@@ -5,6 +5,11 @@ namespace App\Filament\Resources\ReportSchedules\Schemas;
 use App\Enums\LeadSourceGroupBy;
 use App\Enums\ReportSchedulePeriod;
 use App\Enums\ReportScheduleType;
+use App\Enums\UserRole;
+use App\Filament\Support\LeadTypeSelect;
+use App\Models\CallingList;
+use App\Models\DispositionDefinition;
+use App\Models\User;
 use App\Support\Weekdays;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
@@ -46,6 +51,45 @@ class ReportScheduleForm
                     ->default(LeadSourceGroupBy::VenueAndEvent->value)
                     ->required(fn (Get $get): bool => self::selectedType($get) === ReportScheduleType::LeadSource)
                     ->visible(fn (Get $get): bool => self::selectedType($get) === ReportScheduleType::LeadSource),
+                Section::make('Filters')
+                    ->columnSpanFull()
+                    ->description('Leave blank to include all reps, lists, and dispositions.')
+                    ->visible(fn (Get $get): bool => self::selectedType($get)?->usesFilters() ?? false)
+                    ->schema([
+                        Select::make('filters.agent_id')
+                            ->label('Rep')
+                            ->options(fn (): array => ['' => 'All'] + User::query()
+                                ->where('role', UserRole::Agent)
+                                ->where('active', true)
+                                ->orderBy('name')
+                                ->pluck('name', 'id')
+                                ->all())
+                            ->nullable(),
+                        LeadTypeSelect::make('filters.lead_type', allowCreate: false)
+                            ->required(false)
+                            ->nullable()
+                            ->placeholder('All'),
+                        Select::make('filters.calling_list_id')
+                            ->label('Calling list')
+                            ->options(fn (): array => ['' => 'All', 'holding' => 'Holding'] + CallingList::query()
+                                ->orderBy('name')
+                                ->pluck('name', 'id')
+                                ->all())
+                            ->searchable()
+                            ->nullable()
+                            ->placeholder('All'),
+                        Select::make('filters.dispositions')
+                            ->label('Dispositions')
+                            ->options(fn (): array => DispositionDefinition::filterOptions(
+                                (int) auth()->user()->company_id,
+                            ))
+                            ->multiple()
+                            ->searchable()
+                            ->nullable()
+                            ->placeholder('All')
+                            ->columnSpanFull(),
+                    ])
+                    ->columns(3),
                 Select::make('days_of_week')
                     ->label('Days')
                     ->multiple()

@@ -62,7 +62,11 @@ class ReportScheduleSender
         try {
             Mail::to($recipients[0])
                 ->bcc(array_slice($recipients, 1))
-                ->send(new DashboardDigestMail($digest['subject'], $digest['html']));
+                ->send(new DashboardDigestMail(
+                    $digest['subject'],
+                    $digest['html'],
+                    $digest['attachments'] ?? [],
+                ));
 
             $schedule->forceFill(['last_sent_slot' => $slot])->saveQuietly();
 

@@ -8,6 +8,7 @@ use App\Filament\Pages\Concerns\HasDashboardFilters;
 use App\Services\Dashboard\LeadSourceReportService;
 use App\Services\Dashboard\ManagerDashboardService;
 use BackedEnum;
+use Filament\Forms\Components\Component;
 use Filament\Forms\Components\Select;
 use Filament\Pages\Page;
 use Filament\Schemas\Concerns\InteractsWithSchemas;
@@ -21,6 +22,8 @@ class PerformanceByLeadSource extends Page implements HasSchemas
     use InteractsWithSchemas;
 
     protected static string|\UnitEnum|null $navigationGroup = DashboardNavigation::GROUP;
+
+    protected static ?string $navigationParentItem = DashboardNavigation::PARENT_REPORTS;
 
     protected static ?string $navigationLabel = 'Performance by Lead Source';
 
@@ -73,7 +76,7 @@ class PerformanceByLeadSource extends Page implements HasSchemas
     }
 
     /**
-     * @return list<\Filament\Forms\Components\Component>
+     * @return list<Component>
      */
     protected function extraDashboardFilterFields(): array
     {

@@ -25,6 +25,7 @@ class ReportSchedule extends Model
         'days_of_week',
         'send_times',
         'group_by',
+        'filters',
         'last_sent_slot',
     ];
 
@@ -37,6 +38,7 @@ class ReportSchedule extends Model
             'days_of_week' => 'array',
             'send_times' => 'array',
             'group_by' => LeadSourceGroupBy::class,
+            'filters' => 'array',
         ];
     }
 
@@ -53,6 +55,12 @@ class ReportSchedule extends Model
 
             if ($schedule->report_type !== ReportScheduleType::LeadSource) {
                 $schedule->group_by = null;
+            }
+
+            if (! $schedule->report_type?->usesFilters()) {
+                $schedule->filters = null;
+            } else {
+                $schedule->filters = self::normalizeFilters($schedule->filters);
             }
         });
     }
@@ -93,7 +101,6 @@ class ReportSchedule extends Model
     }
 
     /**
-     * @param  mixed  $times
      * @return list<string>
      */
     public static function normalizeSendTimes(mixed $times): array
@@ -117,5 +124,53 @@ class ReportSchedule extends Model
             ->sort()
             ->values()
             ->all();
+    }
+
+    /**
+     * @return array{
+     *     agent_id: ?int,
+     *     lead_type: ?string,
+     *     calling_list_id: int|string|null,
+     *     dispositions: list<string>
+     * }
+     */
+    public function callDetailFilters(): array
+    {
+        return self::normalizeFilters($this->filters);
+    }
+
+    /**
+     * @return array{
+     *     agent_id: ?int,
+     *     lead_type: ?string,
+     *     calling_list_id: int|string|null,
+     *     dispositions: list<string>
+     * }
+     */
+    public static function normalizeFilters(mixed $filters): array
+    {
+        $filters = is_array($filters) ? $filters : [];
+
+        $agentId = $filters['agent_id'] ?? null;
+        $leadType = $filters['lead_type'] ?? null;
+        $callingListId = $filters['calling_list_id'] ?? null;
+
+        if ($callingListId === '' || $callingListId === null) {
+            $callingListId = null;
+        } elseif ($callingListId !== 'holding') {
+            $callingListId = (int) $callingListId;
+        }
+
+        return [
+            'agent_id' => $agentId === null || $agentId === '' ? null : (int) $agentId,
+            'lead_type' => is_string($leadType) && $leadType !== '' ? $leadType : null,
+            'calling_list_id' => $callingListId,
+            'dispositions' => collect($filters['dispositions'] ?? [])
+                ->map(fn (mixed $slug): string => is_string($slug) ? trim($slug) : '')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all(),
+        ];
     }
 }

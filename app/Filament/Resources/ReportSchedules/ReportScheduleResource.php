@@ -14,12 +14,15 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class ReportScheduleResource extends Resource
 {
     protected static ?string $model = ReportSchedule::class;
 
     protected static string|\UnitEnum|null $navigationGroup = DashboardNavigation::GROUP;
+
+    protected static ?string $navigationParentItem = DashboardNavigation::PARENT_REPORTS;
 
     protected static ?int $navigationSort = 12;
 
@@ -57,7 +60,7 @@ class ReportScheduleResource extends Resource
         ];
     }
 
-    public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
+    public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery()->withCount('recipients');
     }
