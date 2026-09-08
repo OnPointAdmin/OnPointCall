@@ -17,6 +17,7 @@ use Filament\Schemas\Contracts\HasSchemas;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Contracts\Support\Htmlable;
+use Livewire\Attributes\Session;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class CallDetail extends Page implements HasSchemas
@@ -40,10 +41,22 @@ class CallDetail extends Page implements HasSchemas
 
     public int $callsPage = 1;
 
+    /**
+     * @var list<string>
+     */
+    #[Session]
+    public array $visibleColumns = [];
+
+    public bool $columnsMenuOpen = false;
+
     public function mount(ManagerDashboardService $dashboardService): void
     {
         $this->initializeDashboardFilters($dashboardService);
         $this->applyDashboardFilters($dashboardService);
+
+        if ($this->visibleColumns === []) {
+            $this->visibleColumns = CallDetailReportService::defaultTableColumnKeys();
+        }
     }
 
     public function getHeading(): string|Htmlable|null
@@ -59,10 +72,9 @@ class CallDetail extends Page implements HasSchemas
     public function exportCsv(ManagerDashboardService $dashboardService): StreamedResponse
     {
         $filters = $this->parsedDashboardFilters($dashboardService);
-        $reportFilters = $this->reportFilters($filters);
         $csv = app(CallDetailReportService::class)->toCsv(
             $filters['company_id'],
-            $reportFilters,
+            $this->reportFilters($filters),
             $filters['range']['start'],
             $filters['range']['end'],
         );
@@ -99,6 +111,37 @@ class CallDetail extends Page implements HasSchemas
     public function leadUrl(int $leadId): string
     {
         return LeadResource::getUrl('view', ['record' => $leadId]);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function columnOptions(): array
+    {
+        return CallDetailReportService::columnOptions();
+    }
+
+    /**
+     * @return list<array{key: string, label: string, wrap: bool}>
+     */
+    public function visibleColumnDefs(): array
+    {
+        return CallDetailReportService::visibleColumnDefs($this->visibleColumns);
+    }
+
+    public function resetColumns(): void
+    {
+        $this->visibleColumns = CallDetailReportService::defaultTableColumnKeys();
+    }
+
+    public function updatedVisibleColumns(): void
+    {
+        $this->visibleColumns = CallDetailReportService::normalizeColumns($this->visibleColumns);
+    }
+
+    public function cellIsLinked(string $key): bool
+    {
+        return in_array($key, ['name', 'first_name', 'last_name', 'phone'], true);
     }
 
     /**
@@ -165,7 +208,8 @@ class CallDetail extends Page implements HasSchemas
      *     agent_id: ?int,
      *     lead_type: ?string,
      *     calling_list_id: int|string|null,
-     *     dispositions: list<string>
+     *     dispositions: list<string>,
+     *     columns: list<string>
      * }
      */
     private function reportFilters(array $filters): array
@@ -175,6 +219,7 @@ class CallDetail extends Page implements HasSchemas
             'lead_type' => $filters['lead_type'] ?? null,
             'calling_list_id' => $filters['calling_list_id'] ?? null,
             'dispositions' => $filters['dispositions'] ?? [],
+            'columns' => CallDetailReportService::normalizeColumns($this->visibleColumns),
         ];
     }
 }

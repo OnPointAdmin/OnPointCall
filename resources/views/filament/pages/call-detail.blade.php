@@ -1,6 +1,8 @@
 <x-filament-panels::page>
     @php
         $calls = $this->callRows();
+        $columns = $this->visibleColumnDefs();
+        $columnCount = max(1, count($columns));
     @endphp
 
     <div class="dashboard-report">
@@ -25,6 +27,45 @@
                     </svg>
                     Refresh
                 </button>
+
+                <div
+                    class="dashboard-columns"
+                    x-data
+                    @keydown.escape.window="$wire.set('columnsMenuOpen', false)"
+                    @click.outside="$wire.set('columnsMenuOpen', false)"
+                >
+                    <button
+                        type="button"
+                        class="dashboard-refresh"
+                        wire:click="$toggle('columnsMenuOpen')"
+                        aria-haspopup="true"
+                        aria-expanded="{{ $this->columnsMenuOpen ? 'true' : 'false' }}"
+                    >
+                        Columns
+                    </button>
+
+                    @if ($this->columnsMenuOpen)
+                        <div class="dashboard-columns-menu">
+                            <div class="dashboard-columns-menu-header">
+                                <span>Show columns</span>
+                                <button type="button" class="dashboard-columns-reset" wire:click="resetColumns">
+                                    Reset
+                                </button>
+                            </div>
+
+                            @foreach ($this->columnOptions() as $key => $label)
+                                <label class="dashboard-columns-option">
+                                    <input
+                                        type="checkbox"
+                                        value="{{ $key }}"
+                                        wire:model.live="visibleColumns"
+                                    >
+                                    {{ $label }}
+                                </label>
+                            @endforeach
+                        </div>
+                    @endif
+                </div>
 
                 <button
                     type="button"
@@ -65,49 +106,36 @@
                 <table>
                     <thead>
                         <tr>
-                            <th class="col-start">Called At</th>
-                            <th>Rep</th>
-                            <th>Name</th>
-                            <th>Phone</th>
-                            <th>Disposition</th>
-                            <th>Reason</th>
-                            <th>Calling List</th>
-                            <th>Venue</th>
-                            <th>Event</th>
+                            @foreach ($columns as $index => $column)
+                                <th @class(['col-start' => $index === 0, 'col-wrap' => $column['wrap']])>
+                                    {{ $column['label'] }}
+                                </th>
+                            @endforeach
                         </tr>
                     </thead>
                     <tbody>
                         @forelse ($calls as $row)
                             <tr>
-                                <td class="col-start">{{ $row['called_at'] !== '' ? $row['called_at'] : '—' }}</td>
-                                <td>{{ $row['rep'] !== '' ? $row['rep'] : '—' }}</td>
-                                <td>
-                                    @if ($row['lead_id'])
-                                        <a href="{{ $this->leadUrl($row['lead_id']) }}" class="dashboard-totals-leads-link">
-                                            {{ trim($row['first_name'].' '.$row['last_name']) !== '' ? trim($row['first_name'].' '.$row['last_name']) : '—' }}
-                                        </a>
-                                    @else
-                                        —
-                                    @endif
-                                </td>
-                                <td>
-                                    @if ($row['lead_id'])
-                                        <a href="{{ $this->leadUrl($row['lead_id']) }}" class="dashboard-totals-leads-link">
-                                            {{ $row['phone'] !== '' ? $row['phone'] : '—' }}
-                                        </a>
-                                    @else
-                                        {{ $row['phone'] !== '' ? $row['phone'] : '—' }}
-                                    @endif
-                                </td>
-                                <td>{{ $row['disposition'] !== '' ? $row['disposition'] : '—' }}</td>
-                                <td>{{ $row['reason'] !== '' ? $row['reason'] : '—' }}</td>
-                                <td>{{ $row['calling_list'] !== '' ? $row['calling_list'] : '—' }}</td>
-                                <td>{{ $row['venue'] !== '' ? $row['venue'] : '—' }}</td>
-                                <td>{{ $row['event'] !== '' ? $row['event'] : '—' }}</td>
+                                @foreach ($columns as $index => $column)
+                                    @php
+                                        $value = trim((string) ($row[$column['key']] ?? ''));
+                                        $display = $value !== '' ? $value : '—';
+                                        $linked = $this->cellIsLinked($column['key']) && $row['lead_id'];
+                                    @endphp
+                                    <td @class(['col-start' => $index === 0, 'col-wrap' => $column['wrap']])>
+                                        @if ($linked)
+                                            <a href="{{ $this->leadUrl($row['lead_id']) }}" class="dashboard-totals-leads-link">
+                                                {{ $display }}
+                                            </a>
+                                        @else
+                                            {{ $display }}
+                                        @endif
+                                    </td>
+                                @endforeach
                             </tr>
                         @empty
                             <tr class="empty-row">
-                                <td colspan="9">
+                                <td colspan="{{ $columnCount }}">
                                     No calls for the selected filters.
                                 </td>
                             </tr>
@@ -143,7 +171,7 @@
             @endif
 
             <p class="dashboard-footnote">
-                One row per call in the date range. A lead called more than once appears more than once. Export CSV includes notes, callback time, and contact fields.
+                One row per call in the date range. A lead called more than once appears more than once. Use Columns to add qualified partners, demographics, Soft Score, and other lead fields. Export CSV matches the selected columns.
             </p>
         </div>
     </div>

@@ -131,7 +131,8 @@ class ReportSchedule extends Model
      *     agent_id: ?int,
      *     lead_type: ?string,
      *     calling_list_id: int|string|null,
-     *     dispositions: list<string>
+     *     dispositions: list<string>,
+     *     columns: list<string>
      * }
      */
     public function callDetailFilters(): array
@@ -144,7 +145,8 @@ class ReportSchedule extends Model
      *     agent_id: ?int,
      *     lead_type: ?string,
      *     calling_list_id: int|string|null,
-     *     dispositions: list<string>
+     *     dispositions: list<string>,
+     *     columns: list<string>
      * }
      */
     public static function normalizeFilters(mixed $filters): array
@@ -167,6 +169,12 @@ class ReportSchedule extends Model
             'calling_list_id' => $callingListId,
             'dispositions' => collect($filters['dispositions'] ?? [])
                 ->map(fn (mixed $slug): string => is_string($slug) ? trim($slug) : '')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all(),
+            'columns' => collect($filters['columns'] ?? [])
+                ->map(fn (mixed $key): string => is_string($key) ? trim($key) : '')
                 ->filter()
                 ->unique()
                 ->values()

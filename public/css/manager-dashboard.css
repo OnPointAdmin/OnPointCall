@@ -725,3 +725,79 @@
     color: #64748b;
     font-size: 0.8125rem;
 }
+
+.dashboard-table thead th.col-wrap,
+.dashboard-table tbody td.col-wrap {
+    white-space: normal;
+    max-width: 16rem;
+}
+
+.dashboard-columns {
+    position: relative;
+}
+
+.dashboard-columns-menu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 0.4rem);
+    z-index: 40;
+    width: 18rem;
+    max-height: 24rem;
+    overflow-y: auto;
+    background: #fff;
+    color: #0f172a;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.5rem;
+    box-shadow: 0 12px 28px rgb(15 23 42 / 0.22);
+    padding: 0.4rem 0 0.55rem;
+}
+
+.dashboard-columns-menu-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.35rem 0.85rem 0.5rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #64748b;
+    border-bottom: 1px solid #e2e8f0;
+    margin-bottom: 0.25rem;
+}
+
+.dashboard-columns-reset {
+    border: 0;
+    background: none;
+    color: #1e3a5f;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    cursor: pointer;
+    padding: 0;
+}
+
+.dashboard-columns-reset:hover {
+    text-decoration: underline;
+}
+
+.dashboard-columns-option {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.35rem 0.85rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: #0f172a;
+    cursor: pointer;
+}
+
+.dashboard-columns-option:hover {
+    background: #f8fafc;
+}
+
+.dashboard-columns-option input {
+    margin: 0;
+}

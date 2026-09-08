@@ -5,8 +5,10 @@ namespace Tests\Feature;
 use App\Enums\Disposition;
 use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
+use App\Enums\QualificationStatus;
 use App\Enums\ReportSchedulePeriod;
 use App\Enums\ReportScheduleType;
+use App\Enums\SoftScoreStatus;
 use App\Enums\UserRole;
 use App\Filament\Pages\CallDetail;
 use App\Filament\Resources\ReportSchedules\Pages\CreateReportSchedule;
@@ -57,7 +59,8 @@ class CallDetailReportTest extends TestCase
             ->assertSee('Booked')
             ->assertSee('Grand Hall')
             ->assertSee('Export CSV')
-            ->assertSee('Dispositions');
+            ->assertSee('Dispositions')
+            ->assertSee('Columns');
 
         Carbon::setTestNow();
     }
@@ -96,6 +99,91 @@ class CallDetailReportTest extends TestCase
         $this->assertStringContainsString('VIP party', $csv);
         $this->assertStringContainsString('pat@example.com', $csv);
         $this->assertStringContainsString($agent->name, $csv);
+
+        Carbon::setTestNow();
+    }
+
+    public function test_csv_can_include_qualified_partners_demographics_and_soft_score(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-10 15:00:00', 'America/New_York'));
+
+        [$admin, $agent] = $this->makeUsers();
+        $lead = $this->createLead($admin->company_id, [
+            'first_name' => 'Pat',
+            'last_name' => 'Booked',
+            'age_range' => '45-54',
+            'annual_income' => '$100,000-$149,999',
+            'marital_status' => 'Married',
+            'gender' => 'Female',
+            'home_owner' => 'Yes',
+            'soft_score_code' => 'A',
+            'soft_score_status' => SoftScoreStatus::Complete,
+            'qualification_status' => QualificationStatus::Qualified,
+            'qualification_result' => [
+                'request' => ['surveyCompanyId' => 'test'],
+                'response' => [
+                    'qualifiedCompaniesBooking' => [
+                        ['companyName' => 'Travel Partner', 'vertical' => 'Vacation'],
+                    ],
+                ],
+            ],
+        ]);
+        $this->createDisposition($admin->company_id, $lead->id, $agent->id, Disposition::Booked);
+
+        $range = app(ManagerDashboardService::class)->todayRange($admin->company_id);
+        $csv = app(CallDetailReportService::class)->toCsv(
+            $admin->company_id,
+            ['columns' => ['name', 'soft_score', 'qualified_partners', 'age_range', 'annual_income']],
+            $range['start'],
+            $range['end'],
+        );
+
+        $this->assertStringContainsString('Soft Score', $csv);
+        $this->assertStringContainsString('Qualified Partners', $csv);
+        $this->assertStringContainsString('Age range', $csv);
+        $this->assertStringContainsString('A', $csv);
+        $this->assertStringContainsString('Travel Partner', $csv);
+        $this->assertStringContainsString('45-54', $csv);
+        $this->assertStringContainsString('$100,000-$149,999', $csv);
+        $this->assertStringNotContainsString('Called At', $csv);
+
+        Carbon::setTestNow();
+    }
+
+    public function test_report_page_can_toggle_optional_columns(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-10 15:00:00', 'America/New_York'));
+
+        [$admin, $agent] = $this->makeUsers();
+        $lead = $this->createLead($admin->company_id, [
+            'first_name' => 'Pat',
+            'last_name' => 'Booked',
+            'age_range' => '45-54',
+            'soft_score_code' => 'B2',
+            'qualification_result' => [
+                'response' => [
+                    'qualifiedCompaniesBooking' => [
+                        ['companyName' => 'Travel Partner'],
+                    ],
+                ],
+            ],
+        ]);
+        $this->createDisposition($admin->company_id, $lead->id, $agent->id, Disposition::Booked);
+
+        CompanyContext::set($admin->company_id);
+
+        Livewire::actingAs($admin)
+            ->test(CallDetail::class)
+            ->assertDontSee('Travel Partner')
+            ->assertDontSee('45-54')
+            ->assertDontSee('B2')
+            ->set('visibleColumns', ['name', 'qualified_partners', 'age_range', 'soft_score'])
+            ->assertSee('Travel Partner')
+            ->assertSee('45-54')
+            ->assertSee('B2')
+            ->call('resetColumns')
+            ->assertDontSee('Travel Partner')
+            ->assertDontSee('B2');
 
         Carbon::setTestNow();
     }
@@ -222,6 +310,7 @@ class CallDetailReportTest extends TestCase
             ])
             ->assertFormFieldIsVisible('filters.agent_id')
             ->assertFormFieldIsVisible('filters.dispositions')
+            ->assertFormFieldIsVisible('filters.columns')
             ->assertFormFieldIsVisible('period');
     }
 

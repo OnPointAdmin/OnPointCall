@@ -12,12 +12,14 @@ Same as Agent Dashboard (Rep, Lead type, Calling list, Start/End Date, date pres
 
 One row per matching history event (a lead called twice in the range appears twice).
 
-## CSV columns
+## Columns
 
-Called At, Rep, Disposition, Reason, Note, Callback At, Calling List, Lead Type, First Name, Last Name, Phone, Phone 2, Email, City, State, Zip, Venue, Event, Partner List, Lead ID, Booking ID, Current Status, Attempt Count.
+A **Columns** picker on the report (and optional columns on scheduled emails) shows or hides fields. Default table columns stay Called At, Rep, Name, Phone, Disposition, Reason, Calling List, Venue, Event. CSV export matches the selected columns. Scheduled emails with no columns selected keep the original standard CSV.
+
+Available extras include contact fields, notes, callback time, **qualified partners**, demographics (age range, annual income, marital status, gender, homeowner), and **Soft Score**.
 
 UTF-8 with BOM for Excel.
 
 ## Scheduling
 
-New `report_schedules.report_type` value `call_detail`. Periods match other date-range reports. Persist optional filters JSON (`agent_id`, `lead_type`, `calling_list_id`, `dispositions`). Email a short HTML summary plus the CSV attached. Send now / cron reuse the existing digest command.
+New `report_schedules.report_type` value `call_detail`. Periods match other date-range reports. Persist optional filters JSON (`agent_id`, `lead_type`, `calling_list_id`, `dispositions`, `columns`). Email a short HTML summary plus the CSV attached. Send now / cron reuse the existing digest command.

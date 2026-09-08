@@ -10,6 +10,7 @@ use App\Filament\Support\LeadTypeSelect;
 use App\Models\CallingList;
 use App\Models\DispositionDefinition;
 use App\Models\User;
+use App\Services\Dashboard\CallDetailReportService;
 use App\Support\Weekdays;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
@@ -87,6 +88,15 @@ class ReportScheduleForm
                             ->searchable()
                             ->nullable()
                             ->placeholder('All')
+                            ->columnSpanFull(),
+                        Select::make('filters.columns')
+                            ->label('Columns')
+                            ->options(fn (): array => CallDetailReportService::columnOptions())
+                            ->multiple()
+                            ->searchable()
+                            ->nullable()
+                            ->placeholder('Standard CSV columns')
+                            ->helperText('Leave blank for the standard CSV. Add qualified partners, demographics, or Soft Score here.')
                             ->columnSpanFull(),
                     ])
                     ->columns(3),

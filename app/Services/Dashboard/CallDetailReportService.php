@@ -18,40 +18,153 @@ class CallDetailReportService
 {
     public const PER_PAGE = 50;
 
+    /**
+     * @return array<string, array{label: string, table_default: bool, csv_default: bool, wrap?: bool}>
+     */
+    public static function columnDefinitions(): array
+    {
+        return [
+            'called_at' => ['label' => 'Called At', 'table_default' => true, 'csv_default' => true],
+            'rep' => ['label' => 'Rep', 'table_default' => true, 'csv_default' => true],
+            'name' => ['label' => 'Name', 'table_default' => true, 'csv_default' => false],
+            'first_name' => ['label' => 'First Name', 'table_default' => false, 'csv_default' => true],
+            'last_name' => ['label' => 'Last Name', 'table_default' => false, 'csv_default' => true],
+            'phone' => ['label' => 'Phone', 'table_default' => true, 'csv_default' => true],
+            'phone_2' => ['label' => 'Phone 2', 'table_default' => false, 'csv_default' => true],
+            'email' => ['label' => 'Email', 'table_default' => false, 'csv_default' => true],
+            'disposition' => ['label' => 'Disposition', 'table_default' => true, 'csv_default' => true],
+            'reason' => ['label' => 'Reason', 'table_default' => true, 'csv_default' => true],
+            'note' => ['label' => 'Note', 'table_default' => false, 'csv_default' => true, 'wrap' => true],
+            'callback_at' => ['label' => 'Callback At', 'table_default' => false, 'csv_default' => true],
+            'calling_list' => ['label' => 'Calling List', 'table_default' => true, 'csv_default' => true],
+            'lead_type' => ['label' => 'Lead Type', 'table_default' => false, 'csv_default' => true],
+            'city' => ['label' => 'City', 'table_default' => false, 'csv_default' => true],
+            'state' => ['label' => 'State', 'table_default' => false, 'csv_default' => true],
+            'zip' => ['label' => 'Zip', 'table_default' => false, 'csv_default' => true],
+            'venue' => ['label' => 'Venue', 'table_default' => true, 'csv_default' => true],
+            'event' => ['label' => 'Event', 'table_default' => true, 'csv_default' => true],
+            'partner_list' => ['label' => 'Partner List', 'table_default' => false, 'csv_default' => true, 'wrap' => true],
+            'age_range' => ['label' => 'Age range', 'table_default' => false, 'csv_default' => false],
+            'annual_income' => ['label' => 'Annual income', 'table_default' => false, 'csv_default' => false],
+            'marital_status' => ['label' => 'Marital status', 'table_default' => false, 'csv_default' => false],
+            'gender' => ['label' => 'Gender', 'table_default' => false, 'csv_default' => false],
+            'home_owner' => ['label' => 'Homeowner', 'table_default' => false, 'csv_default' => false],
+            'soft_score' => ['label' => 'Soft Score', 'table_default' => false, 'csv_default' => false],
+            'qualified_partners' => ['label' => 'Qualified Partners', 'table_default' => false, 'csv_default' => false, 'wrap' => true],
+            'external_lead_id' => ['label' => 'Lead ID', 'table_default' => false, 'csv_default' => true],
+            'booking_id' => ['label' => 'Booking ID', 'table_default' => false, 'csv_default' => true],
+            'status' => ['label' => 'Current Status', 'table_default' => false, 'csv_default' => true],
+            'attempt_count' => ['label' => 'Attempt Count', 'table_default' => false, 'csv_default' => true],
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function columnOptions(): array
+    {
+        return collect(self::columnDefinitions())
+            ->mapWithKeys(fn (array $column, string $key): array => [$key => $column['label']])
+            ->all();
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function defaultTableColumnKeys(): array
+    {
+        return collect(self::columnDefinitions())
+            ->filter(fn (array $column): bool => $column['table_default'])
+            ->keys()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function defaultCsvColumnKeys(): array
+    {
+        return [
+            'called_at',
+            'rep',
+            'disposition',
+            'reason',
+            'note',
+            'callback_at',
+            'calling_list',
+            'lead_type',
+            'first_name',
+            'last_name',
+            'phone',
+            'phone_2',
+            'email',
+            'city',
+            'state',
+            'zip',
+            'venue',
+            'event',
+            'partner_list',
+            'external_lead_id',
+            'booking_id',
+            'status',
+            'attempt_count',
+        ];
+    }
+
+    /**
+     * @param  list<string>|null  $columns
+     * @return list<string>
+     */
+    public static function normalizeColumns(?array $columns, bool $fallbackToCsv = false): array
+    {
+        $known = array_keys(self::columnDefinitions());
+        $selected = collect($columns ?? [])
+            ->map(fn (mixed $key): string => is_string($key) ? $key : '')
+            ->filter(fn (string $key): bool => in_array($key, $known, true))
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($selected === []) {
+            return $fallbackToCsv ? self::defaultCsvColumnKeys() : self::defaultTableColumnKeys();
+        }
+
+        return array_values(array_filter(
+            $known,
+            fn (string $key): bool => in_array($key, $selected, true),
+        ));
+    }
+
+    /**
+     * @param  list<string>|null  $columns
+     * @return list<array{key: string, label: string, wrap: bool}>
+     */
+    public static function visibleColumnDefs(?array $columns, bool $fallbackToCsv = false): array
+    {
+        $definitions = self::columnDefinitions();
+
+        return array_map(
+            fn (string $key): array => [
+                'key' => $key,
+                'label' => $definitions[$key]['label'],
+                'wrap' => (bool) ($definitions[$key]['wrap'] ?? false),
+            ],
+            self::normalizeColumns($columns, $fallbackToCsv),
+        );
+    }
+
     public function __construct(
         private readonly ManagerDashboardService $dashboardService,
     ) {}
 
     /**
+     * @param  list<string>|null  $columns
      * @return list<string>
      */
-    public function headers(): array
+    public function headers(?array $columns = null, bool $fallbackToCsv = true): array
     {
-        return [
-            'Called At',
-            'Rep',
-            'Disposition',
-            'Reason',
-            'Note',
-            'Callback At',
-            'Calling List',
-            'Lead Type',
-            'First Name',
-            'Last Name',
-            'Phone',
-            'Phone 2',
-            'Email',
-            'City',
-            'State',
-            'Zip',
-            'Venue',
-            'Event',
-            'Partner List',
-            'Lead ID',
-            'Booking ID',
-            'Current Status',
-            'Attempt Count',
-        ];
+        return array_column(self::visibleColumnDefs($columns, $fallbackToCsv), 'label');
     }
 
     /**
@@ -59,7 +172,8 @@ class CallDetailReportService
      *     agent_id?: ?int,
      *     lead_type?: ?string,
      *     calling_list_id?: int|string|null,
-     *     dispositions?: list<string>
+     *     dispositions?: list<string>,
+     *     columns?: list<string>
      * }  $filters
      * @return LengthAwarePaginator<int, array<string, mixed>>
      */
@@ -85,7 +199,8 @@ class CallDetailReportService
      *     agent_id?: ?int,
      *     lead_type?: ?string,
      *     calling_list_id?: int|string|null,
-     *     dispositions?: list<string>
+     *     dispositions?: list<string>,
+     *     columns?: list<string>
      * }  $filters
      */
     public function count(int $companyId, array $filters, Carbon $start, Carbon $end): int
@@ -98,7 +213,8 @@ class CallDetailReportService
      *     agent_id?: ?int,
      *     lead_type?: ?string,
      *     calling_list_id?: int|string|null,
-     *     dispositions?: list<string>
+     *     dispositions?: list<string>,
+     *     columns?: list<string>
      * }  $filters
      */
     public function toCsv(int $companyId, array $filters, Carbon $start, Carbon $end): string
@@ -110,7 +226,7 @@ class CallDetailReportService
         }
 
         fwrite($handle, "\xEF\xBB\xBF");
-        fputcsv($handle, $this->headers(), ',', '"', '');
+        fputcsv($handle, $this->headers($filters['columns'] ?? null, $this->csvColumnFallback($filters)), ',', '"', '');
 
         foreach ($this->csvRows($companyId, $filters, $start, $end) as $row) {
             fputcsv($handle, $row, ',', '"', '');
@@ -128,7 +244,8 @@ class CallDetailReportService
      *     agent_id?: ?int,
      *     lead_type?: ?string,
      *     calling_list_id?: int|string|null,
-     *     dispositions?: list<string>
+     *     dispositions?: list<string>,
+     *     columns?: list<string>
      * }  $filters
      * @return \Generator<int, list<string>>
      */
@@ -137,35 +254,18 @@ class CallDetailReportService
         $definitions = DispositionDefinition::indexedForCompany($companyId);
         $leadTypeNames = $this->leadTypeNames($companyId);
         $timezone = $this->dashboardService->companyTimezone($companyId);
+        $columnKeys = array_column(
+            self::visibleColumnDefs($filters['columns'] ?? null, $this->csvColumnFallback($filters)),
+            'key',
+        );
 
         foreach ($this->historyQuery($companyId, $filters, $start, $end)->lazy(500) as $row) {
             $presented = $this->presentRow($row, $definitions, $leadTypeNames, $timezone);
 
-            yield [
-                $presented['called_at'],
-                $presented['rep'],
-                $presented['disposition'],
-                $presented['reason'],
-                $presented['note'],
-                $presented['callback_at'],
-                $presented['calling_list'],
-                $presented['lead_type'],
-                $presented['first_name'],
-                $presented['last_name'],
-                $presented['phone'],
-                $presented['phone_2'],
-                $presented['email'],
-                $presented['city'],
-                $presented['state'],
-                $presented['zip'],
-                $presented['venue'],
-                $presented['event'],
-                $presented['partner_list'],
-                $presented['external_lead_id'],
-                $presented['booking_id'],
-                $presented['status'],
-                $presented['attempt_count'],
-            ];
+            yield array_map(
+                fn (string $key): string => (string) ($presented[$key] ?? ''),
+                $columnKeys,
+            );
         }
     }
 
@@ -174,7 +274,8 @@ class CallDetailReportService
      *     agent_id?: ?int,
      *     lead_type?: ?string,
      *     calling_list_id?: int|string|null,
-     *     dispositions?: list<string>
+     *     dispositions?: list<string>,
+     *     columns?: list<string>
      * }  $filters
      * @return Builder<LeadHistory>
      */
@@ -219,6 +320,7 @@ class CallDetailReportService
      *     lead_type: string,
      *     first_name: string,
      *     last_name: string,
+     *     name: string,
      *     phone: string,
      *     phone_2: string,
      *     email: string,
@@ -228,6 +330,13 @@ class CallDetailReportService
      *     venue: string,
      *     event: string,
      *     partner_list: string,
+     *     age_range: string,
+     *     annual_income: string,
+     *     marital_status: string,
+     *     gender: string,
+     *     home_owner: string,
+     *     soft_score: string,
+     *     qualified_partners: string,
      *     external_lead_id: string,
      *     booking_id: string,
      *     status: string,
@@ -241,6 +350,9 @@ class CallDetailReportService
         $slug = $this->dispositionSlug($row);
         $definition = $slug !== '' ? $definitions->get($slug) : null;
         $leadTypeSlug = trim((string) ($lead?->lead_type ?? ''));
+        $firstName = (string) ($lead?->first_name ?? '');
+        $lastName = (string) ($lead?->last_name ?? '');
+        $partners = $lead?->qualifiedPartnerNames() ?? [];
 
         return [
             'lead_id' => $lead?->id,
@@ -255,8 +367,9 @@ class CallDetailReportService
             'lead_type' => $leadTypeSlug !== ''
                 ? ($leadTypeNames[$leadTypeSlug] ?? $leadTypeSlug)
                 : '',
-            'first_name' => (string) ($lead?->first_name ?? ''),
-            'last_name' => (string) ($lead?->last_name ?? ''),
+            'first_name' => $firstName,
+            'last_name' => $lastName,
+            'name' => trim($firstName.' '.$lastName),
             'phone' => $this->phone((string) ($lead?->phone ?? '')),
             'phone_2' => $this->phone((string) ($lead?->phone_2 ?? '')),
             'email' => (string) ($lead?->email ?? ''),
@@ -266,6 +379,13 @@ class CallDetailReportService
             'venue' => (string) ($lead?->venue ?? ''),
             'event' => (string) ($lead?->event ?? ''),
             'partner_list' => (string) ($lead?->partner_list ?? ''),
+            'age_range' => (string) ($lead?->age_range ?? ''),
+            'annual_income' => (string) ($lead?->annual_income ?? ''),
+            'marital_status' => (string) ($lead?->marital_status ?? ''),
+            'gender' => (string) ($lead?->gender ?? ''),
+            'home_owner' => (string) ($lead?->home_owner ?? ''),
+            'soft_score' => (string) ($lead?->soft_score_code ?? ''),
+            'qualified_partners' => implode(', ', $partners),
             'external_lead_id' => (string) ($lead?->external_lead_id ?? ''),
             'booking_id' => (string) ($lead?->booking_id ?? ''),
             'status' => $lead?->status?->label() ?? '',
@@ -395,5 +515,15 @@ class CallDetailReportService
         }
 
         return $value;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     */
+    private function csvColumnFallback(array $filters): bool
+    {
+        $columns = $filters['columns'] ?? null;
+
+        return ! is_array($columns) || $columns === [];
     }
 }
