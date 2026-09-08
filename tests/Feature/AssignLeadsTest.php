@@ -6,6 +6,7 @@ use App\Enums\Disposition;
 use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
 use App\Enums\QualificationStatus;
+use App\Enums\QualifiedPartnersMatch;
 use App\Enums\UserRole;
 use App\Filament\Pages\AssignLeads;
 use App\Models\CallingList;
@@ -232,7 +233,9 @@ class AssignLeadsTest extends TestCase
             ->test(AssignLeads::class)
             ->assertOk()
             ->assertFormFieldExists('qualified_partners', 'filterForm')
+            ->assertFormFieldExists('qualified_partners_match', 'filterForm')
             ->assertSee('Qualified · Partners')
+            ->assertSee('In the list')
             ->assertSee('Travel Partner')
             ->assertSet('holdingCount', 2)
             ->assertCanSeeTableRecords([$travel, $other])
@@ -243,6 +246,54 @@ class AssignLeadsTest extends TestCase
             ->assertSet('holdingCount', 1)
             ->assertCanSeeTableRecords([$travel])
             ->assertCanNotSeeTableRecords([$other]);
+    }
+
+    public function test_qualified_partners_just_this_partner_excludes_multi_partner_leads(): void
+    {
+        [$admin] = $this->setUpAssignPage();
+
+        $onlyTravel = $this->makeHoldingLead($admin->company_id, '4045551703', now());
+        $onlyTravel->update([
+            'qualification_result' => [
+                'request' => [],
+                'response' => [
+                    'qualifiedCompaniesBooking' => [
+                        ['companyName' => 'Travel Partner'],
+                    ],
+                ],
+            ],
+        ]);
+
+        $travelAndOther = $this->makeHoldingLead($admin->company_id, '4045551704', now());
+        $travelAndOther->update([
+            'qualification_result' => [
+                'request' => [],
+                'response' => [
+                    'qualifiedCompaniesBooking' => [
+                        ['companyName' => 'Travel Partner'],
+                        ['companyName' => 'Other Partner'],
+                    ],
+                ],
+            ],
+        ]);
+
+        Livewire::actingAs($admin)
+            ->test(AssignLeads::class)
+            ->fillForm([
+                'qualified_partners' => ['Travel Partner'],
+                'qualified_partners_match' => QualifiedPartnersMatch::InList->value,
+            ], 'filterForm')
+            ->call('refreshCountAction')
+            ->assertSet('holdingCount', 2)
+            ->assertCanSeeTableRecords([$onlyTravel, $travelAndOther])
+            ->fillForm([
+                'qualified_partners' => ['Travel Partner'],
+                'qualified_partners_match' => QualifiedPartnersMatch::Only->value,
+            ], 'filterForm')
+            ->call('refreshCountAction')
+            ->assertSet('holdingCount', 1)
+            ->assertCanSeeTableRecords([$onlyTravel])
+            ->assertCanNotSeeTableRecords([$travelAndOther]);
     }
 
     public function test_clear_filters_resets_filters_and_matching_count(): void

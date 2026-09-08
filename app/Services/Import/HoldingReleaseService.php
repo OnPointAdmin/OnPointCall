@@ -7,6 +7,7 @@ use App\Enums\DncStatus;
 use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
 use App\Enums\QualificationStatus;
+use App\Enums\QualifiedPartnersMatch;
 use App\Enums\RndStatus;
 use App\Enums\SoftScoreStatus;
 use App\Exceptions\HoldingReleaseException;
@@ -102,7 +103,7 @@ class HoldingReleaseService
             $query->where('qualification_status', $filter->qualificationStatus);
         }
 
-        $this->applyQualifiedPartnersFilter($query, $filter->qualifiedPartners);
+        $this->applyQualifiedPartnersFilter($query, $filter);
 
         if ($filter->attemptCount !== null) {
             $query->where('attempt_count', $filter->attemptCount);
@@ -301,60 +302,93 @@ class HoldingReleaseService
         });
     }
 
-    /**
-     * @param  list<string>|null  $qualifiedPartners
-     */
-    private function applyQualifiedPartnersFilter(Builder $query, ?array $qualifiedPartners): void
+    private function applyQualifiedPartnersFilter(Builder $query, HoldingFilter $filter): void
     {
-        $partners = $this->selectedValues($qualifiedPartners);
+        $partners = array_values(array_unique($this->selectedValues($filter->qualifiedPartners)));
 
         if ($partners === []) {
             return;
         }
 
         $driver = $query->getConnection()->getDriverName();
+        $existsSql = $this->qualifiedPartnerExistsSql($driver);
+        $match = QualifiedPartnersMatch::tryFrom((string) ($filter->qualifiedPartnersMatch ?? ''))
+            ?? QualifiedPartnersMatch::InList;
 
-        $query->where(function (Builder $group) use ($partners, $driver): void {
+        if ($match === QualifiedPartnersMatch::Only) {
+            $query->where(function (Builder $group) use ($partners, $existsSql, $driver): void {
+                foreach ($partners as $partner) {
+                    $group->whereRaw($existsSql, [$partner]);
+                }
+
+                $group->whereRaw($this->qualifiedPartnerCountSql($driver), [count($partners)]);
+            });
+
+            return;
+        }
+
+        $query->where(function (Builder $group) use ($partners, $existsSql): void {
             foreach ($partners as $partner) {
-                $group->orWhere(function (Builder $match) use ($partner, $driver): void {
-                    if ($driver === 'pgsql') {
-                        // qualification_result is json (not jsonb). COALESCE arms must
-                        // share a type — mixing json with '[]'::jsonb raises SQLSTATE 42846.
-                        $match->whereRaw(
-                            "EXISTS (
-                                SELECT 1
-                                FROM json_array_elements(
-                                    COALESCE(
-                                        qualification_result->'response'->'qualifiedCompaniesBooking',
-                                        qualification_result->'qualifiedCompaniesBooking',
-                                        '[]'::json
-                                    )
-                                ) AS company
-                                WHERE btrim(company->>'companyName') = ?
-                            )",
-                            [$partner],
-                        );
-
-                        return;
-                    }
-
-                    $match->whereRaw(
-                        "EXISTS (
-                            SELECT 1
-                            FROM json_each(
-                                COALESCE(
-                                    json_extract(qualification_result, '$.response.qualifiedCompaniesBooking'),
-                                    json_extract(qualification_result, '$.qualifiedCompaniesBooking'),
-                                    '[]'
-                                )
-                            ) AS company
-                            WHERE trim(json_extract(company.value, '$.companyName')) = ?
-                        )",
-                        [$partner],
-                    );
-                });
+                $group->orWhereRaw($existsSql, [$partner]);
             }
         });
+    }
+
+    private function qualifiedBookingCompaniesExpr(string $driver): string
+    {
+        if ($driver === 'pgsql') {
+            // qualification_result is json (not jsonb). COALESCE arms must
+            // share a type — mixing json with '[]'::jsonb raises SQLSTATE 42846.
+            return "COALESCE(
+                qualification_result->'response'->'qualifiedCompaniesBooking',
+                qualification_result->'qualifiedCompaniesBooking',
+                '[]'::json
+            )";
+        }
+
+        return "COALESCE(
+            json_extract(qualification_result, '$.response.qualifiedCompaniesBooking'),
+            json_extract(qualification_result, '$.qualifiedCompaniesBooking'),
+            '[]'
+        )";
+    }
+
+    private function qualifiedPartnerExistsSql(string $driver): string
+    {
+        $companies = $this->qualifiedBookingCompaniesExpr($driver);
+
+        if ($driver === 'pgsql') {
+            return "EXISTS (
+                SELECT 1
+                FROM json_array_elements({$companies}) AS company
+                WHERE btrim(company->>'companyName') = ?
+            )";
+        }
+
+        return "EXISTS (
+            SELECT 1
+            FROM json_each({$companies}) AS company
+            WHERE trim(json_extract(company.value, '$.companyName')) = ?
+        )";
+    }
+
+    private function qualifiedPartnerCountSql(string $driver): string
+    {
+        $companies = $this->qualifiedBookingCompaniesExpr($driver);
+
+        if ($driver === 'pgsql') {
+            return "(
+                SELECT COUNT(*)
+                FROM json_array_elements({$companies}) AS company
+                WHERE btrim(COALESCE(company->>'companyName', '')) <> ''
+            ) = ?";
+        }
+
+        return "(
+            SELECT COUNT(*)
+            FROM json_each({$companies}) AS company
+            WHERE trim(COALESCE(json_extract(company.value, '$.companyName'), '')) <> ''
+        ) = ?";
     }
 
     private function release(

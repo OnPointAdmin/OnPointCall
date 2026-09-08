@@ -775,6 +775,81 @@ class HoldingReleaseServiceTest extends TestCase
         }
     }
 
+    public function test_qualified_partners_only_match_requires_exact_partner_set(): void
+    {
+        $company = Company::factory()->create();
+
+        $onlyWyndham = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045551919',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'qualification_status' => QualificationStatus::Qualified,
+            'qualification_result' => [
+                'request' => [],
+                'response' => [
+                    'qualifiedCompaniesBooking' => [
+                        ['companyName' => 'Wyndham Destinations'],
+                    ],
+                ],
+            ],
+            'imported_at' => now(),
+        ]);
+
+        $both = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045552020',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'qualification_status' => QualificationStatus::Qualified,
+            'qualification_result' => [
+                'request' => [],
+                'response' => [
+                    'qualifiedCompaniesBooking' => [
+                        ['companyName' => 'Wyndham Destinations'],
+                        ['companyName' => 'Preferred Guest Resorts, LLC'],
+                    ],
+                ],
+            ],
+            'imported_at' => now(),
+        ]);
+
+        $service = app(HoldingReleaseService::class);
+
+        $inList = new HoldingFilter(
+            leadType: 'standard',
+            qualifiedPartners: ['Wyndham Destinations'],
+            qualifiedPartnersMatch: 'in_list',
+        );
+
+        $this->assertEqualsCanonicalizing(
+            [$onlyWyndham->id, $both->id],
+            $service->queryHolding($company->id, $inList)->pluck('id')->all(),
+        );
+
+        $only = new HoldingFilter(
+            leadType: 'standard',
+            qualifiedPartners: ['Wyndham Destinations'],
+            qualifiedPartnersMatch: 'only',
+        );
+
+        $this->assertSame(
+            [$onlyWyndham->id],
+            $service->queryHolding($company->id, $only)->pluck('id')->all(),
+        );
+
+        $exactBoth = new HoldingFilter(
+            leadType: 'standard',
+            qualifiedPartners: ['Preferred Guest Resorts, LLC', 'Wyndham Destinations'],
+            qualifiedPartnersMatch: 'only',
+        );
+
+        $this->assertSame(
+            [$both->id],
+            $service->queryHolding($company->id, $exactBoth)->pluck('id')->all(),
+        );
+    }
+
     public function test_release_fresh_assigns_n_newest_leads_by_imported_at(): void
     {
         $company = Company::factory()->create();

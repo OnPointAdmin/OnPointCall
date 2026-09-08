@@ -21,6 +21,7 @@ readonly class HoldingFilter
      * @param  list<string>|null  $tourResult
      * @param  list<string>|null  $lastDispositions
      * @param  list<string>|null  $qualifiedPartners
+     * @param  string|null  $qualifiedPartnersMatch
      */
     public function __construct(
         public ?string $leadType = null,
@@ -50,5 +51,6 @@ readonly class HoldingFilter
         public ?array $lastDispositions = null,
         public ?int $attemptCount = null,
         public ?array $qualifiedPartners = null,
+        public ?string $qualifiedPartnersMatch = null,
     ) {}
 }

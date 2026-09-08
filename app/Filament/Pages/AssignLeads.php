@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use App\DataTransferObjects\HoldingFilter;
 use App\Enums\Disposition;
 use App\Enums\QualificationStatus;
+use App\Enums\QualifiedPartnersMatch;
 use App\Exceptions\HoldingReleaseException;
 use App\Filament\Resources\Leads\Schemas\LeadForm;
 use App\Filament\Support\LeadTypeSelect;
@@ -190,6 +191,13 @@ class AssignLeads extends Page implements HasTable
                             ->multiple()
                             ->searchable()
                             ->live(),
+                        Select::make('qualified_partners_match')
+                            ->label('Qualified · Match')
+                            ->options(QualifiedPartnersMatch::options())
+                            ->default(QualifiedPartnersMatch::InList->value)
+                            ->selectablePlaceholder(false)
+                            ->live()
+                            ->helperText('In the list includes leads that also qualify for other partners. Just this partner means that partner is the whole list.'),
                     ])
                     ->columns(3),
                 Section::make('Tour Info')
@@ -478,6 +486,7 @@ class AssignLeads extends Page implements HasTable
         return [
             'lead_type' => 'standard',
             'source_calling_list_id' => 'holding',
+            'qualified_partners_match' => QualifiedPartnersMatch::InList->value,
         ];
     }
 
@@ -616,6 +625,9 @@ class AssignLeads extends Page implements HasTable
                 ? (int) $data['attempt_count']
                 : null,
             qualifiedPartners: $this->selectedList($data['qualified_partners'] ?? null),
+            qualifiedPartnersMatch: isset($data['qualified_partners_match']) && $data['qualified_partners_match'] !== ''
+                ? (string) $data['qualified_partners_match']
+                : null,
         );
     }
 
