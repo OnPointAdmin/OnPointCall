@@ -102,6 +102,8 @@ class HoldingReleaseService
             $query->where('qualification_status', $filter->qualificationStatus);
         }
 
+        $this->applyQualifiedPartnersFilter($query, $filter->qualifiedPartners);
+
         if ($filter->attemptCount !== null) {
             $query->where('attempt_count', $filter->attemptCount);
         }
@@ -161,6 +163,31 @@ class HoldingReleaseService
                 $partners[$partner] = $partner;
             }
         }
+
+        ksort($partners);
+
+        return $partners;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function distinctQualifiedPartners(
+        int $companyId,
+        ?string $leadType,
+        ?int $sourceCallingListId = null,
+    ): array {
+        $partners = [];
+
+        $this->assignableBaseQuery($companyId, $leadType, $sourceCallingListId)
+            ->whereNotNull('qualification_result')
+            ->select(['id', 'qualification_result'])
+            ->cursor()
+            ->each(function (Lead $lead) use (&$partners): void {
+                foreach ($lead->qualifiedPartnerNames() as $name) {
+                    $partners[$name] = $name;
+                }
+            });
 
         ksort($partners);
 
@@ -269,6 +296,60 @@ class HoldingReleaseService
             if ($dispositions !== []) {
                 $group->orWhereHas('latestDisposition', function (Builder $latest) use ($dispositions): void {
                     $latest->whereIn('payload->disposition', $dispositions);
+                });
+            }
+        });
+    }
+
+    /**
+     * @param  list<string>|null  $qualifiedPartners
+     */
+    private function applyQualifiedPartnersFilter(Builder $query, ?array $qualifiedPartners): void
+    {
+        $partners = $this->selectedValues($qualifiedPartners);
+
+        if ($partners === []) {
+            return;
+        }
+
+        $driver = $query->getConnection()->getDriverName();
+
+        $query->where(function (Builder $group) use ($partners, $driver): void {
+            foreach ($partners as $partner) {
+                $group->orWhere(function (Builder $match) use ($partner, $driver): void {
+                    if ($driver === 'pgsql') {
+                        $match->whereRaw(
+                            "EXISTS (
+                                SELECT 1
+                                FROM jsonb_array_elements(
+                                    COALESCE(
+                                        qualification_result->'response'->'qualifiedCompaniesBooking',
+                                        qualification_result->'qualifiedCompaniesBooking',
+                                        '[]'::jsonb
+                                    )
+                                ) AS company
+                                WHERE company->>'companyName' = ?
+                            )",
+                            [$partner],
+                        );
+
+                        return;
+                    }
+
+                    $match->whereRaw(
+                        "EXISTS (
+                            SELECT 1
+                            FROM json_each(
+                                COALESCE(
+                                    json_extract(qualification_result, '$.response.qualifiedCompaniesBooking'),
+                                    json_extract(qualification_result, '$.qualifiedCompaniesBooking'),
+                                    '[]'
+                                )
+                            ) AS company
+                            WHERE json_extract(company.value, '$.companyName') = ?
+                        )",
+                        [$partner],
+                    );
                 });
             }
         });

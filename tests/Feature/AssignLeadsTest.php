@@ -200,6 +200,51 @@ class AssignLeadsTest extends TestCase
             ->assertSet('holdingCount', 0);
     }
 
+    public function test_qualified_partners_filter_limits_matching_leads(): void
+    {
+        [$admin] = $this->setUpAssignPage();
+
+        $travel = $this->makeHoldingLead($admin->company_id, '4045551701', now());
+        $travel->update([
+            'qualification_result' => [
+                'request' => [],
+                'response' => [
+                    'qualifiedCompaniesBooking' => [
+                        ['companyName' => 'Travel Partner'],
+                    ],
+                ],
+            ],
+        ]);
+
+        $other = $this->makeHoldingLead($admin->company_id, '4045551702', now());
+        $other->update([
+            'qualification_result' => [
+                'request' => [],
+                'response' => [
+                    'qualifiedCompaniesBooking' => [
+                        ['companyName' => 'Other Partner'],
+                    ],
+                ],
+            ],
+        ]);
+
+        Livewire::actingAs($admin)
+            ->test(AssignLeads::class)
+            ->assertOk()
+            ->assertFormFieldExists('qualified_partners', 'filterForm')
+            ->assertSee('Qualified · Partners')
+            ->assertSee('Travel Partner')
+            ->assertSet('holdingCount', 2)
+            ->assertCanSeeTableRecords([$travel, $other])
+            ->fillForm([
+                'qualified_partners' => ['Travel Partner'],
+            ], 'filterForm')
+            ->call('refreshCountAction')
+            ->assertSet('holdingCount', 1)
+            ->assertCanSeeTableRecords([$travel])
+            ->assertCanNotSeeTableRecords([$other]);
+    }
+
     public function test_clear_filters_resets_filters_and_matching_count(): void
     {
         [$admin] = $this->setUpAssignPage();

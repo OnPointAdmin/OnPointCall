@@ -592,6 +592,124 @@ class HoldingReleaseServiceTest extends TestCase
         );
     }
 
+    public function test_distinct_qualified_partners_uses_booking_companies_only(): void
+    {
+        $company = Company::factory()->create();
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045551212',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'qualification_status' => QualificationStatus::Qualified,
+            'qualification_result' => [
+                'request' => [],
+                'response' => [
+                    'qualifiedCompaniesLead' => [
+                        ['companyName' => 'Lead Only Partner'],
+                    ],
+                    'qualifiedCompaniesBooking' => [
+                        ['companyName' => 'Travel Partner'],
+                    ],
+                ],
+            ],
+            'imported_at' => now(),
+        ]);
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045551313',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'qualification_status' => QualificationStatus::Qualified,
+            'qualification_result' => [
+                'qualifiedCompaniesBooking' => [
+                    ['companyName' => 'Resort Partner'],
+                ],
+            ],
+            'imported_at' => now(),
+        ]);
+
+        $service = app(HoldingReleaseService::class);
+
+        $this->assertSame(
+            [
+                'Resort Partner' => 'Resort Partner',
+                'Travel Partner' => 'Travel Partner',
+            ],
+            $service->distinctQualifiedPartners($company->id, 'standard'),
+        );
+    }
+
+    public function test_qualified_partners_filter_matches_booking_partners_only(): void
+    {
+        $company = Company::factory()->create();
+
+        $booking = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045551414',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'qualification_status' => QualificationStatus::Qualified,
+            'qualification_result' => [
+                'request' => [],
+                'response' => [
+                    'qualifiedCompaniesBooking' => [
+                        ['companyName' => 'Travel Partner'],
+                    ],
+                ],
+            ],
+            'imported_at' => now(),
+        ]);
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045551515',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'qualification_status' => QualificationStatus::NotQualified,
+            'qualification_result' => [
+                'request' => [],
+                'response' => [
+                    'qualifiedCompaniesLead' => [
+                        ['companyName' => 'Travel Partner'],
+                    ],
+                    'qualifiedCompaniesBooking' => [],
+                ],
+            ],
+            'imported_at' => now(),
+        ]);
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045551616',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'qualification_status' => QualificationStatus::Qualified,
+            'qualification_result' => [
+                'request' => [],
+                'response' => [
+                    'qualifiedCompaniesBooking' => [
+                        ['companyName' => 'Other Partner'],
+                    ],
+                ],
+            ],
+            'imported_at' => now(),
+        ]);
+
+        $service = app(HoldingReleaseService::class);
+        $filter = new HoldingFilter(
+            leadType: 'standard',
+            qualifiedPartners: ['Travel Partner'],
+        );
+
+        $this->assertSame(1, $service->countHolding($company->id, $filter));
+        $this->assertSame(
+            [$booking->id],
+            $service->queryHolding($company->id, $filter)->pluck('id')->all(),
+        );
+    }
+
     public function test_release_fresh_assigns_n_newest_leads_by_imported_at(): void
     {
         $company = Company::factory()->create();

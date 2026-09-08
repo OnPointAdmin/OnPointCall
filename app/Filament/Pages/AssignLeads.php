@@ -33,6 +33,7 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
+use Filament\Tables\Enums\RecordActionsPosition;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -179,6 +180,16 @@ class AssignLeads extends Page implements HasTable
                             ->nullable()
                             ->placeholder('Any')
                             ->live(),
+                        Select::make('qualified_partners')
+                            ->label('Qualified · Partners')
+                            ->options(fn (): array => app(HoldingReleaseService::class)->distinctQualifiedPartners(
+                                auth()->user()->company_id,
+                                $this->selectedLeadType(),
+                                $this->selectedSourceCallingListId(),
+                            ))
+                            ->multiple()
+                            ->searchable()
+                            ->live(),
                     ])
                     ->columns(3),
                 Section::make('Tour Info')
@@ -291,6 +302,35 @@ class AssignLeads extends Page implements HasTable
                     ->toggleable(),
                 TextColumn::make('status')
                     ->badge(),
+                TextColumn::make('qualification_status')
+                    ->label('Qualified')
+                    ->badge()
+                    ->placeholder('—')
+                    ->color(fn (?QualificationStatus $state): string => match ($state) {
+                        QualificationStatus::Qualified => 'success',
+                        QualificationStatus::NotQualified => 'warning',
+                        QualificationStatus::Error => 'danger',
+                        default => 'gray',
+                    })
+                    ->formatStateUsing(fn (?QualificationStatus $state): ?string => $state?->label())
+                    ->toggleable(),
+                TextColumn::make('partner_list')
+                    ->label('Partner List')
+                    ->wrap()
+                    ->limit(40)
+                    ->tooltip(fn (Lead $record): ?string => filled($record->partner_list) ? $record->partner_list : null)
+                    ->placeholder('—')
+                    ->toggleable(),
+                TextColumn::make('qualified_partners')
+                    ->label('Qualified · Partners')
+                    ->wrap()
+                    ->placeholder('—')
+                    ->getStateUsing(function (Lead $record): ?string {
+                        $names = $record->qualifiedPartnerNames();
+
+                        return $names === [] ? null : implode(', ', $names);
+                    })
+                    ->toggleable(),
                 TextColumn::make('last_disposition')
                     ->label('Last Disp')
                     ->badge()
@@ -316,12 +356,14 @@ class AssignLeads extends Page implements HasTable
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->defaultSort('imported_at', 'desc')
+            ->recordAction('view')
+            ->recordActionsAlignment('end')
             ->recordActions([
                 ViewAction::make()
                     ->slideOver()
                     ->modalWidth(Width::Full)
                     ->schema(fn (Schema $schema): Schema => LeadForm::configure($schema, withHistory: true)->columns(2)),
-            ])
+            ], position: RecordActionsPosition::AfterCells)
             ->paginated([10, 25, 50, 100])
             ->defaultPaginationPageOption(25)
             ->emptyStateHeading('No matching leads')
@@ -573,6 +615,7 @@ class AssignLeads extends Page implements HasTable
             attemptCount: isset($data['attempt_count']) && $data['attempt_count'] !== ''
                 ? (int) $data['attempt_count']
                 : null,
+            qualifiedPartners: $this->selectedList($data['qualified_partners'] ?? null),
         );
     }
 
