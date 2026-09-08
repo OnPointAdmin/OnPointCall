@@ -194,13 +194,11 @@ class Lead extends Model
         $result = $this->qualificationResponse();
         $names = [];
 
-        foreach (['qualifiedCompaniesLead', 'qualifiedCompaniesBooking'] as $key) {
-            foreach ($result[$key] ?? [] as $company) {
-                $name = is_array($company) ? ($company['companyName'] ?? null) : null;
+        foreach ($result['qualifiedCompaniesBooking'] ?? [] as $company) {
+            $name = is_array($company) ? ($company['companyName'] ?? null) : null;
 
-                if (is_string($name) && trim($name) !== '') {
-                    $names[] = trim($name);
-                }
+            if (is_string($name) && trim($name) !== '') {
+                $names[] = trim($name);
             }
         }
 

@@ -78,7 +78,8 @@ class QualificationCheckTest extends TestCase
                 'expires_in' => 3600,
             ]),
             '*/services/apexrest/CustomerQualification' => Http::response([
-                'qualifiedCompaniesLead' => [
+                'qualifiedCompaniesLead' => [],
+                'qualifiedCompaniesBooking' => [
                     [
                         'companyId' => '001000000000010AAA',
                         'companyName' => 'Travel Partner',
@@ -86,7 +87,6 @@ class QualificationCheckTest extends TestCase
                         'priority' => '1',
                     ],
                 ],
-                'qualifiedCompaniesBooking' => [],
                 'failedCriteria' => [],
                 'errorMessage' => null,
             ]),
@@ -192,6 +192,47 @@ class QualificationCheckTest extends TestCase
                 'failed' => ['Age Criteria'],
             ],
         ], $lead->qualificationFailedCriteria());
+    }
+
+    public function test_qualification_service_maps_lead_only_companies_to_not_qualified(): void
+    {
+        config([
+            'services.qualification.client_id' => 'sf-client',
+            'services.qualification.client_secret' => 'sf-secret',
+        ]);
+
+        Http::fake([
+            '*/services/oauth2/token' => Http::response(['access_token' => 'sf-token']),
+            '*/services/apexrest/CustomerQualification' => Http::response([
+                'qualifiedCompaniesLead' => [
+                    [
+                        'companyId' => '001000000000010AAA',
+                        'companyName' => 'Travel Partner',
+                        'vertical' => 'Travel',
+                        'priority' => '1',
+                    ],
+                ],
+                'qualifiedCompaniesBooking' => [],
+                'failedCriteria' => [],
+                'errorMessage' => null,
+            ]),
+        ]);
+
+        $company = Company::factory()->create(['salesforce_id' => '001000000000001AAA']);
+
+        $lead = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045556666',
+            'status' => 'holding',
+            'lead_type' => 'standard',
+            'imported_at' => now(),
+        ]);
+
+        app(QualificationService::class)->qualifyLead($lead);
+
+        $lead->refresh();
+        $this->assertSame(QualificationStatus::NotQualified, $lead->qualification_status);
+        $this->assertSame([], $lead->qualifiedPartnerNames());
     }
 
     public function test_qualification_errors_when_company_salesforce_id_missing(): void

@@ -187,19 +187,55 @@ class QualificationClient
     }
 
     /**
+     * Call center qualification means the guest can book a tour.
+     * Partners on the Lead list only are not treated as qualified.
+     *
      * @param  array<string, mixed>  $json
      */
     private function hasQualifiedCompanies(array $json): bool
     {
-        foreach (['qualifiedCompaniesLead', 'qualifiedCompaniesBooking'] as $key) {
-            $list = $json[$key] ?? [];
+        return $this->hasNamedCompanies($json['qualifiedCompaniesBooking'] ?? null);
+    }
 
-            if (is_array($list) && $list !== []) {
+    private function hasNamedCompanies(mixed $list): bool
+    {
+        foreach ($this->companyList($list) as $company) {
+            $name = trim((string) ($company['companyName'] ?? ''));
+
+            if ($name !== '') {
                 return true;
             }
         }
 
         return false;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function companyList(mixed $list): array
+    {
+        if (! is_array($list) || $list === []) {
+            return [];
+        }
+
+        if (array_is_list($list)) {
+            return array_values(array_filter($list, 'is_array'));
+        }
+
+        if (isset($list['companyName']) || isset($list['companyId'])) {
+            return [$list];
+        }
+
+        $companies = [];
+
+        foreach ($list as $company) {
+            if (is_array($company)) {
+                $companies[] = $company;
+            }
+        }
+
+        return $companies;
     }
 
     private function looksLikeSalesforceId(string $value): bool
