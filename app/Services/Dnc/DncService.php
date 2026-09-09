@@ -11,6 +11,7 @@ use App\Enums\LeadStatus;
 use App\Models\ImportBatch;
 use App\Models\Lead;
 use App\Models\LeadHistory;
+use App\Services\Qualify\QualifyBatchCounters;
 use App\Support\PhoneNormalizer;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -26,7 +27,7 @@ class DncService
     /**
      * @param  Collection<int, Lead>  $leads
      */
-    public function checkLeads(Collection $leads, ?int $actorId = null): void
+    public function checkLeads(Collection $leads, ?int $actorId = null, ?int $qualifyBatchId = null): void
     {
         if ($leads->isEmpty()) {
             return;
@@ -123,7 +124,7 @@ class DncService
                 error: 'DNC scrub did not return a result for this lead.',
             );
 
-            $this->persistResult($lead, $result, $actorId);
+            $this->persistResult($lead, $result, $actorId, $qualifyBatchId);
         }
     }
 
@@ -377,9 +378,9 @@ class DncService
         });
     }
 
-    private function persistResult(Lead $lead, DncResult $result, ?int $actorId): void
+    private function persistResult(Lead $lead, DncResult $result, ?int $actorId, ?int $qualifyBatchId = null): void
     {
-        DB::transaction(function () use ($lead, $result, $actorId): void {
+        DB::transaction(function () use ($lead, $result, $actorId, $qualifyBatchId): void {
             $previousLeadStatus = $lead->status;
 
             $updates = [
@@ -433,6 +434,8 @@ class DncService
             if ($lead->import_batch_id) {
                 $this->completeBatchCounter($lead->import_batch_id, $result->status);
             }
+
+            app(QualifyBatchCounters::class)->completeDnc($qualifyBatchId, $result->status);
         });
     }
 

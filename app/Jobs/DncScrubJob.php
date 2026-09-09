@@ -21,13 +21,18 @@ class DncScrubJob implements ShouldQueue
         public array $leadIds,
         public ?int $batchId = null,
         public ?int $actorId = null,
+        public ?int $qualifyBatchId = null,
     ) {}
 
     /**
      * @param  list<int>  $leadIds
      */
-    public static function dispatchForLeadIds(array $leadIds, ?int $batchId = null, ?int $actorId = null): int
-    {
+    public static function dispatchForLeadIds(
+        array $leadIds,
+        ?int $batchId = null,
+        ?int $actorId = null,
+        ?int $qualifyBatchId = null,
+    ): int {
         $ids = array_values(array_unique(array_filter($leadIds)));
 
         if ($ids === []) {
@@ -37,7 +42,7 @@ class DncScrubJob implements ShouldQueue
         $dispatched = 0;
 
         foreach (array_chunk($ids, 25) as $chunk) {
-            self::dispatch($chunk, $batchId, $actorId);
+            self::dispatch($chunk, $batchId, $actorId, $qualifyBatchId);
             $dispatched++;
         }
 
@@ -57,7 +62,7 @@ class DncScrubJob implements ShouldQueue
         CompanyContext::set((int) $leads->first()->company_id);
 
         try {
-            $dncService->checkLeads($leads, $this->actorId);
+            $dncService->checkLeads($leads, $this->actorId, $this->qualifyBatchId);
         } finally {
             CompanyContext::clear();
         }

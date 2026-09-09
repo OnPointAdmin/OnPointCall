@@ -21,7 +21,6 @@ readonly class HoldingFilter
      * @param  list<string>|null  $tourResult
      * @param  list<string>|null  $lastDispositions
      * @param  list<string>|null  $qualifiedPartners
-     * @param  string|null  $qualifiedPartnersMatch
      */
     public function __construct(
         public ?string $leadType = null,
@@ -53,4 +52,41 @@ readonly class HoldingFilter
         public ?array $qualifiedPartners = null,
         public ?string $qualifiedPartnersMatch = null,
     ) {}
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function toArray(): array
+    {
+        return [
+            'lead_type' => $this->leadType,
+            'source_calling_list_id' => $this->sourceCallingListId,
+            'state' => $this->state,
+            'venue' => $this->venue,
+            'event' => $this->event,
+            'import_batch_id' => $this->importBatchId,
+            'imported_from' => $this->importedFrom,
+            'imported_to' => $this->importedTo,
+            'created_from' => $this->createdFrom,
+            'created_to' => $this->createdTo,
+            'zip' => $this->zip,
+            'partner' => $this->partner,
+            'file_name' => $this->fileName,
+            'soft_score_code' => $this->softScoreCode,
+            'age_range' => $this->ageRange,
+            'annual_income' => $this->annualIncome,
+            'marital_status' => $this->maritalStatus,
+            'gender' => $this->gender,
+            'home_owner' => $this->homeOwner,
+            'tour_location' => $this->tourLocation,
+            'tour_date_start' => $this->tourDateStart,
+            'tour_date' => $this->tourDate,
+            'tour_result' => $this->tourResult,
+            'qualification_status' => $this->qualificationStatus,
+            'last_dispositions' => $this->lastDispositions,
+            'attempt_count' => $this->attemptCount,
+            'qualified_partners' => $this->qualifiedPartners,
+            'qualified_partners_match' => $this->qualifiedPartnersMatch,
+        ];
+    }
 }

@@ -18,6 +18,7 @@ class SoftScoreLeadJob implements ShouldQueue
         public ?int $actorId = null,
         public bool $dispatchQualificationAfter = false,
         public bool $force = false,
+        public ?int $qualifyBatchId = null,
     ) {}
 
     public function handle(SoftScoreService $softScoreService): void
@@ -27,7 +28,7 @@ class SoftScoreLeadJob implements ShouldQueue
         CompanyContext::set($lead->company_id);
 
         try {
-            $softScoreService->scoreLead($lead, $this->actorId, $this->force);
+            $softScoreService->scoreLead($lead, $this->actorId, $this->force, $this->qualifyBatchId);
         } finally {
             CompanyContext::clear();
         }
@@ -39,6 +40,6 @@ class SoftScoreLeadJob implements ShouldQueue
         $lead->refresh();
 
         // Soft Score finished and soft_score_code is on the lead — now qualify.
-        QualifyLeadJob::dispatch($this->leadId, $this->batchId, $this->actorId, $this->force);
+        QualifyLeadJob::dispatch($this->leadId, $this->batchId, $this->actorId, $this->force, $this->qualifyBatchId);
     }
 }

@@ -36,7 +36,7 @@ class HoldingReleaseService
         'tour_result',
     ];
 
-    public function queryHolding(int $companyId, HoldingFilter $filter): Builder
+    public function queryHolding(int $companyId, HoldingFilter $filter, bool $assignableOnly = true): Builder
     {
         $query = Lead::withoutGlobalScopes()
             ->where('company_id', $companyId);
@@ -110,7 +110,10 @@ class HoldingReleaseService
         }
 
         $this->applyLastDispositionFilter($query, $filter->lastDispositions);
-        $this->applyAssignableScopes($query);
+
+        if ($assignableOnly) {
+            $this->applyAssignableScopes($query);
+        }
 
         return $query;
     }
@@ -123,12 +126,13 @@ class HoldingReleaseService
         ?string $leadType,
         string $column,
         ?int $sourceCallingListId = null,
+        bool $assignableOnly = true,
     ): array {
         if (! in_array($column, self::DISTINCT_COLUMNS, true)) {
             throw new InvalidArgumentException("Unsupported holding filter column: {$column}");
         }
 
-        $values = $this->assignableBaseQuery($companyId, $leadType, $sourceCallingListId)
+        $values = $this->baseQuery($companyId, $leadType, $sourceCallingListId, $assignableOnly)
             ->whereNotNull($column)
             ->where($column, '!=', '')
             ->distinct()
@@ -151,8 +155,9 @@ class HoldingReleaseService
         int $companyId,
         ?string $leadType,
         ?int $sourceCallingListId = null,
+        bool $assignableOnly = true,
     ): array {
-        $partnerLists = $this->assignableBaseQuery($companyId, $leadType, $sourceCallingListId)
+        $partnerLists = $this->baseQuery($companyId, $leadType, $sourceCallingListId, $assignableOnly)
             ->whereNotNull('partner_list')
             ->where('partner_list', '!=', '')
             ->pluck('partner_list');
@@ -177,10 +182,11 @@ class HoldingReleaseService
         int $companyId,
         ?string $leadType,
         ?int $sourceCallingListId = null,
+        bool $assignableOnly = true,
     ): array {
         $partners = [];
 
-        $this->assignableBaseQuery($companyId, $leadType, $sourceCallingListId)
+        $this->baseQuery($companyId, $leadType, $sourceCallingListId, $assignableOnly)
             ->whereNotNull('qualification_result')
             ->select(['id', 'qualification_result'])
             ->cursor()
@@ -195,9 +201,9 @@ class HoldingReleaseService
         return $partners;
     }
 
-    public function countHolding(int $companyId, HoldingFilter $filter): int
+    public function countHolding(int $companyId, HoldingFilter $filter, bool $assignableOnly = true): int
     {
-        return $this->queryHolding($companyId, $filter)->count();
+        return $this->queryHolding($companyId, $filter, $assignableOnly)->count();
     }
 
     /**
@@ -206,9 +212,9 @@ class HoldingReleaseService
      *
      * @return Builder<Lead>
      */
-    public function queryMatchingLeads(int $companyId, HoldingFilter $filter, ?int $maxCount = null): Builder
+    public function queryMatchingLeads(int $companyId, HoldingFilter $filter, ?int $maxCount = null, bool $assignableOnly = true): Builder
     {
-        $query = $this->queryHolding($companyId, $filter);
+        $query = $this->queryHolding($companyId, $filter, $assignableOnly);
 
         if ($maxCount === null) {
             return $query;
@@ -245,8 +251,12 @@ class HoldingReleaseService
         return $this->release($companyId, $filter, $callingListId, $count, $actorId);
     }
 
-    private function assignableBaseQuery(int $companyId, ?string $leadType, ?int $sourceCallingListId): Builder
-    {
+    private function baseQuery(
+        int $companyId,
+        ?string $leadType,
+        ?int $sourceCallingListId,
+        bool $assignableOnly,
+    ): Builder {
         $query = Lead::withoutGlobalScopes()
             ->where('company_id', $companyId);
 
@@ -254,6 +264,10 @@ class HoldingReleaseService
 
         if ($leadType) {
             $query->where('lead_type', $leadType);
+        }
+
+        if ($assignableOnly) {
+            $this->applyAssignableScopes($query);
         }
 
         return $query;

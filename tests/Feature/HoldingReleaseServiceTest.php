@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\DataTransferObjects\HoldingFilter;
 use App\Enums\Disposition;
+use App\Enums\DncStatus;
 use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
 use App\Enums\QualificationStatus;
@@ -1282,6 +1283,85 @@ class HoldingReleaseServiceTest extends TestCase
         $this->assertSame(
             ['FL' => 'FL'],
             $service->distinctHoldingColumn($company->id, 'standard', 'state', $sourceList->id),
+        );
+    }
+
+    public function test_all_matching_query_includes_dnc_and_rnd_unassignable_leads(): void
+    {
+        $company = Company::factory()->create();
+
+        $assignable = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045558001',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'imported_at' => now(),
+        ]);
+
+        $dncError = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045558002',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'dnc_status' => DncStatus::Error,
+            'imported_at' => now(),
+        ]);
+
+        $rndError = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045558003',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'rnd_status' => RndStatus::Error,
+            'imported_at' => now(),
+        ]);
+
+        $service = app(HoldingReleaseService::class);
+        $filter = new HoldingFilter(leadType: 'standard');
+
+        $this->assertSame(1, $service->countHolding($company->id, $filter));
+        $this->assertSame(3, $service->countHolding($company->id, $filter, assignableOnly: false));
+        $this->assertEqualsCanonicalizing(
+            [$assignable->id, $dncError->id, $rndError->id],
+            $service->queryHolding($company->id, $filter, assignableOnly: false)->pluck('id')->all(),
+        );
+    }
+
+    public function test_distinct_options_follow_assignable_mode(): void
+    {
+        $company = Company::factory()->create();
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045558101',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'venue' => 'Assignable Venue',
+            'imported_at' => now(),
+        ]);
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045558102',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'venue' => 'Dnc Error Venue',
+            'dnc_status' => DncStatus::Error,
+            'imported_at' => now(),
+        ]);
+
+        $service = app(HoldingReleaseService::class);
+
+        $this->assertSame(
+            ['Assignable Venue' => 'Assignable Venue'],
+            $service->distinctHoldingColumn($company->id, 'standard', 'venue'),
+        );
+        $this->assertSame(
+            [
+                'Assignable Venue' => 'Assignable Venue',
+                'Dnc Error Venue' => 'Dnc Error Venue',
+            ],
+            $service->distinctHoldingColumn($company->id, 'standard', 'venue', null, false),
         );
     }
 }

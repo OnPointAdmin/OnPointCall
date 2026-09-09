@@ -7,6 +7,7 @@ use App\Enums\QualificationStatus;
 use App\Models\ImportBatch;
 use App\Models\Lead;
 use App\Models\LeadHistory;
+use App\Services\Qualify\QualifyBatchCounters;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
@@ -54,7 +55,7 @@ class QualificationService
         return $this->shouldRun($lead);
     }
 
-    public function qualifyLead(Lead $lead, ?int $actorId = null, bool $force = false): void
+    public function qualifyLead(Lead $lead, ?int $actorId = null, bool $force = false, ?int $qualifyBatchId = null): void
     {
         // $force is accepted so callers (QualifyLeadJob) can opt into a rerun;
         // qualification itself always runs when invoked.
@@ -79,7 +80,7 @@ class QualificationService
 
         $result = $this->client->qualifyLead($lead);
 
-        DB::transaction(function () use ($lead, $result, $actorId): void {
+        DB::transaction(function () use ($lead, $result, $actorId, $qualifyBatchId): void {
             $lead->update([
                 'qualification_status' => $result->status,
                 'qualification_result' => [
@@ -106,6 +107,8 @@ class QualificationService
             if ($lead->import_batch_id) {
                 $this->completeBatchCounter($lead->import_batch_id, $result->status);
             }
+
+            app(QualifyBatchCounters::class)->completeQualification($qualifyBatchId, $result->status);
         });
     }
 

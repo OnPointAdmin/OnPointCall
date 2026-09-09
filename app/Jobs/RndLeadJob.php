@@ -16,6 +16,7 @@ class RndLeadJob implements ShouldQueue
         public int $leadId,
         public ?int $batchId = null,
         public ?int $actorId = null,
+        public ?int $qualifyBatchId = null,
     ) {}
 
     public function handle(RndService $rndService): void
@@ -25,7 +26,7 @@ class RndLeadJob implements ShouldQueue
         CompanyContext::set($lead->company_id);
 
         try {
-            $rndService->checkLead($lead, $this->actorId);
+            $rndService->checkLead($lead, $this->actorId, $this->qualifyBatchId);
         } finally {
             CompanyContext::clear();
         }

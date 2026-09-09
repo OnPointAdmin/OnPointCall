@@ -20,6 +20,7 @@ class QualifyLeadJob implements ShouldQueue
         public ?int $batchId = null,
         public ?int $actorId = null,
         public bool $force = false,
+        public ?int $qualifyBatchId = null,
     ) {}
 
     public function handle(QualificationService $qualificationService): void
@@ -38,7 +39,7 @@ class QualifyLeadJob implements ShouldQueue
 
         try {
             $lead->refresh();
-            $qualificationService->qualifyLead($lead, $this->actorId, $this->force);
+            $qualificationService->qualifyLead($lead, $this->actorId, $this->force, $this->qualifyBatchId);
         } finally {
             CompanyContext::clear();
         }

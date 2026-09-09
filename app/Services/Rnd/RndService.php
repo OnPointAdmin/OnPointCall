@@ -9,6 +9,7 @@ use App\Enums\RndStatus;
 use App\Models\ImportBatch;
 use App\Models\Lead;
 use App\Models\LeadHistory;
+use App\Services\Qualify\QualifyBatchCounters;
 use App\Support\PhoneNormalizer;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -20,7 +21,7 @@ class RndService
         private readonly RndClient $client,
     ) {}
 
-    public function checkLead(Lead $lead, ?int $actorId = null): void
+    public function checkLead(Lead $lead, ?int $actorId = null, ?int $qualifyBatchId = null): void
     {
         $previousStatus = $lead->rnd_status;
         $batchId = $lead->import_batch_id;
@@ -53,12 +54,12 @@ class RndService
             $result = $this->client->checkNumber($phone, $consentDate);
         }
 
-        $this->persistResult($lead, $result, $actorId);
+        $this->persistResult($lead, $result, $actorId, $qualifyBatchId);
     }
 
-    private function persistResult(Lead $lead, RndResult $result, ?int $actorId): void
+    private function persistResult(Lead $lead, RndResult $result, ?int $actorId, ?int $qualifyBatchId = null): void
     {
-        DB::transaction(function () use ($lead, $result, $actorId): void {
+        DB::transaction(function () use ($lead, $result, $actorId, $qualifyBatchId): void {
             $previousLeadStatus = $lead->status;
 
             $updates = [
@@ -103,6 +104,8 @@ class RndService
             if ($lead->import_batch_id) {
                 $this->completeBatchCounter($lead->import_batch_id, $result->status);
             }
+
+            app(QualifyBatchCounters::class)->completeRnd($qualifyBatchId, $result->status);
         });
     }
 

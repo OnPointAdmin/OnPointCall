@@ -7,6 +7,7 @@ use App\Enums\SoftScoreStatus;
 use App\Models\ImportBatch;
 use App\Models\Lead;
 use App\Models\LeadHistory;
+use App\Services\Qualify\QualifyBatchCounters;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
@@ -66,7 +67,7 @@ class SoftScoreService
         return $this->shouldRun($lead);
     }
 
-    public function scoreLead(Lead $lead, ?int $actorId = null, bool $force = false): void
+    public function scoreLead(Lead $lead, ?int $actorId = null, bool $force = false, ?int $qualifyBatchId = null): void
     {
         if (! $force && ! $this->shouldRun($lead)) {
             return;
@@ -88,7 +89,7 @@ class SoftScoreService
 
         $result = $this->client->scoreLead($lead);
 
-        DB::transaction(function () use ($lead, $result, $actorId): void {
+        DB::transaction(function () use ($lead, $result, $actorId, $qualifyBatchId): void {
             $lead->update([
                 'soft_score_status' => $result->status,
                 'soft_score_code' => $result->qualificationCode,
@@ -112,6 +113,8 @@ class SoftScoreService
             if ($lead->import_batch_id) {
                 $this->completeBatchCounter($lead->import_batch_id, $result->status);
             }
+
+            app(QualifyBatchCounters::class)->completeSoftScore($qualifyBatchId, $result->status);
         });
     }
 

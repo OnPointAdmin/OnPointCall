@@ -3,9 +3,11 @@
 namespace App\Providers\Filament;
 
 use App\Filament\Navigation\DashboardNavigation;
+use App\Filament\Navigation\QualifyNavigation;
 use App\Filament\Pages\Auth\EditProfile;
 use App\Filament\Pages\CallDetail;
 use App\Filament\Pages\Dashboard;
+use App\Filament\Pages\QualifyLeads;
 use App\Http\Middleware\EnsurePasswordChanged;
 use App\Http\Middleware\SetCompanyContext;
 use Filament\Actions\Action;
@@ -75,6 +77,12 @@ class AdminPanelProvider extends PanelProvider
                     ->url(fn (): string => CallDetail::getUrl())
                     ->group(DashboardNavigation::GROUP)
                     ->sort(10),
+                NavigationItem::make('qualify')
+                    ->label(QualifyNavigation::PARENT)
+                    ->icon(Heroicon::OutlinedCheckBadge)
+                    ->url(fn (): string => QualifyLeads::getUrl())
+                    ->group(QualifyNavigation::GROUP)
+                    ->sort(2),
             ])
             ->navigationGroups([
                 NavigationGroup::make(DashboardNavigation::GROUP),
