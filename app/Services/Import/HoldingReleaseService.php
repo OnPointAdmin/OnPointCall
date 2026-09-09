@@ -324,25 +324,40 @@ class HoldingReleaseService
             return;
         }
 
+        $hasNone = in_array('none', $partners, true);
+        $namedPartners = array_values(array_filter(
+            $partners,
+            static fn (string $item): bool => $item !== 'none',
+        ));
+
         $driver = $query->getConnection()->getDriverName();
         $existsSql = $this->qualifiedPartnerExistsSql($driver);
+        $countSql = $this->qualifiedPartnerCountSql($driver);
         $match = QualifiedPartnersMatch::tryFrom((string) ($filter->qualifiedPartnersMatch ?? ''))
             ?? QualifiedPartnersMatch::InList;
 
-        if ($match === QualifiedPartnersMatch::Only) {
-            $query->where(function (Builder $group) use ($partners, $existsSql, $driver): void {
-                foreach ($partners as $partner) {
-                    $group->whereRaw($existsSql, [$partner]);
-                }
+        $query->where(function (Builder $group) use ($hasNone, $namedPartners, $existsSql, $countSql, $match, $driver): void {
+            if ($hasNone) {
+                $group->orWhereRaw($countSql, [0]);
+            }
 
-                $group->whereRaw($this->qualifiedPartnerCountSql($driver), [count($partners)]);
-            });
+            if ($namedPartners === []) {
+                return;
+            }
 
-            return;
-        }
+            if ($match === QualifiedPartnersMatch::Only) {
+                $group->orWhere(function (Builder $onlyGroup) use ($namedPartners, $existsSql, $countSql, $driver): void {
+                    foreach ($namedPartners as $partner) {
+                        $onlyGroup->whereRaw($existsSql, [$partner]);
+                    }
 
-        $query->where(function (Builder $group) use ($partners, $existsSql): void {
-            foreach ($partners as $partner) {
+                    $onlyGroup->whereRaw($countSql, [count($namedPartners)]);
+                });
+
+                return;
+            }
+
+            foreach ($namedPartners as $partner) {
                 $group->orWhereRaw($existsSql, [$partner]);
             }
         });

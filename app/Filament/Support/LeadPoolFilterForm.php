@@ -103,7 +103,7 @@ class LeadPoolFilterForm
                         ->live(),
                     Select::make('qualified_partners')
                         ->label('Qualified · Partners')
-                        ->options(fn (): array => app(HoldingReleaseService::class)->distinctQualifiedPartners(
+                        ->options(fn (): array => ['none' => 'None'] + app(HoldingReleaseService::class)->distinctQualifiedPartners(
                             (int) auth()->user()->company_id,
                             $page->selectedLeadType(),
                             $page->selectedSourceCallingListId(),

@@ -296,6 +296,37 @@ class AssignLeadsTest extends TestCase
             ->assertCanNotSeeTableRecords([$travelAndOther]);
     }
 
+    public function test_qualified_partners_none_filter_limits_matching_leads(): void
+    {
+        [$admin] = $this->setUpAssignPage();
+
+        $none = $this->makeHoldingLead($admin->company_id, '4045551801', now());
+        $none->update(['qualification_status' => null]);
+
+        $travel = $this->makeHoldingLead($admin->company_id, '4045551802', now());
+        $travel->update([
+            'qualification_result' => [
+                'request' => [],
+                'response' => [
+                    'qualifiedCompaniesBooking' => [
+                        ['companyName' => 'Travel Partner'],
+                    ],
+                ],
+            ],
+        ]);
+
+        Livewire::actingAs($admin)
+            ->test(AssignLeads::class)
+            ->assertSet('holdingCount', 2)
+            ->fillForm([
+                'qualified_partners' => ['none'],
+            ], 'filterForm')
+            ->call('refreshCountAction')
+            ->assertSet('holdingCount', 1)
+            ->assertCanSeeTableRecords([$none])
+            ->assertCanNotSeeTableRecords([$travel]);
+    }
+
     public function test_clear_filters_resets_filters_and_matching_count(): void
     {
         [$admin] = $this->setUpAssignPage();

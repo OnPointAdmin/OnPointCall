@@ -851,6 +851,124 @@ class HoldingReleaseServiceTest extends TestCase
         );
     }
 
+    public function test_qualified_partners_none_filter_matches_leads_with_no_booking_partners(): void
+    {
+        $company = Company::factory()->create();
+
+        $neverQualified = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045552111',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'qualification_status' => null,
+            'imported_at' => now(),
+        ]);
+
+        $notQualifiedEmpty = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045552112',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'qualification_status' => QualificationStatus::NotQualified,
+            'qualification_result' => [
+                'request' => [],
+                'response' => [
+                    'qualifiedCompaniesBooking' => [],
+                ],
+            ],
+            'imported_at' => now(),
+        ]);
+
+        $withPartner = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045552113',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'qualification_status' => QualificationStatus::Qualified,
+            'qualification_result' => [
+                'request' => [],
+                'response' => [
+                    'qualifiedCompaniesBooking' => [
+                        ['companyName' => 'Travel Partner'],
+                    ],
+                ],
+            ],
+            'imported_at' => now(),
+        ]);
+
+        $service = app(HoldingReleaseService::class);
+        $filter = new HoldingFilter(
+            leadType: 'standard',
+            qualifiedPartners: ['none'],
+        );
+
+        $this->assertSame(2, $service->countHolding($company->id, $filter));
+        $this->assertEqualsCanonicalizing(
+            [$neverQualified->id, $notQualifiedEmpty->id],
+            $service->queryHolding($company->id, $filter)->pluck('id')->all(),
+        );
+    }
+
+    public function test_qualified_partners_none_combined_with_named_partner_uses_or_logic(): void
+    {
+        $company = Company::factory()->create();
+
+        $none = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045552114',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'qualification_status' => null,
+            'imported_at' => now(),
+        ]);
+
+        $travel = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045552115',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'qualification_status' => QualificationStatus::Qualified,
+            'qualification_result' => [
+                'request' => [],
+                'response' => [
+                    'qualifiedCompaniesBooking' => [
+                        ['companyName' => 'Travel Partner'],
+                    ],
+                ],
+            ],
+            'imported_at' => now(),
+        ]);
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045552116',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'qualification_status' => QualificationStatus::Qualified,
+            'qualification_result' => [
+                'request' => [],
+                'response' => [
+                    'qualifiedCompaniesBooking' => [
+                        ['companyName' => 'Other Partner'],
+                    ],
+                ],
+            ],
+            'imported_at' => now(),
+        ]);
+
+        $service = app(HoldingReleaseService::class);
+        $filter = new HoldingFilter(
+            leadType: 'standard',
+            qualifiedPartners: ['none', 'Travel Partner'],
+        );
+
+        $this->assertSame(2, $service->countHolding($company->id, $filter));
+        $this->assertEqualsCanonicalizing(
+            [$none->id, $travel->id],
+            $service->queryHolding($company->id, $filter)->pluck('id')->all(),
+        );
+    }
+
     public function test_release_fresh_assigns_n_newest_leads_by_imported_at(): void
     {
         $company = Company::factory()->create();
