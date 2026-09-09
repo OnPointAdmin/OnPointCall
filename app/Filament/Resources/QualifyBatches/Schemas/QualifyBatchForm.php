@@ -3,10 +3,13 @@
 namespace App\Filament\Resources\QualifyBatches\Schemas;
 
 use App\Enums\QualifyBatchStatus;
+use App\Filament\Support\BatchCheckFormSections;
+use App\Filament\Support\DncBatchFormSection;
+use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Toggle;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 
 class QualifyBatchForm
@@ -14,43 +17,32 @@ class QualifyBatchForm
     public static function configure(Schema $schema): Schema
     {
         return $schema
+            ->columns(1)
             ->components([
-                TextInput::make('user.name')
-                    ->label('Queued by'),
-                Select::make('status')
-                    ->options(QualifyBatchStatus::class),
-                TextInput::make('lead_count')
-                    ->numeric(),
-                Toggle::make('run_soft_score')
-                    ->label('Soft Score'),
-                Toggle::make('run_rnd_check')
-                    ->label('RND'),
-                Toggle::make('run_qualification')
-                    ->label('Qualification'),
-                Toggle::make('run_dnc_check')
-                    ->label('DNC'),
-                TextInput::make('soft_score_pending')->numeric(),
-                TextInput::make('soft_score_qualified')
-                    ->label('Soft score done')
-                    ->numeric(),
-                TextInput::make('soft_score_error')->numeric(),
-                TextInput::make('rnd_pending')->numeric(),
-                TextInput::make('rnd_clear')->numeric(),
-                TextInput::make('rnd_reassigned')->numeric(),
-                TextInput::make('rnd_no_data')->numeric(),
-                TextInput::make('rnd_error')->numeric(),
-                TextInput::make('qualification_pending')->numeric(),
-                TextInput::make('qualification_qualified')->numeric(),
-                TextInput::make('qualification_not_qualified')->numeric(),
-                TextInput::make('qualification_error')->numeric(),
-                TextInput::make('dnc_pending')->numeric(),
-                TextInput::make('dnc_clear')->numeric(),
-                TextInput::make('dnc_hit')->label('DNC hits')->numeric(),
-                TextInput::make('dnc_invalid')->numeric(),
-                TextInput::make('dnc_error')->numeric(),
-                Textarea::make('error_message')
-                    ->columnSpanFull()
-                    ->visible(fn (?string $state): bool => filled($state)),
+                BatchCheckFormSections::fullWidth(Section::make('Overview')
+                    ->schema([
+                        TextInput::make('user.name')
+                            ->label('Queued by'),
+                        DateTimePicker::make('created_at')
+                            ->label('Queued at'),
+                        Select::make('status')
+                            ->options(QualifyBatchStatus::class),
+                        Textarea::make('error_message')
+                            ->label('Batch error')
+                            ->columnSpanFull()
+                            ->visible(fn (?string $state): bool => filled($state)),
+                    ])
+                    ->columns(3)),
+                BatchCheckFormSections::fullWidth(Section::make('Run summary')
+                    ->schema([
+                        TextInput::make('lead_count')
+                            ->label('Leads')
+                            ->numeric(),
+                    ])
+                    ->columns(3)),
+                BatchCheckFormSections::checksRun(),
+                ...BatchCheckFormSections::counterSections(),
+                ...DncBatchFormSection::sections(),
             ]);
     }
 }

@@ -14,6 +14,7 @@ use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Livewire\Attributes\On;
 
 class LeadsRelationManager extends RelationManager
@@ -37,11 +38,11 @@ class LeadsRelationManager extends RelationManager
     {
         return $table
             ->recordTitleAttribute('phone')
-            ->defaultSort('id')
+            ->defaultSort('phone')
             ->columns([
                 TextColumn::make('id')
                     ->label('ID')
-                    ->sortable(),
+                    ->sortable(query: fn (Builder $query, string $direction): Builder => $query->orderBy('leads.id', $direction)),
                 TextColumn::make('phone')
                     ->searchable()
                     ->sortable(),

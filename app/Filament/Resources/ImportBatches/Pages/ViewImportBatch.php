@@ -4,12 +4,19 @@ namespace App\Filament\Resources\ImportBatches\Pages;
 
 use App\Enums\ImportBatchStatus;
 use App\Filament\Resources\ImportBatches\ImportBatchResource;
+use App\Filament\Resources\ImportBatches\RelationManagers\DuplicatesRelationManager;
+use App\Filament\Resources\ImportBatches\RelationManagers\LeadsRelationManager;
 use App\Models\ImportBatch;
 use App\Services\Import\ImportBatchCheckRetryService;
 use App\Services\Import\LeadImportService;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
+use Filament\Schemas\Components\Component;
+use Filament\Schemas\Components\Group;
+use Filament\Schemas\Components\Livewire;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Facades\Auth;
 
@@ -183,6 +190,56 @@ class ViewImportBatch extends ViewRecord
                         ->send();
                 }),
         ];
+    }
+
+    public function content(Schema $schema): Schema
+    {
+        return $schema
+            ->components([
+                $this->getFormContentComponent(),
+                $this->getRelationManagersContentComponent(),
+            ]);
+    }
+
+    /**
+     * @return array<class-string<DuplicatesRelationManager|LeadsRelationManager>>
+     */
+    protected function getAllRelationManagers(): array
+    {
+        return [
+            LeadsRelationManager::class,
+            DuplicatesRelationManager::class,
+        ];
+    }
+
+    public function getRelationManagersContentComponent(): Component
+    {
+        $ownerRecord = $this->getRecord();
+        $managerLivewireData = ['ownerRecord' => $ownerRecord, 'pageClass' => static::class];
+
+        $section = function (string $heading, string $manager) use ($managerLivewireData): Section {
+            return Section::make($heading)
+                ->columnSpanFull()
+                ->schema([
+                    Livewire::make(
+                        $manager,
+                        [...$managerLivewireData, ...$manager::getDefaultProperties()],
+                    )->key($manager),
+                ]);
+        };
+
+        return Group::make([
+            $section('Leads', LeadsRelationManager::class),
+            Section::make('Duplicates')
+                ->columnSpanFull()
+                ->visible(fn (): bool => (int) $this->getRecord()->duplicate_count + (int) $this->getRecord()->conflict_count > 0)
+                ->schema([
+                    Livewire::make(
+                        DuplicatesRelationManager::class,
+                        [...$managerLivewireData, ...DuplicatesRelationManager::getDefaultProperties()],
+                    )->key(DuplicatesRelationManager::class),
+                ]),
+        ]);
     }
 
     public function mount(int|string $record): void

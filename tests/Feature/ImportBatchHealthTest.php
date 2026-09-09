@@ -3,14 +3,56 @@
 namespace Tests\Feature;
 
 use App\Enums\ImportBatchStatus;
+use App\Enums\UserRole;
+use App\Filament\Resources\ImportBatches\Pages\ViewImportBatch;
 use App\Models\Company;
 use App\Models\ImportBatch;
+use App\Models\User;
+use App\Support\CompanyContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Livewire\Livewire;
 use Tests\TestCase;
 
 class ImportBatchHealthTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_view_page_groups_batch_details_into_sections(): void
+    {
+        $company = Company::factory()->create();
+        $admin = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Admin,
+        ]);
+        CompanyContext::set($company->id);
+
+        $batch = ImportBatch::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'source_filename' => 'test.csv',
+            'imported_at' => now(),
+            'total_rows' => 5,
+            'inserted_count' => 5,
+            'duplicate_count' => 0,
+            'conflict_count' => 0,
+            'lead_type' => 'standard',
+            'status' => ImportBatchStatus::Completed,
+            'run_soft_score' => true,
+            'run_dnc_check' => true,
+            'run_rnd_check' => false,
+            'run_qualification' => false,
+        ]);
+
+        Livewire::actingAs($admin)
+            ->test(ViewImportBatch::class, ['record' => $batch->getRouteKey()])
+            ->assertOk()
+            ->assertSee('Overview')
+            ->assertSee('Import results')
+            ->assertSee('Checks run')
+            ->assertSee('Soft Score')
+            ->assertSee('DNC')
+            ->assertSee('Internal DNC')
+            ->assertSee('Leads');
+    }
 
     public function test_health_status_is_pending_while_importing(): void
     {

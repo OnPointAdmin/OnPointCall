@@ -5,6 +5,8 @@ namespace Tests\Feature;
 use App\Enums\QualifyBatchStatus;
 use App\Enums\SoftScoreStatus;
 use App\Enums\UserRole;
+use App\Filament\Resources\QualifyBatches\Pages\ViewQualifyBatch;
+use App\Filament\Resources\QualifyBatches\RelationManagers\LeadsRelationManager;
 use App\Models\Company;
 use App\Models\Lead;
 use App\Models\QualifyBatch;
@@ -13,11 +15,77 @@ use App\Services\SoftScore\SoftScoreService;
 use App\Support\CompanyContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use Livewire\Livewire;
 use Tests\TestCase;
 
 class QualifyBatchTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_view_page_groups_batch_details_into_sections(): void
+    {
+        $company = Company::factory()->create();
+        $admin = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Admin,
+        ]);
+        CompanyContext::set($company->id);
+
+        $batch = QualifyBatch::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'user_id' => $admin->id,
+            'lead_count' => 1,
+            'run_soft_score' => true,
+            'run_dnc_check' => true,
+            'status' => QualifyBatchStatus::Processing,
+        ]);
+
+        Livewire::actingAs($admin)
+            ->test(ViewQualifyBatch::class, ['record' => $batch->getRouteKey()])
+            ->assertOk()
+            ->assertSee('Overview')
+            ->assertSee('Run summary')
+            ->assertSee('Checks run')
+            ->assertSee('Soft Score')
+            ->assertSee('DNC')
+            ->assertSee('Internal DNC')
+            ->assertSee('Leads');
+    }
+
+    public function test_leads_relation_manager_loads_without_ambiguous_id_sort(): void
+    {
+        $company = Company::factory()->create();
+        $admin = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Admin,
+        ]);
+        CompanyContext::set($company->id);
+
+        $batch = QualifyBatch::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'user_id' => $admin->id,
+            'lead_count' => 1,
+            'run_soft_score' => true,
+            'status' => QualifyBatchStatus::Processing,
+        ]);
+
+        $lead = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045559010',
+            'lead_type' => 'standard',
+            'imported_at' => now(),
+        ]);
+
+        $batch->leads()->attach($lead->id);
+
+        Livewire::actingAs($admin)
+            ->test(LeadsRelationManager::class, [
+                'ownerRecord' => $batch,
+                'pageClass' => \App\Filament\Resources\QualifyBatches\Pages\ViewQualifyBatch::class,
+            ])
+            ->assertOk()
+            ->assertCanSeeTableRecords([$lead]);
+    }
 
     public function test_health_is_pending_while_checks_remain_then_ok_after_complete(): void
     {

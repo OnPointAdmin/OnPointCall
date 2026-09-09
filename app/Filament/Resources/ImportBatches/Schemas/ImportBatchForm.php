@@ -3,12 +3,15 @@
 namespace App\Filament\Resources\ImportBatches\Schemas;
 
 use App\Enums\ImportBatchStatus;
+use App\Filament\Support\BatchCheckFormSections;
+use App\Filament\Support\DncBatchFormSection;
 use App\Filament\Support\LeadTypeSelect;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 
 class ImportBatchForm
@@ -16,51 +19,55 @@ class ImportBatchForm
     public static function configure(Schema $schema): Schema
     {
         return $schema
+            ->columns(1)
             ->components([
-                TextInput::make('source_filename'),
-                Select::make('status')
-                    ->options(ImportBatchStatus::class),
-                DateTimePicker::make('imported_at'),
-                LeadTypeSelect::make(allowCreate: false, activeOnly: false),
-                Toggle::make('run_soft_score'),
-                Toggle::make('run_rnd_check'),
-                Toggle::make('run_qualification'),
-                Toggle::make('run_dnc_check'),
-                Toggle::make('ignore_national_dnc')
-                    ->label('TCPA consent (ignore national and state DNC)')
-                    ->helperText('When DNC runs, national and state hits are recorded but do not mark the lead DNC. Litigator and internal DNC still block.'),
-                TextInput::make('total_rows')->numeric(),
-                TextInput::make('inserted_count')->numeric(),
-                TextInput::make('updated_count')->numeric(),
-                TextInput::make('valid_leads')
-                    ->label('Valid Leads')
-                    ->numeric()
-                    ->disabled()
-                    ->dehydrated(false),
-                TextInput::make('duplicate_count')->numeric(),
-                TextInput::make('conflict_count')->numeric(),
-                TextInput::make('soft_score_pending')->numeric(),
-                TextInput::make('soft_score_qualified')
-                    ->label('Soft score done')
-                    ->numeric(),
-                TextInput::make('soft_score_error')->numeric(),
-                TextInput::make('rnd_pending')->numeric(),
-                TextInput::make('rnd_clear')->numeric(),
-                TextInput::make('rnd_reassigned')->numeric(),
-                TextInput::make('rnd_no_data')->numeric(),
-                TextInput::make('rnd_error')->numeric(),
-                TextInput::make('qualification_pending')->numeric(),
-                TextInput::make('qualification_qualified')->numeric(),
-                TextInput::make('qualification_not_qualified')->numeric(),
-                TextInput::make('qualification_error')->numeric(),
-                TextInput::make('dnc_pending')->numeric(),
-                TextInput::make('dnc_clear')->numeric(),
-                TextInput::make('dnc_hit')->label('DNC hits')->numeric(),
-                TextInput::make('dnc_invalid')->numeric(),
-                TextInput::make('dnc_error')->numeric(),
-                Textarea::make('error_message')
-                    ->columnSpanFull()
-                    ->visible(fn (?string $state): bool => filled($state)),
+                BatchCheckFormSections::fullWidth(Section::make('Overview')
+                    ->schema([
+                        TextInput::make('source_filename')
+                            ->label('Source file'),
+                        DateTimePicker::make('imported_at')
+                            ->label('Imported at'),
+                        Select::make('status')
+                            ->options(ImportBatchStatus::class),
+                        LeadTypeSelect::make(allowCreate: false, activeOnly: false),
+                        Textarea::make('error_message')
+                            ->label('Batch error')
+                            ->columnSpanFull()
+                            ->visible(fn (?string $state): bool => filled($state)),
+                    ])
+                    ->columns(3)),
+                BatchCheckFormSections::fullWidth(Section::make('Import results')
+                    ->schema([
+                        TextInput::make('total_rows')
+                            ->label('Total rows')
+                            ->numeric(),
+                        TextInput::make('inserted_count')
+                            ->label('Inserted')
+                            ->numeric(),
+                        TextInput::make('updated_count')
+                            ->label('Updated')
+                            ->numeric(),
+                        TextInput::make('valid_leads')
+                            ->label('Valid leads')
+                            ->numeric()
+                            ->disabled()
+                            ->dehydrated(false),
+                        TextInput::make('duplicate_count')
+                            ->label('Duplicates')
+                            ->numeric(),
+                        TextInput::make('conflict_count')
+                            ->label('Conflicts')
+                            ->numeric(),
+                    ])
+                    ->columns(3)),
+                BatchCheckFormSections::checksRun([
+                    Toggle::make('ignore_national_dnc')
+                        ->label('TCPA consent (ignore national and state DNC)')
+                        ->helperText('When DNC runs, national and state hits are recorded but do not mark the lead DNC. Litigator and internal DNC still block.')
+                        ->columnSpanFull(),
+                ]),
+                ...BatchCheckFormSections::counterSections(),
+                ...DncBatchFormSection::sections(),
             ]);
     }
 }

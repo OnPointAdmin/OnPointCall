@@ -3,11 +3,17 @@
 namespace App\Filament\Resources\QualifyBatches\Pages;
 
 use App\Filament\Resources\QualifyBatches\QualifyBatchResource;
+use App\Filament\Resources\QualifyBatches\RelationManagers\LeadsRelationManager;
 use App\Models\QualifyBatch;
 use App\Services\Qualify\QualifyBatchCheckRetryService;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
+use Filament\Schemas\Components\Component;
+use Filament\Schemas\Components\Group;
+use Filament\Schemas\Components\Livewire;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Facades\Auth;
 
@@ -97,6 +103,42 @@ class ViewQualifyBatch extends ViewRecord
                         ->send();
                 }),
         ];
+    }
+
+    public function content(Schema $schema): Schema
+    {
+        return $schema
+            ->components([
+                $this->getFormContentComponent(),
+                $this->getRelationManagersContentComponent(),
+            ]);
+    }
+
+    /**
+     * @return array<class-string<LeadsRelationManager>>
+     */
+    protected function getAllRelationManagers(): array
+    {
+        return [
+            LeadsRelationManager::class,
+        ];
+    }
+
+    public function getRelationManagersContentComponent(): Component
+    {
+        $ownerRecord = $this->getRecord();
+        $managerLivewireData = ['ownerRecord' => $ownerRecord, 'pageClass' => static::class];
+
+        return Group::make([
+            Section::make('Leads')
+                ->columnSpanFull()
+                ->schema([
+                    Livewire::make(
+                        LeadsRelationManager::class,
+                        [...$managerLivewireData, ...LeadsRelationManager::getDefaultProperties()],
+                    )->key(LeadsRelationManager::class),
+                ]),
+        ]);
     }
 
     public function mount(int|string $record): void
