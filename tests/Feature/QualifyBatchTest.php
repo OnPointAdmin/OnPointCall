@@ -2,18 +2,21 @@
 
 namespace Tests\Feature;
 
+use App\Enums\ImportBatchStatus;
 use App\Enums\QualifyBatchStatus;
 use App\Enums\SoftScoreStatus;
 use App\Enums\UserRole;
 use App\Filament\Resources\QualifyBatches\Pages\ViewQualifyBatch;
 use App\Filament\Resources\QualifyBatches\RelationManagers\LeadsRelationManager;
 use App\Models\Company;
+use App\Models\ImportBatch;
 use App\Models\Lead;
 use App\Models\QualifyBatch;
 use App\Models\User;
 use App\Services\SoftScore\SoftScoreService;
 use App\Support\CompanyContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -81,7 +84,7 @@ class QualifyBatchTest extends TestCase
         Livewire::actingAs($admin)
             ->test(LeadsRelationManager::class, [
                 'ownerRecord' => $batch,
-                'pageClass' => \App\Filament\Resources\QualifyBatches\Pages\ViewQualifyBatch::class,
+                'pageClass' => ViewQualifyBatch::class,
             ])
             ->assertOk()
             ->assertCanSeeTableRecords([$lead]);
@@ -149,6 +152,137 @@ class QualifyBatchTest extends TestCase
         $this->assertSame('ok', $batch->healthStatus());
     }
 
+    public function test_nq_code_increments_not_qualified_and_q_pc1_increment_qualified(): void
+    {
+        config([
+            'services.soft_score.client_id' => 'client',
+            'services.soft_score.client_secret' => 'secret',
+        ]);
+
+        Http::fake(function (Request $request) {
+            if (str_contains($request->url(), 'accesstoken')) {
+                return Http::response(['access_token' => 'token', 'expires_in' => 3600]);
+            }
+
+            $phone = data_get($request->data(), 'leadRequest.homePhone');
+            $code = match ($phone) {
+                '4045559101' => 'Q',
+                '4045559102' => 'PC1',
+                default => 'NQ',
+            };
+
+            return Http::response([
+                'lead' => [
+                    'creditScore' => [
+                        ['creditBand' => ['qualificationCode' => $code]],
+                    ],
+                ],
+            ]);
+        });
+
+        $company = Company::factory()->create();
+        CompanyContext::set($company->id);
+
+        $batch = QualifyBatch::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'lead_count' => 3,
+            'run_soft_score' => true,
+            'soft_score_pending' => 3,
+            'status' => QualifyBatchStatus::Processing,
+        ]);
+
+        $qualified = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045559101',
+            'lead_type' => 'standard',
+            'imported_at' => now(),
+        ]);
+        $pc1 = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045559102',
+            'lead_type' => 'standard',
+            'imported_at' => now(),
+        ]);
+        $notQualified = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045559103',
+            'lead_type' => 'standard',
+            'imported_at' => now(),
+        ]);
+
+        $batch->leads()->attach([$qualified->id, $pc1->id, $notQualified->id]);
+
+        $service = app(SoftScoreService::class);
+        $service->scoreLead($qualified, null, force: true, qualifyBatchId: $batch->id);
+        $service->scoreLead($pc1, null, force: true, qualifyBatchId: $batch->id);
+        $service->scoreLead($notQualified, null, force: true, qualifyBatchId: $batch->id);
+
+        $batch->refresh();
+
+        $this->assertSame('Q', $qualified->fresh()->soft_score_code);
+        $this->assertSame('PC1', $pc1->fresh()->soft_score_code);
+        $this->assertSame('NQ', $notQualified->fresh()->soft_score_code);
+        $this->assertSame(0, $batch->soft_score_pending);
+        $this->assertSame(2, $batch->soft_score_qualified);
+        $this->assertSame(1, $batch->soft_score_not_qualified);
+        $this->assertSame(0, $batch->soft_score_error);
+    }
+
+    public function test_leads_table_filters_by_soft_score_code(): void
+    {
+        $company = Company::factory()->create();
+        $admin = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Admin,
+        ]);
+        CompanyContext::set($company->id);
+
+        $batch = QualifyBatch::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'user_id' => $admin->id,
+            'lead_count' => 3,
+            'run_soft_score' => true,
+            'status' => QualifyBatchStatus::Completed,
+        ]);
+
+        $q = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045559201',
+            'lead_type' => 'standard',
+            'imported_at' => now(),
+            'soft_score_status' => SoftScoreStatus::Complete,
+            'soft_score_code' => 'Q',
+        ]);
+        $nq = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045559202',
+            'lead_type' => 'standard',
+            'imported_at' => now(),
+            'soft_score_status' => SoftScoreStatus::Complete,
+            'soft_score_code' => 'NQ',
+        ]);
+        $pc1 = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045559203',
+            'lead_type' => 'standard',
+            'imported_at' => now(),
+            'soft_score_status' => SoftScoreStatus::Complete,
+            'soft_score_code' => 'PC1',
+        ]);
+
+        $batch->leads()->attach([$q->id, $nq->id, $pc1->id]);
+
+        Livewire::actingAs($admin)
+            ->test(LeadsRelationManager::class, [
+                'ownerRecord' => $batch,
+                'pageClass' => ViewQualifyBatch::class,
+            ])
+            ->assertCanSeeTableRecords([$q, $nq, $pc1])
+            ->filterTable('soft_score_code', 'NQ')
+            ->assertCanSeeTableRecords([$nq])
+            ->assertCanNotSeeTableRecords([$q, $pc1]);
+    }
+
     public function test_health_is_error_when_soft_score_errors_exist(): void
     {
         $company = Company::factory()->create();
@@ -186,12 +320,12 @@ class QualifyBatchTest extends TestCase
         $company = Company::factory()->create();
         CompanyContext::set($company->id);
 
-        $importBatch = \App\Models\ImportBatch::withoutGlobalScopes()->create([
+        $importBatch = ImportBatch::withoutGlobalScopes()->create([
             'company_id' => $company->id,
             'source_filename' => 'import.csv',
             'imported_at' => now(),
             'lead_type' => 'standard',
-            'status' => \App\Enums\ImportBatchStatus::Completed,
+            'status' => ImportBatchStatus::Completed,
             'run_soft_score' => true,
             'soft_score_qualified' => 1,
             'soft_score_pending' => 0,

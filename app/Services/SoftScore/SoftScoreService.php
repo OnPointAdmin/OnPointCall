@@ -8,6 +8,7 @@ use App\Models\ImportBatch;
 use App\Models\Lead;
 use App\Models\LeadHistory;
 use App\Services\Qualify\QualifyBatchCounters;
+use App\Support\SoftScoreCounters;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
@@ -74,11 +75,12 @@ class SoftScoreService
         }
 
         $previousStatus = $lead->soft_score_status;
+        $previousCode = $lead->soft_score_code;
         $batchId = $lead->import_batch_id;
 
-        DB::transaction(function () use ($lead, $previousStatus, $batchId): void {
+        DB::transaction(function () use ($lead, $previousStatus, $previousCode, $batchId): void {
             if ($batchId) {
-                $this->moveCompletedCounterToPending($batchId, $previousStatus);
+                $this->moveCompletedCounterToPending($batchId, $previousStatus, $previousCode);
             }
 
             $lead->update([
@@ -111,10 +113,10 @@ class SoftScoreService
             ]);
 
             if ($lead->import_batch_id) {
-                $this->completeBatchCounter($lead->import_batch_id, $result->status);
+                $this->completeBatchCounter($lead->import_batch_id, $result->status, $result->qualificationCode);
             }
 
-            app(QualifyBatchCounters::class)->completeSoftScore($qualifyBatchId, $result->status);
+            app(QualifyBatchCounters::class)->completeSoftScore($qualifyBatchId, $result->status, $result->qualificationCode);
         });
     }
 
@@ -142,7 +144,7 @@ class SoftScoreService
         });
     }
 
-    private function moveCompletedCounterToPending(int $batchId, ?SoftScoreStatus $previous): void
+    private function moveCompletedCounterToPending(int $batchId, ?SoftScoreStatus $previous, ?string $previousCode): void
     {
         if ($previous === null || $previous === SoftScoreStatus::Pending) {
             return;
@@ -158,16 +160,15 @@ class SoftScoreService
             'soft_score_pending' => $batch->soft_score_pending + 1,
         ];
 
-        match ($previous) {
-            SoftScoreStatus::Complete, SoftScoreStatus::Recent => $updates['soft_score_qualified'] = max(0, $batch->soft_score_qualified - 1),
-            SoftScoreStatus::Error => $updates['soft_score_error'] = max(0, $batch->soft_score_error - 1),
-            SoftScoreStatus::Pending => null,
-        };
+        $column = SoftScoreCounters::completedColumn($previous, $previousCode);
+        if ($column !== null) {
+            $updates[$column] = max(0, $batch->{$column} - 1);
+        }
 
         $batch->update($updates);
     }
 
-    private function completeBatchCounter(int $batchId, SoftScoreStatus $status): void
+    private function completeBatchCounter(int $batchId, SoftScoreStatus $status, ?string $code): void
     {
         $batch = ImportBatch::withoutGlobalScopes()->lockForUpdate()->find($batchId);
 
@@ -179,11 +180,10 @@ class SoftScoreService
             'soft_score_pending' => max(0, $batch->soft_score_pending - 1),
         ];
 
-        match ($status) {
-            SoftScoreStatus::Complete, SoftScoreStatus::Recent => $updates['soft_score_qualified'] = $batch->soft_score_qualified + 1,
-            SoftScoreStatus::Error => $updates['soft_score_error'] = $batch->soft_score_error + 1,
-            SoftScoreStatus::Pending => null,
-        };
+        $column = SoftScoreCounters::completedColumn($status, $code);
+        if ($column !== null) {
+            $updates[$column] = $batch->{$column} + 1;
+        }
 
         $batch->update($updates);
     }

@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\LeadStatus;
+use App\Enums\QualificationStatus;
 use App\Enums\SoftScoreStatus;
 use App\Enums\UserRole;
 use App\Jobs\SoftScoreLeadJob;
@@ -68,7 +69,49 @@ class SoftScoreFreshnessTest extends TestCase
         $this->assertNotNull($lead->soft_score_checked_at);
         $this->assertSame(0, (int) $batch->fresh()->soft_score_pending);
         $this->assertSame(1, (int) $batch->fresh()->soft_score_qualified);
+        $this->assertSame(0, (int) $batch->fresh()->soft_score_not_qualified);
         $this->assertSame(0, (int) $batch->fresh()->soft_score_error);
+        Queue::assertNotPushed(SoftScoreLeadJob::class);
+    }
+
+    public function test_import_counts_recent_nq_as_not_qualified(): void
+    {
+        Queue::fake();
+
+        $company = Company::factory()->create();
+        CompanyContext::set($company->id);
+
+        $csv = implode("\n", [
+            'Phone,First Name,Score,CheckedAt',
+            '4045556011,Jane,NQ,'.now()->subDays(5)->toDateString(),
+        ]);
+
+        $path = storage_path('app/imports/soft-score-fresh-nq.csv');
+        if (! is_dir(dirname($path))) {
+            mkdir(dirname($path), 0777, true);
+        }
+        file_put_contents($path, $csv);
+
+        $service = app(LeadImportService::class);
+        $batch = $service->createBatch($company->id, 'soft-score-fresh-nq.csv', 'standard', true);
+
+        $service->process($batch, $path, [
+            'phone' => 'Phone',
+            'first_name' => 'First Name',
+            'soft_score_code' => 'Score',
+            'soft_score_checked_at' => 'CheckedAt',
+        ], 'standard');
+
+        CompanyContext::clear();
+
+        $lead = Lead::withoutGlobalScopes()->where('phone', '4045556011')->first();
+
+        $this->assertNotNull($lead);
+        $this->assertSame(SoftScoreStatus::Recent, $lead->soft_score_status);
+        $this->assertSame('NQ', $lead->soft_score_code);
+        $this->assertSame(0, (int) $batch->fresh()->soft_score_pending);
+        $this->assertSame(0, (int) $batch->fresh()->soft_score_qualified);
+        $this->assertSame(1, (int) $batch->fresh()->soft_score_not_qualified);
         Queue::assertNotPushed(SoftScoreLeadJob::class);
     }
 
@@ -284,7 +327,7 @@ class SoftScoreFreshnessTest extends TestCase
             'soft_score_code' => 'B',
             'soft_score_status' => SoftScoreStatus::Complete,
             'soft_score_checked_at' => now()->subDays(1),
-            'qualification_status' => \App\Enums\QualificationStatus::Qualified,
+            'qualification_status' => QualificationStatus::Qualified,
             'qualification_checked_at' => now()->subDays(1),
         ]);
 

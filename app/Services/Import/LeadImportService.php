@@ -20,6 +20,7 @@ use App\Models\Lead;
 use App\Services\SoftScore\SoftScoreService;
 use App\Support\CsvHeader;
 use App\Support\PhoneNormalizer;
+use App\Support\SoftScoreCounters;
 use App\Support\TimezoneResolver;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -97,7 +98,8 @@ class LeadImportService
         $insertedLeadIds = [];
         $updatedLeadIds = [];
         $softScoreJobLeadIds = [];
-        $softScoreRecentCount = 0;
+        $softScoreRecentQualifiedCount = 0;
+        $softScoreRecentNotQualifiedCount = 0;
         $rndJobLeadIds = [];
         $qualificationJobLeadIds = [];
         $dncJobLeadIds = [];
@@ -158,7 +160,11 @@ class LeadImportService
 
                 $updatedLeadIds[] = $lead->id;
                 $softScoreJobLeadIds = [...$softScoreJobLeadIds, ...$queued['soft_score']];
-                $softScoreRecentCount += $queued['soft_score_recent'];
+                if (SoftScoreCounters::isNotQualifiedCode($lead->soft_score_code)) {
+                    $softScoreRecentNotQualifiedCount += $queued['soft_score_recent'];
+                } else {
+                    $softScoreRecentQualifiedCount += $queued['soft_score_recent'];
+                }
                 $rndJobLeadIds = [...$rndJobLeadIds, ...$queued['rnd']];
                 $qualificationJobLeadIds = [...$qualificationJobLeadIds, ...$queued['qualification']];
                 $dncJobLeadIds = [...$dncJobLeadIds, ...$queued['dnc']];
@@ -188,7 +194,11 @@ class LeadImportService
                     $queueSoftScore = true;
                 } else {
                     $markSoftScoreRecent = true;
-                    $softScoreRecentCount++;
+                    if (SoftScoreCounters::isNotQualifiedCode($attributes['soft_score_code'] ?? null)) {
+                        $softScoreRecentNotQualifiedCount++;
+                    } else {
+                        $softScoreRecentQualifiedCount++;
+                    }
                 }
             }
 
@@ -236,7 +246,8 @@ class LeadImportService
             'duplicate_count' => $duplicateCount,
             'conflict_count' => $conflictCount,
             'soft_score_pending' => count($softScoreJobLeadIds),
-            'soft_score_qualified' => $softScoreRecentCount,
+            'soft_score_qualified' => $softScoreRecentQualifiedCount,
+            'soft_score_not_qualified' => $softScoreRecentNotQualifiedCount,
             'rnd_pending' => count($rndJobLeadIds),
             'qualification_pending' => count($qualificationJobLeadIds),
             'dnc_pending' => count($dncJobLeadIds),

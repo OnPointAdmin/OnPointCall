@@ -9,6 +9,7 @@ use App\Enums\RndStatus;
 use App\Enums\SoftScoreStatus;
 use App\Filament\Actions\ViewDncResultAction;
 use App\Filament\Actions\ViewQualificationResultAction;
+use App\Filament\Support\BatchLeadsFilters;
 use App\Models\Lead;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables\Columns\TextColumn;
@@ -122,11 +123,8 @@ class LeadsRelationManager extends RelationManager
                     ->options(collect(LeadStatus::cases())->mapWithKeys(
                         fn (LeadStatus $status): array => [$status->value => $status->label()]
                     )),
-                SelectFilter::make('soft_score_status')
-                    ->label('Soft score')
-                    ->options(collect(SoftScoreStatus::cases())->mapWithKeys(
-                        fn (SoftScoreStatus $status): array => [$status->value => $status->label()]
-                    )),
+                BatchLeadsFilters::softScoreCode($this),
+                BatchLeadsFilters::softScoreStatus(),
                 SelectFilter::make('rnd_status')
                     ->label('RND')
                     ->options(collect(RndStatus::cases())->mapWithKeys(

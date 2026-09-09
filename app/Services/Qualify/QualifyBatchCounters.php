@@ -7,10 +7,11 @@ use App\Enums\QualificationStatus;
 use App\Enums\RndStatus;
 use App\Enums\SoftScoreStatus;
 use App\Models\QualifyBatch;
+use App\Support\SoftScoreCounters;
 
 class QualifyBatchCounters
 {
-    public function completeSoftScore(?int $qualifyBatchId, SoftScoreStatus $status): void
+    public function completeSoftScore(?int $qualifyBatchId, SoftScoreStatus $status, ?string $code = null): void
     {
         $batch = $this->lock($qualifyBatchId);
 
@@ -22,11 +23,10 @@ class QualifyBatchCounters
             'soft_score_pending' => max(0, $batch->soft_score_pending - 1),
         ];
 
-        match ($status) {
-            SoftScoreStatus::Complete, SoftScoreStatus::Recent => $updates['soft_score_qualified'] = $batch->soft_score_qualified + 1,
-            SoftScoreStatus::Error => $updates['soft_score_error'] = $batch->soft_score_error + 1,
-            SoftScoreStatus::Pending => null,
-        };
+        $column = SoftScoreCounters::completedColumn($status, $code);
+        if ($column !== null) {
+            $updates[$column] = $batch->{$column} + 1;
+        }
 
         $batch->update($updates);
         $batch->syncStatusFromCounters();
