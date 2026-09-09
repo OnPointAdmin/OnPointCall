@@ -67,7 +67,7 @@ class ImportBatchesTable
                     ->sortable(query: function (Builder $query, string $direction): Builder {
                         $direction = strtolower($direction) === 'desc' ? 'desc' : 'asc';
 
-                        return $query->orderByRaw('(inserted_count - COALESCE(rnd_reassigned, 0) - COALESCE(dnc_hit, 0) - COALESCE(dnc_invalid, 0)) '.$direction);
+                        return $query->orderByRaw('(inserted_count - COALESCE(rnd_reassigned, 0) - COALESCE(dnc_hit, 0) - COALESCE(dnc_invalid, 0) - COALESCE(booking_future_hit, 0) - COALESCE(booking_past_hit, 0)) '.$direction);
                     }),
                 TextColumn::make('duplicate_count')
                     ->numeric()

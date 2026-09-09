@@ -56,6 +56,28 @@ return [
         'freshness_days' => (int) env('QUALIFICATION_FRESHNESS_DAYS', 15),
     ],
 
+    'salesforce' => [
+        'bookings' => [
+            'object' => 'Booking__c',
+            'fields' => [
+                'id' => 'Id',
+                'phone' => 'Phone__c',
+                'phone_cleaned' => 'Phone_Cleaned__c',
+                'phone_2' => 'Phone_2__c',
+                'email' => 'Email__c',
+                'email_2' => 'Email_2__c',
+                'tour_date' => 'Tour_Date__c',
+                'status' => 'Status__c',
+            ],
+            'future_statuses' => [
+                'New',
+                'Rescheduled',
+                'No Show Rescheduled',
+                'Agent Callback',
+            ],
+        ],
+    ],
+
     'dnc' => [
         'base_url' => env('DNC_BASE_URL', 'https://www.dncscrub.com'),
         'login_id' => env('DNC_LOGIN_ID'),

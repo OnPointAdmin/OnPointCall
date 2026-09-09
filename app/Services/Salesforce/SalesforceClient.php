@@ -72,4 +72,61 @@ class SalesforceClient
     {
         return (string) config('services.qualification.api_version', 'v64.0');
     }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function query(string $soql): array
+    {
+        $records = [];
+        $path = '/services/data/'.$this->apiVersion().'/query?q='.urlencode($soql);
+
+        while ($path !== '') {
+            $response = $this->http()->get($path);
+
+            if (! $response->successful()) {
+                throw new \RuntimeException('Salesforce query failed: '.$response->body());
+            }
+
+            $payload = $response->json();
+
+            if (! is_array($payload)) {
+                throw new \RuntimeException('Salesforce query returned an invalid response.');
+            }
+
+            foreach ($payload['records'] ?? [] as $record) {
+                if (is_array($record)) {
+                    $records[] = $record;
+                }
+            }
+
+            $next = $payload['nextRecordsUrl'] ?? null;
+
+            if (! is_string($next) || $next === '') {
+                break;
+            }
+
+            $path = $this->relativeApiPath($next);
+        }
+
+        return $records;
+    }
+
+    private function relativeApiPath(string $url): string
+    {
+        $instanceUrl = $this->instanceUrl();
+
+        if (str_starts_with($url, $instanceUrl)) {
+            return substr($url, strlen($instanceUrl)) ?: '/';
+        }
+
+        if (str_starts_with($url, '/')) {
+            return $url;
+        }
+
+        $parsed = parse_url($url);
+        $path = $parsed['path'] ?? '';
+
+        return is_string($path) && $path !== '' ? $path : '/';
+    }
 }

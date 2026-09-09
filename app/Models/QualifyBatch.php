@@ -23,6 +23,8 @@ class QualifyBatch extends Model
         'run_rnd_check',
         'run_qualification',
         'run_dnc_check',
+        'exclude_future_bookings',
+        'exclude_past_bookings',
         'soft_score_pending',
         'soft_score_qualified',
         'soft_score_not_qualified',
@@ -41,6 +43,11 @@ class QualifyBatch extends Model
         'dnc_hit',
         'dnc_invalid',
         'dnc_error',
+        'booking_check_pending',
+        'booking_check_clear',
+        'booking_future_hit',
+        'booking_past_hit',
+        'booking_check_error',
         'status',
         'error_message',
     ];
@@ -53,8 +60,15 @@ class QualifyBatch extends Model
             'run_rnd_check' => 'boolean',
             'run_qualification' => 'boolean',
             'run_dnc_check' => 'boolean',
+            'exclude_future_bookings' => 'boolean',
+            'exclude_past_bookings' => 'boolean',
             'status' => QualifyBatchStatus::class,
         ];
+    }
+
+    public function getRunBookingCheckAttribute(): bool
+    {
+        return (bool) $this->exclude_future_bookings || (bool) $this->exclude_past_bookings;
     }
 
     public function user(): BelongsTo
@@ -73,7 +87,8 @@ class QualifyBatch extends Model
         return ($this->run_soft_score && (int) $this->soft_score_pending > 0)
             || ($this->run_rnd_check && (int) $this->rnd_pending > 0)
             || ($this->run_qualification && (int) $this->qualification_pending > 0)
-            || ($this->run_dnc_check && (int) $this->dnc_pending > 0);
+            || ($this->run_dnc_check && (int) $this->dnc_pending > 0)
+            || ($this->run_booking_check && (int) $this->booking_check_pending > 0);
     }
 
     public function syncStatusFromCounters(): void

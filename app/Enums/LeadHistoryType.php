@@ -18,6 +18,7 @@ enum LeadHistoryType: string
     case RndCheck = 'rnd_check';
     case Qualification = 'qualification';
     case DncCheck = 'dnc_check';
+    case BookingCheck = 'booking_check';
     case DncPush = 'dnc_push';
     case FieldEdit = 'field_edit';
 
@@ -38,6 +39,7 @@ enum LeadHistoryType: string
             self::RndCheck => 'RND Check',
             self::Qualification => 'Qualification',
             self::DncCheck => 'DNC Check',
+            self::BookingCheck => 'Booking Check',
             self::DncPush => 'DNC Push',
             self::FieldEdit => 'Field Edit',
         };

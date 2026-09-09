@@ -53,6 +53,8 @@ class ImportLeads extends Page
             'run_qualification' => true,
             'run_dnc_check' => true,
             'ignore_national_dnc' => true,
+            'exclude_future_bookings' => true,
+            'exclude_past_bookings' => true,
             'import_mapping_id' => $defaultMapping?->id,
         ]);
     }
@@ -135,6 +137,16 @@ class ImportLeads extends Page
                     ->label('Leads have TCPA / prior express consent')
                     ->helperText('Applies when DNC runs, including if you run it later from the batch. National and state DNC hits are recorded but the lead stays callable. Litigators and internal DNC still flag. Turn this off for purchased lists without a consent checkbox.')
                     ->default(true),
+                $this->importCheckToggle(
+                    field: 'exclude_future_bookings',
+                    label: 'Exclude future bookings',
+                    helperText: 'Queries Salesforce Booking__c. Matching future tours mark the lead Booked and keep it out of Assign Leads.',
+                ),
+                $this->importCheckToggle(
+                    field: 'exclude_past_bookings',
+                    label: 'Exclude past bookings',
+                    helperText: 'Queries Salesforce Booking__c. Matching past tours mark the lead Booked and keep it out of Assign Leads.',
+                ),
             ]);
     }
 
@@ -233,6 +245,8 @@ class ImportLeads extends Page
             runQualification: (bool) ($data['run_qualification'] ?? true),
             runDncCheck: (bool) ($data['run_dnc_check'] ?? true),
             ignoreNationalDnc: (bool) ($data['ignore_national_dnc'] ?? true),
+            excludeFutureBookings: (bool) ($data['exclude_future_bookings'] ?? true),
+            excludePastBookings: (bool) ($data['exclude_past_bookings'] ?? true),
         );
 
         $batch->update([

@@ -30,6 +30,8 @@ class ImportBatch extends Model
         'run_qualification',
         'run_dnc_check',
         'ignore_national_dnc',
+        'exclude_future_bookings',
+        'exclude_past_bookings',
         'soft_score_pending',
         'soft_score_qualified',
         'soft_score_not_qualified',
@@ -48,6 +50,11 @@ class ImportBatch extends Model
         'dnc_hit',
         'dnc_invalid',
         'dnc_error',
+        'booking_check_pending',
+        'booking_check_clear',
+        'booking_future_hit',
+        'booking_past_hit',
+        'booking_check_error',
         'status',
         'error_message',
     ];
@@ -66,8 +73,15 @@ class ImportBatch extends Model
             'run_qualification' => 'boolean',
             'run_dnc_check' => 'boolean',
             'ignore_national_dnc' => 'boolean',
+            'exclude_future_bookings' => 'boolean',
+            'exclude_past_bookings' => 'boolean',
             'status' => ImportBatchStatus::class,
         ];
+    }
+
+    public function getRunBookingCheckAttribute(): bool
+    {
+        return (bool) $this->exclude_future_bookings || (bool) $this->exclude_past_bookings;
     }
 
     public function leads(): HasMany
@@ -90,6 +104,8 @@ class ImportBatch extends Model
         return max(0, (int) $this->inserted_count
             - (int) $this->rnd_reassigned
             - (int) $this->dnc_hit
-            - (int) $this->dnc_invalid);
+            - (int) $this->dnc_invalid
+            - (int) $this->booking_future_hit
+            - (int) $this->booking_past_hit);
     }
 }

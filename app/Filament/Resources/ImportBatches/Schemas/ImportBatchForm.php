@@ -4,6 +4,7 @@ namespace App\Filament\Resources\ImportBatches\Schemas;
 
 use App\Enums\ImportBatchStatus;
 use App\Filament\Support\BatchCheckFormSections;
+use App\Filament\Support\BookingBatchFormSection;
 use App\Filament\Support\DncBatchFormSection;
 use App\Filament\Support\LeadTypeSelect;
 use Filament\Forms\Components\DateTimePicker;
@@ -65,9 +66,18 @@ class ImportBatchForm
                         ->label('TCPA consent (ignore national and state DNC)')
                         ->helperText('When DNC runs, national and state hits are recorded but do not mark the lead DNC. Litigator and internal DNC still block.')
                         ->columnSpanFull(),
+                    Toggle::make('exclude_future_bookings')
+                        ->label('Exclude future bookings')
+                        ->helperText('Marks matching leads Booked when Salesforce has a future tour in an active status.')
+                        ->columnSpanFull(),
+                    Toggle::make('exclude_past_bookings')
+                        ->label('Exclude past bookings')
+                        ->helperText('Marks matching leads Booked when Salesforce has any past tour date.')
+                        ->columnSpanFull(),
                 ]),
                 ...BatchCheckFormSections::counterSections(),
                 ...DncBatchFormSection::sections(),
+                ...BookingBatchFormSection::sections(),
             ]);
     }
 }

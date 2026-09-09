@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\BookingCheckStatus;
 use App\Enums\DncStatus;
 use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
@@ -84,6 +85,10 @@ class Lead extends Model
         'dnc_checked_at',
         'dnc_last_error',
         'dnc_result',
+        'booking_check_status',
+        'booking_checked_at',
+        'booking_check_last_error',
+        'booking_check_result',
     ];
 
     protected function casts(): array
@@ -105,6 +110,9 @@ class Lead extends Model
             'dnc_status' => DncStatus::class,
             'dnc_checked_at' => 'datetime',
             'dnc_result' => 'array',
+            'booking_check_status' => BookingCheckStatus::class,
+            'booking_checked_at' => 'datetime',
+            'booking_check_result' => 'array',
         ];
     }
 
@@ -333,6 +341,36 @@ class Lead extends Model
         }
 
         return $formatted;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function bookingMatches(): array
+    {
+        $matches = $this->booking_check_result['matches'] ?? [];
+
+        return is_array($matches) ? $matches : [];
+    }
+
+    public function bookingDetailLabel(): ?string
+    {
+        $matches = $this->bookingMatches();
+
+        if ($matches === []) {
+            return match ($this->booking_check_status) {
+                BookingCheckStatus::Clear => 'No matching bookings',
+                BookingCheckStatus::Error => 'Booking check failed',
+                default => null,
+            };
+        }
+
+        $first = $matches[0];
+        $status = is_string($first['status'] ?? null) ? $first['status'] : null;
+        $tourDate = is_string($first['tour_date'] ?? null) ? $first['tour_date'] : null;
+        $parts = array_filter([$status, $tourDate]);
+
+        return $parts !== [] ? implode(' — ', $parts) : null;
     }
 
     private static function nullableTrimmedString(mixed $value): ?string

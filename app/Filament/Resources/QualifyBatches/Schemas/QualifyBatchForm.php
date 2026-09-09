@@ -4,7 +4,9 @@ namespace App\Filament\Resources\QualifyBatches\Schemas;
 
 use App\Enums\QualifyBatchStatus;
 use App\Filament\Support\BatchCheckFormSections;
+use App\Filament\Support\BookingBatchFormSection;
 use App\Filament\Support\DncBatchFormSection;
+use Filament\Forms\Components\Toggle;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -40,9 +42,17 @@ class QualifyBatchForm
                             ->numeric(),
                     ])
                     ->columns(3)),
-                BatchCheckFormSections::checksRun(),
+                BatchCheckFormSections::checksRun([
+                    Toggle::make('exclude_future_bookings')
+                        ->label('Exclude future bookings')
+                        ->columnSpanFull(),
+                    Toggle::make('exclude_past_bookings')
+                        ->label('Exclude past bookings')
+                        ->columnSpanFull(),
+                ]),
                 ...BatchCheckFormSections::counterSections(),
                 ...DncBatchFormSection::sections(),
+                ...BookingBatchFormSection::sections(),
             ]);
     }
 }

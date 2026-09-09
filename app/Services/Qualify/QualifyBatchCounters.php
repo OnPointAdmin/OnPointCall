@@ -2,6 +2,7 @@
 
 namespace App\Services\Qualify;
 
+use App\Enums\BookingCheckStatus;
 use App\Enums\DncStatus;
 use App\Enums\QualificationStatus;
 use App\Enums\RndStatus;
@@ -97,6 +98,30 @@ class QualifyBatchCounters
             DncStatus::Invalid => $updates['dnc_invalid'] = $batch->dnc_invalid + 1,
             DncStatus::Error => $updates['dnc_error'] = $batch->dnc_error + 1,
             DncStatus::Pending => null,
+        };
+
+        $batch->update($updates);
+        $batch->syncStatusFromCounters();
+    }
+
+    public function completeBooking(?int $qualifyBatchId, BookingCheckStatus $status): void
+    {
+        $batch = $this->lock($qualifyBatchId);
+
+        if (! $batch) {
+            return;
+        }
+
+        $updates = [
+            'booking_check_pending' => max(0, $batch->booking_check_pending - 1),
+        ];
+
+        match ($status) {
+            BookingCheckStatus::Clear => $updates['booking_check_clear'] = $batch->booking_check_clear + 1,
+            BookingCheckStatus::FutureHit => $updates['booking_future_hit'] = $batch->booking_future_hit + 1,
+            BookingCheckStatus::PastHit => $updates['booking_past_hit'] = $batch->booking_past_hit + 1,
+            BookingCheckStatus::Error => $updates['booking_check_error'] = $batch->booking_check_error + 1,
+            BookingCheckStatus::Pending => null,
         };
 
         $batch->update($updates);

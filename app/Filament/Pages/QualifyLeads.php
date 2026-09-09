@@ -57,6 +57,8 @@ class QualifyLeads extends Page implements HasTable
             'run_rnd_check' => true,
             'run_qualification' => true,
             'run_dnc_check' => true,
+            'exclude_future_bookings' => true,
+            'exclude_past_bookings' => true,
             'max_count' => null,
         ]);
     }
@@ -92,6 +94,16 @@ class QualifyLeads extends Page implements HasTable
                             ->helperText('Queues a DNC.com scrub. TCPA / national DNC handling follows each lead’s import batch. Hits are marked DNC.')
                             ->default(true)
                             ->live(),
+                        Toggle::make('exclude_future_bookings')
+                            ->label('Exclude future bookings')
+                            ->helperText('Queries Salesforce Booking__c. Matching future tours mark the lead Booked.')
+                            ->default(true)
+                            ->live(),
+                        Toggle::make('exclude_past_bookings')
+                            ->label('Exclude past bookings')
+                            ->helperText('Queries Salesforce Booking__c. Matching past tours mark the lead Booked.')
+                            ->default(true)
+                            ->live(),
                         TextInput::make('max_count')
                             ->label('Max Count')
                             ->numeric()
@@ -122,7 +134,7 @@ class QualifyLeads extends Page implements HasTable
                                 ->color('primary')
                                 ->requiresConfirmation()
                                 ->modalHeading('Run checks on these leads?')
-                                ->modalDescription('Selected checks run for matching leads, including leads that already have a result. Holding leads stay unassignable while a check is Pending. RND reassigned numbers become Terminal. DNC hits are marked DNC.'),
+                                ->modalDescription('Selected checks run for matching leads, including leads that already have a result. Holding leads stay unassignable while a check is Pending. RND reassigned numbers become Terminal. DNC hits are marked DNC. Booking hits are marked Booked.'),
                         ]),
                     ]),
                 Section::make('Selected leads')
@@ -150,8 +162,10 @@ class QualifyLeads extends Page implements HasTable
         $runRndCheck = (bool) ($qualify['run_rnd_check'] ?? false);
         $runQualification = (bool) ($qualify['run_qualification'] ?? false);
         $runDncCheck = (bool) ($qualify['run_dnc_check'] ?? false);
+        $excludeFutureBookings = (bool) ($qualify['exclude_future_bookings'] ?? false);
+        $excludePastBookings = (bool) ($qualify['exclude_past_bookings'] ?? false);
 
-        if (! $runSoftScore && ! $runRndCheck && ! $runQualification && ! $runDncCheck) {
+        if (! $runSoftScore && ! $runRndCheck && ! $runQualification && ! $runDncCheck && ! $excludeFutureBookings && ! $excludePastBookings) {
             Notification::make()
                 ->title('Select at least one check')
                 ->danger()
@@ -176,6 +190,8 @@ class QualifyLeads extends Page implements HasTable
             runRndCheck: $runRndCheck,
             runQualification: $runQualification,
             runDncCheck: $runDncCheck,
+            excludeFutureBookings: $excludeFutureBookings,
+            excludePastBookings: $excludePastBookings,
             maxCount: $this->maxCountFromValue($qualify['max_count'] ?? null),
             userId: auth()->id(),
         );

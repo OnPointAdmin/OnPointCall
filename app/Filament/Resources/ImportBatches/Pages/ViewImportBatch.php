@@ -167,6 +167,43 @@ class ViewImportBatch extends ViewRecord
                         ->success()
                         ->send();
                 }),
+            Action::make('runBookingCheck')
+                ->label('Run booking check')
+                ->color('primary')
+                ->requiresConfirmation()
+                ->modalHeading('Run Salesforce booking check on this batch?')
+                ->modalDescription('This will query Booking__c for every unchecked lead. Matching future or past bookings mark the lead Booked based on this batch’s toggles.')
+                ->visible(fn (): bool => ! $this->getRecord()->run_booking_check
+                    && $this->getRecord()->status === ImportBatchStatus::Completed)
+                ->action(function (ImportBatchCheckRetryService $retryService): void {
+                    /** @var ImportBatch $batch */
+                    $batch = $this->getRecord();
+                    $queued = $retryService->runBookingCheck($batch, Auth::id());
+
+                    $this->refreshRecord();
+
+                    Notification::make()
+                        ->title($queued === 0 ? 'No unchecked leads for booking check' : "Queued {$queued} lead(s) for booking check")
+                        ->success()
+                        ->send();
+                }),
+            Action::make('retryBookingErrors')
+                ->label('Retry booking errors')
+                ->color('warning')
+                ->requiresConfirmation()
+                ->visible(fn (): bool => (int) $this->getRecord()->booking_check_error > 0)
+                ->action(function (ImportBatchCheckRetryService $retryService): void {
+                    /** @var ImportBatch $batch */
+                    $batch = $this->getRecord();
+                    $queued = $retryService->retryBookingErrors($batch, Auth::id());
+
+                    $this->refreshRecord();
+
+                    Notification::make()
+                        ->title($queued === 0 ? 'No booking errors to retry' : "Queued {$queued} lead(s) for booking retry")
+                        ->success()
+                        ->send();
+                }),
             Action::make('reapplyDncConsent')
                 ->label('Re-apply DNC consent policy')
                 ->color('warning')

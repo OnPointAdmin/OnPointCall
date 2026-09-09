@@ -148,6 +148,8 @@ class QualifyLeadsTest extends TestCase
             runRndCheck: false,
             runQualification: false,
             runDncCheck: false,
+            excludeFutureBookings: false,
+            excludePastBookings: false,
             maxCount: null,
             userId: $admin->id,
         );
@@ -186,6 +188,8 @@ class QualifyLeadsTest extends TestCase
             runRndCheck: false,
             runQualification: true,
             runDncCheck: false,
+            excludeFutureBookings: false,
+            excludePastBookings: false,
             maxCount: null,
             userId: $admin->id,
         );

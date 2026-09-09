@@ -3,6 +3,7 @@
 namespace App\Services\Import;
 
 use App\DataTransferObjects\HoldingFilter;
+use App\Enums\BookingCheckStatus;
 use App\Enums\DncStatus;
 use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
@@ -553,6 +554,7 @@ class HoldingReleaseService
         $this->applySoftScoreAssignableScope($query);
         $this->applyQualificationAssignableScope($query);
         $this->applyDncAssignableScope($query);
+        $this->applyBookingAssignableScope($query);
     }
 
     private function applyRndAssignableScope(Builder $query): void
@@ -581,7 +583,8 @@ class HoldingReleaseService
         return $this->isRndAssignable($lead)
             && $this->isSoftScoreAssignable($lead)
             && $this->isQualificationAssignable($lead)
-            && $this->isDncAssignable($lead);
+            && $this->isDncAssignable($lead)
+            && $this->isBookingAssignable($lead);
     }
 
     private function isRndAssignable(Lead $lead): bool
@@ -636,6 +639,24 @@ class HoldingReleaseService
         }
 
         return $lead->dnc_status->isAssignable();
+    }
+
+    private function applyBookingAssignableScope(Builder $query): void
+    {
+        $query->where(function (Builder $assignable): void {
+            $assignable
+                ->whereNull('booking_check_status')
+                ->orWhere('booking_check_status', BookingCheckStatus::Clear->value);
+        });
+    }
+
+    private function isBookingAssignable(Lead $lead): bool
+    {
+        if ($lead->booking_check_status === null) {
+            return true;
+        }
+
+        return $lead->booking_check_status->isAssignable();
     }
 
     /**

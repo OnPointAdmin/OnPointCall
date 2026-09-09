@@ -102,6 +102,23 @@ class ViewQualifyBatch extends ViewRecord
                         ->success()
                         ->send();
                 }),
+            Action::make('retryBookingErrors')
+                ->label('Retry booking errors')
+                ->color('warning')
+                ->requiresConfirmation()
+                ->visible(fn (): bool => (int) $this->getRecord()->booking_check_error > 0)
+                ->action(function (QualifyBatchCheckRetryService $retryService): void {
+                    /** @var QualifyBatch $batch */
+                    $batch = $this->getRecord();
+                    $queued = $retryService->retryBookingErrors($batch, Auth::id());
+
+                    $this->refreshRecord();
+
+                    Notification::make()
+                        ->title($queued === 0 ? 'No booking errors to retry' : "Queued {$queued} lead(s) for booking retry")
+                        ->success()
+                        ->send();
+                }),
         ];
     }
 

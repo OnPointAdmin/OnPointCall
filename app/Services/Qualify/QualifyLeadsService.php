@@ -3,11 +3,13 @@
 namespace App\Services\Qualify;
 
 use App\DataTransferObjects\HoldingFilter;
+use App\Enums\BookingCheckStatus;
 use App\Enums\DncStatus;
 use App\Enums\QualificationStatus;
 use App\Enums\QualifyBatchStatus;
 use App\Enums\RndStatus;
 use App\Enums\SoftScoreStatus;
+use App\Jobs\BookingCheckJob;
 use App\Jobs\DncScrubJob;
 use App\Jobs\QualifyLeadJob;
 use App\Jobs\RndLeadJob;
@@ -29,6 +31,8 @@ class QualifyLeadsService
         bool $runRndCheck,
         bool $runQualification,
         bool $runDncCheck,
+        bool $excludeFutureBookings,
+        bool $excludePastBookings,
         ?int $maxCount,
         ?int $userId,
     ): QualifyBatch {
@@ -41,6 +45,8 @@ class QualifyLeadsService
         $qualificationLeadIds = [];
         $rndLeadIds = [];
         $dncLeadIds = [];
+        $bookingLeadIds = [];
+        $runBookingCheck = $excludeFutureBookings || $excludePastBookings;
         $queuedLeadIds = [];
 
         foreach ($leads as $lead) {
@@ -48,8 +54,9 @@ class QualifyLeadsService
             $queueQualification = $runQualification && $lead->qualification_status !== QualificationStatus::Pending;
             $queueRnd = $runRndCheck && $lead->rnd_status !== RndStatus::Pending;
             $queueDnc = $runDncCheck && $lead->dnc_status !== DncStatus::Pending;
+            $queueBooking = $runBookingCheck && $lead->booking_check_status !== BookingCheckStatus::Pending;
 
-            if (! $queueSoftScore && ! $queueQualification && ! $queueRnd && ! $queueDnc) {
+            if (! $queueSoftScore && ! $queueQualification && ! $queueRnd && ! $queueDnc && ! $queueBooking) {
                 continue;
             }
 
@@ -70,12 +77,17 @@ class QualifyLeadsService
             if ($queueDnc) {
                 $dncLeadIds[] = $lead->id;
             }
+
+            if ($queueBooking) {
+                $bookingLeadIds[] = $lead->id;
+            }
         }
 
         $hasJobs = $softScoreLeadIds !== []
             || $qualificationLeadIds !== []
             || $rndLeadIds !== []
-            || $dncLeadIds !== [];
+            || $dncLeadIds !== []
+            || $bookingLeadIds !== [];
 
         $batch = DB::transaction(function () use (
             $companyId,
@@ -84,6 +96,8 @@ class QualifyLeadsService
             $runRndCheck,
             $runQualification,
             $runDncCheck,
+            $excludeFutureBookings,
+            $excludePastBookings,
             $maxCount,
             $userId,
             $queuedLeadIds,
@@ -91,6 +105,7 @@ class QualifyLeadsService
             $qualificationLeadIds,
             $rndLeadIds,
             $dncLeadIds,
+            $bookingLeadIds,
             $hasJobs,
         ): QualifyBatch {
             $batch = QualifyBatch::withoutGlobalScopes()->create([
@@ -102,10 +117,13 @@ class QualifyLeadsService
                 'run_rnd_check' => $runRndCheck,
                 'run_qualification' => $runQualification,
                 'run_dnc_check' => $runDncCheck,
+                'exclude_future_bookings' => $excludeFutureBookings,
+                'exclude_past_bookings' => $excludePastBookings,
                 'soft_score_pending' => count($softScoreLeadIds),
                 'rnd_pending' => count($rndLeadIds),
                 'qualification_pending' => count($qualificationLeadIds),
                 'dnc_pending' => count($dncLeadIds),
+                'booking_check_pending' => count($bookingLeadIds),
                 'status' => $hasJobs
                     ? QualifyBatchStatus::Processing
                     : QualifyBatchStatus::Completed,
@@ -124,6 +142,7 @@ class QualifyLeadsService
             $qualificationLeadIds,
             $rndLeadIds,
             $dncLeadIds,
+            $bookingLeadIds,
             $userId,
         );
 
@@ -135,6 +154,7 @@ class QualifyLeadsService
      * @param  list<int>  $qualificationLeadIds
      * @param  list<int>  $rndLeadIds
      * @param  list<int>  $dncLeadIds
+     * @param  list<int>  $bookingLeadIds
      */
     private function dispatchJobs(
         int $qualifyBatchId,
@@ -142,6 +162,7 @@ class QualifyLeadsService
         array $qualificationLeadIds,
         array $rndLeadIds,
         array $dncLeadIds,
+        array $bookingLeadIds,
         ?int $actorId,
     ): void {
         $softScoreSet = array_fill_keys($softScoreLeadIds, true);
@@ -171,5 +192,6 @@ class QualifyLeadsService
         }
 
         DncScrubJob::dispatchForLeadIds($dncLeadIds, null, $actorId, $qualifyBatchId);
+        BookingCheckJob::dispatchForLeadIds($bookingLeadIds, null, $actorId, $qualifyBatchId);
     }
 }

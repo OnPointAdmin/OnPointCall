@@ -2,6 +2,7 @@
 
 namespace App\Services\Import;
 
+use App\Enums\BookingCheckStatus;
 use App\Enums\DncStatus;
 use App\Enums\ImportBatchStatus;
 use App\Enums\ImportSkipReason;
@@ -9,6 +10,7 @@ use App\Enums\LeadStatus;
 use App\Enums\QualificationStatus;
 use App\Enums\RndStatus;
 use App\Enums\SoftScoreStatus;
+use App\Jobs\BookingCheckJob;
 use App\Jobs\DncScrubJob;
 use App\Jobs\QualifyLeadJob;
 use App\Jobs\RndLeadJob;
@@ -103,6 +105,7 @@ class LeadImportService
         $rndJobLeadIds = [];
         $qualificationJobLeadIds = [];
         $dncJobLeadIds = [];
+        $bookingJobLeadIds = [];
         $duplicateCount = 0;
         $conflictCount = 0;
         $importedAt = now();
@@ -143,6 +146,7 @@ class LeadImportService
                         $rndJobLeadIds,
                         $qualificationJobLeadIds,
                         $dncJobLeadIds,
+                        $bookingJobLeadIds,
                     );
 
                     continue;
@@ -168,6 +172,7 @@ class LeadImportService
                 $rndJobLeadIds = [...$rndJobLeadIds, ...$queued['rnd']];
                 $qualificationJobLeadIds = [...$qualificationJobLeadIds, ...$queued['qualification']];
                 $dncJobLeadIds = [...$dncJobLeadIds, ...$queued['dnc']];
+                $bookingJobLeadIds = [...$bookingJobLeadIds, ...$queued['booking']];
 
                 continue;
             }
@@ -210,6 +215,10 @@ class LeadImportService
                 $leadAttributes['dnc_status'] = DncStatus::Pending;
             }
 
+            if ($batch->run_booking_check) {
+                $leadAttributes['booking_check_status'] = BookingCheckStatus::Pending;
+            }
+
             $lead = Lead::withoutGlobalScopes()->create($leadAttributes);
 
             $insertedLeadIds[] = $lead->id;
@@ -231,6 +240,10 @@ class LeadImportService
             if ($batch->run_dnc_check) {
                 $dncJobLeadIds[] = $lead->id;
             }
+
+            if ($batch->run_booking_check) {
+                $bookingJobLeadIds[] = $lead->id;
+            }
         }
 
         $totalRows = count($rows);
@@ -251,6 +264,7 @@ class LeadImportService
             'rnd_pending' => count($rndJobLeadIds),
             'qualification_pending' => count($qualificationJobLeadIds),
             'dnc_pending' => count($dncJobLeadIds),
+            'booking_check_pending' => count($bookingJobLeadIds),
         ]);
 
         $this->dispatchImportCheckJobs(
@@ -259,6 +273,7 @@ class LeadImportService
             $rndJobLeadIds,
             $qualificationJobLeadIds,
             $dncJobLeadIds,
+            $bookingJobLeadIds,
         );
 
         return [
@@ -280,6 +295,7 @@ class LeadImportService
      * @param  list<int>  $rndJobLeadIds
      * @param  list<int>  $qualificationJobLeadIds
      * @param  list<int>  $dncJobLeadIds
+     * @param  list<int>  $bookingJobLeadIds
      */
     private function dispatchImportCheckJobs(
         int $batchId,
@@ -287,6 +303,7 @@ class LeadImportService
         array $rndJobLeadIds,
         array $qualificationJobLeadIds,
         array $dncJobLeadIds,
+        array $bookingJobLeadIds = [],
     ): void {
         $softScoreSet = array_fill_keys($softScoreJobLeadIds, true);
         $qualificationSet = array_fill_keys($qualificationJobLeadIds, true);
@@ -314,11 +331,12 @@ class LeadImportService
         }
 
         DncScrubJob::dispatchForLeadIds($dncJobLeadIds, $batchId);
+        BookingCheckJob::dispatchForLeadIds($bookingJobLeadIds, $batchId);
     }
 
     /**
      * @param  array<string, mixed>  $attributes
-     * @return array{soft_score: list<int>, soft_score_recent: int, rnd: list<int>, qualification: list<int>, dnc: list<int>}
+     * @return array{soft_score: list<int>, soft_score_recent: int, rnd: list<int>, qualification: list<int>, dnc: list<int>, booking: list<int>}
      */
     private function updateRecoverableLead(
         Lead $lead,
@@ -330,11 +348,13 @@ class LeadImportService
         $oldRnd = $lead->rnd_status;
         $oldQualification = $lead->qualification_status;
         $oldDnc = $lead->dnc_status;
+        $oldBooking = $lead->booking_check_status;
 
         $retrySoftScore = $batch->run_soft_score && $oldSoftScore === SoftScoreStatus::Error;
         $retryRnd = $batch->run_rnd_check && $oldRnd === RndStatus::Error;
         $retryQualification = $batch->run_qualification && $oldQualification === QualificationStatus::Error;
         $retryDnc = $batch->run_dnc_check && $oldDnc === DncStatus::Error;
+        $retryBooking = $batch->run_booking_check && $oldBooking === BookingCheckStatus::Error;
 
         $fieldUpdates = array_filter(
             $attributes,
@@ -366,7 +386,12 @@ class LeadImportService
             $updates['dnc_last_error'] = null;
         }
 
-        DB::transaction(function () use ($lead, $updates, $oldBatchId, $retrySoftScore, $retryRnd, $retryQualification, $retryDnc): void {
+        if ($retryBooking) {
+            $updates['booking_check_status'] = BookingCheckStatus::Pending;
+            $updates['booking_check_last_error'] = null;
+        }
+
+        DB::transaction(function () use ($lead, $updates, $oldBatchId, $retrySoftScore, $retryRnd, $retryQualification, $retryDnc, $retryBooking): void {
             if ($oldBatchId) {
                 if ($retrySoftScore) {
                     $this->decrementSoftScoreCounter($oldBatchId, SoftScoreStatus::Error);
@@ -383,6 +408,10 @@ class LeadImportService
                 if ($retryDnc) {
                     $this->decrementDncCounter($oldBatchId, DncStatus::Error);
                 }
+
+                if ($retryBooking) {
+                    $this->decrementBookingCounter($oldBatchId, BookingCheckStatus::Error);
+                }
             }
 
             $lead->update($updates);
@@ -394,6 +423,7 @@ class LeadImportService
             'rnd' => $retryRnd ? [$lead->id] : [],
             'qualification' => $retryQualification ? [$lead->id] : [],
             'dnc' => $retryDnc ? [$lead->id] : [],
+            'booking' => $retryBooking ? [$lead->id] : [],
         ];
     }
 
@@ -465,6 +495,25 @@ class LeadImportService
             DncStatus::Invalid => ['dnc_invalid' => max(0, $batch->dnc_invalid - 1)],
             DncStatus::Error => ['dnc_error' => max(0, $batch->dnc_error - 1)],
             DncStatus::Pending => ['dnc_pending' => max(0, $batch->dnc_pending - 1)],
+        };
+
+        $batch->update($updates);
+    }
+
+    private function decrementBookingCounter(int $batchId, BookingCheckStatus $status): void
+    {
+        $batch = ImportBatch::withoutGlobalScopes()->lockForUpdate()->find($batchId);
+
+        if (! $batch) {
+            return;
+        }
+
+        $updates = match ($status) {
+            BookingCheckStatus::Clear => ['booking_check_clear' => max(0, $batch->booking_check_clear - 1)],
+            BookingCheckStatus::FutureHit => ['booking_future_hit' => max(0, $batch->booking_future_hit - 1)],
+            BookingCheckStatus::PastHit => ['booking_past_hit' => max(0, $batch->booking_past_hit - 1)],
+            BookingCheckStatus::Error => ['booking_check_error' => max(0, $batch->booking_check_error - 1)],
+            BookingCheckStatus::Pending => ['booking_check_pending' => max(0, $batch->booking_check_pending - 1)],
         };
 
         $batch->update($updates);
@@ -661,6 +710,7 @@ class LeadImportService
      * @param  list<int>  $rndJobLeadIds
      * @param  list<int>  $qualificationJobLeadIds
      * @param  list<int>  $dncJobLeadIds
+     * @param  list<int>  $bookingJobLeadIds
      */
     private function requeuePendingChecks(
         Lead $lead,
@@ -669,6 +719,7 @@ class LeadImportService
         array &$rndJobLeadIds,
         array &$qualificationJobLeadIds,
         array &$dncJobLeadIds,
+        array &$bookingJobLeadIds,
     ): void {
         if ($batch->run_soft_score && $lead->soft_score_status === SoftScoreStatus::Pending) {
             $softScoreJobLeadIds[] = $lead->id;
@@ -684,6 +735,10 @@ class LeadImportService
 
         if ($batch->run_dnc_check && $lead->dnc_status === DncStatus::Pending) {
             $dncJobLeadIds[] = $lead->id;
+        }
+
+        if ($batch->run_booking_check && $lead->booking_check_status === BookingCheckStatus::Pending) {
+            $bookingJobLeadIds[] = $lead->id;
         }
     }
 
@@ -793,7 +848,8 @@ class LeadImportService
         return $lead->soft_score_status === SoftScoreStatus::Error
             || $lead->rnd_status === RndStatus::Error
             || $lead->qualification_status === QualificationStatus::Error
-            || $lead->dnc_status === DncStatus::Error;
+            || $lead->dnc_status === DncStatus::Error
+            || $lead->booking_check_status === BookingCheckStatus::Error;
     }
 
     /**
@@ -1029,6 +1085,8 @@ class LeadImportService
         bool $runQualification = false,
         bool $runDncCheck = false,
         bool $ignoreNationalDnc = false,
+        bool $excludeFutureBookings = true,
+        bool $excludePastBookings = true,
     ): ImportBatch {
         return ImportBatch::withoutGlobalScopes()->create([
             'company_id' => $companyId,
@@ -1040,6 +1098,8 @@ class LeadImportService
             'run_qualification' => $runQualification,
             'run_dnc_check' => $runDncCheck,
             'ignore_national_dnc' => $ignoreNationalDnc,
+            'exclude_future_bookings' => $excludeFutureBookings,
+            'exclude_past_bookings' => $excludePastBookings,
             'status' => ImportBatchStatus::Pending,
         ]);
     }

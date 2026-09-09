@@ -2,11 +2,13 @@
 
 namespace App\Filament\Resources\ImportBatches\RelationManagers;
 
+use App\Enums\BookingCheckStatus;
 use App\Enums\DncStatus;
 use App\Enums\LeadStatus;
 use App\Enums\QualificationStatus;
 use App\Enums\RndStatus;
 use App\Enums\SoftScoreStatus;
+use App\Filament\Actions\ViewBookingCheckResultAction;
 use App\Filament\Actions\ViewDncResultAction;
 use App\Filament\Actions\ViewQualificationResultAction;
 use App\Filament\Support\BatchLeadsFilters;
@@ -101,6 +103,20 @@ class LeadsRelationManager extends RelationManager
                         : null)
                     ->action(ViewDncResultAction::make())
                     ->sortable(),
+                TextColumn::make('booking_check_status')
+                    ->label('Booking')
+                    ->badge()
+                    ->color(fn (?BookingCheckStatus $state): string => match ($state) {
+                        BookingCheckStatus::Clear => 'success',
+                        BookingCheckStatus::FutureHit, BookingCheckStatus::PastHit, BookingCheckStatus::Error => 'danger',
+                        default => 'gray',
+                    })
+                    ->formatStateUsing(fn (?BookingCheckStatus $state): ?string => $state?->label())
+                    ->tooltip(fn (Lead $record): ?string => $record->booking_check_status
+                        ? ($record->bookingDetailLabel() ?? 'View booking check result')
+                        : null)
+                    ->action(ViewBookingCheckResultAction::make())
+                    ->sortable(),
                 TextColumn::make('error')
                     ->label('Error')
                     ->wrap()
@@ -112,6 +128,7 @@ class LeadsRelationManager extends RelationManager
                             $record->rnd_last_error,
                             $record->qualification_last_error,
                             $record->dnc_last_error,
+                            $record->booking_check_last_error,
                         ]);
 
                         return $parts === [] ? null : implode(' | ', $parts);
@@ -138,6 +155,11 @@ class LeadsRelationManager extends RelationManager
                     ->label('DNC')
                     ->options(collect(DncStatus::cases())->mapWithKeys(
                         fn (DncStatus $status): array => [$status->value => $status->label()]
+                    )),
+                SelectFilter::make('booking_check_status')
+                    ->label('Booking')
+                    ->options(collect(BookingCheckStatus::cases())->mapWithKeys(
+                        fn (BookingCheckStatus $status): array => [$status->value => $status->label()]
                     )),
             ])
             ->headerActions([])

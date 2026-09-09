@@ -24,6 +24,7 @@ trait HasCheckBatchHealth
             || ($this->run_rnd_check && (int) $this->rnd_pending > 0)
             || ($this->run_qualification && (int) $this->qualification_pending > 0)
             || ($this->run_dnc_check && (int) $this->dnc_pending > 0)
+            || ($this->runBookingCheck() && (int) $this->booking_check_pending > 0)
         ) {
             return 'pending';
         }
@@ -33,6 +34,7 @@ trait HasCheckBatchHealth
             || (int) $this->rnd_error > 0
             || (int) $this->qualification_error > 0
             || (int) $this->dnc_error > 0
+            || (int) $this->booking_check_error > 0
         ) {
             return 'error';
         }
@@ -141,6 +143,11 @@ trait HasCheckBatchHealth
                 $inner->where('run_qualification', true)->where('qualification_pending', '>', 0);
             })->orWhere(function (Builder $inner): void {
                 $inner->where('run_dnc_check', true)->where('dnc_pending', '>', 0);
+            })->orWhere(function (Builder $inner): void {
+                $inner->where(function (Builder $booking): void {
+                    $booking->where('exclude_future_bookings', true)
+                        ->orWhere('exclude_past_bookings', true);
+                })->where('booking_check_pending', '>', 0);
             });
         });
     }
@@ -154,7 +161,13 @@ trait HasCheckBatchHealth
             $q->where('soft_score_error', '>', 0)
                 ->orWhere('rnd_error', '>', 0)
                 ->orWhere('qualification_error', '>', 0)
-                ->orWhere('dnc_error', '>', 0);
+                ->orWhere('dnc_error', '>', 0)
+                ->orWhere('booking_check_error', '>', 0);
         });
+    }
+
+    private function runBookingCheck(): bool
+    {
+        return (bool) $this->exclude_future_bookings || (bool) $this->exclude_past_bookings;
     }
 }

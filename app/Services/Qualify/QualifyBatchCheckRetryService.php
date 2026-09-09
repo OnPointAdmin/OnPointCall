@@ -2,11 +2,13 @@
 
 namespace App\Services\Qualify;
 
+use App\Enums\BookingCheckStatus;
 use App\Enums\DncStatus;
 use App\Enums\QualificationStatus;
 use App\Enums\QualifyBatchStatus;
 use App\Enums\RndStatus;
 use App\Enums\SoftScoreStatus;
+use App\Jobs\BookingCheckJob;
 use App\Jobs\DncScrubJob;
 use App\Jobs\QualifyLeadJob;
 use App\Jobs\RndLeadJob;
@@ -88,6 +90,26 @@ class QualifyBatchCheckRetryService
         $this->moveErrorToPending($batch, 'dnc_error', 'dnc_pending', $leads->count());
 
         DncScrubJob::dispatchForLeadIds(
+            $leads->pluck('id')->all(),
+            null,
+            $actorId,
+            $batch->id,
+        );
+
+        return $leads->count();
+    }
+
+    public function retryBookingErrors(QualifyBatch $batch, ?int $actorId = null): int
+    {
+        $leads = $this->errorLeads($batch, 'booking_check_status', BookingCheckStatus::Error);
+
+        if ($leads->isEmpty()) {
+            return 0;
+        }
+
+        $this->moveErrorToPending($batch, 'booking_check_error', 'booking_check_pending', $leads->count());
+
+        BookingCheckJob::dispatchForLeadIds(
             $leads->pluck('id')->all(),
             null,
             $actorId,

@@ -2,10 +2,12 @@
 
 namespace App\Services\Import;
 
+use App\Enums\BookingCheckStatus;
 use App\Enums\DncStatus;
 use App\Enums\QualificationStatus;
 use App\Enums\RndStatus;
 use App\Enums\SoftScoreStatus;
+use App\Jobs\BookingCheckJob;
 use App\Jobs\DncScrubJob;
 use App\Jobs\QualifyLeadJob;
 use App\Jobs\RndLeadJob;
@@ -182,6 +184,55 @@ class ImportBatchCheckRetryService
             ->get();
 
         DncScrubJob::dispatchForLeadIds($leads->pluck('id')->all(), $batch->id, $actorId);
+
+        return $leads->count();
+    }
+
+    public function runBookingCheck(ImportBatch $batch, ?int $actorId = null): int
+    {
+        $leads = Lead::withoutGlobalScopes()
+            ->where('import_batch_id', $batch->id)
+            ->whereNull('booking_check_status')
+            ->get();
+
+        if ($leads->isEmpty()) {
+            if (! $batch->run_booking_check) {
+                $batch->update([
+                    'exclude_future_bookings' => true,
+                    'exclude_past_bookings' => true,
+                ]);
+            }
+
+            return 0;
+        }
+
+        DB::transaction(function () use ($batch, $leads): void {
+            $locked = ImportBatch::withoutGlobalScopes()->lockForUpdate()->findOrFail($batch->id);
+
+            $locked->update([
+                'exclude_future_bookings' => true,
+                'exclude_past_bookings' => true,
+                'booking_check_pending' => $locked->booking_check_pending + $leads->count(),
+            ]);
+
+            Lead::withoutGlobalScopes()
+                ->whereIn('id', $leads->pluck('id'))
+                ->update(['booking_check_status' => BookingCheckStatus::Pending]);
+        });
+
+        BookingCheckJob::dispatchForLeadIds($leads->pluck('id')->all(), $batch->id, $actorId);
+
+        return $leads->count();
+    }
+
+    public function retryBookingErrors(ImportBatch $batch, ?int $actorId = null): int
+    {
+        $leads = Lead::withoutGlobalScopes()
+            ->where('import_batch_id', $batch->id)
+            ->where('booking_check_status', BookingCheckStatus::Error)
+            ->get();
+
+        BookingCheckJob::dispatchForLeadIds($leads->pluck('id')->all(), $batch->id, $actorId);
 
         return $leads->count();
     }
