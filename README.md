@@ -9,6 +9,7 @@ Laravel + Filament + PostgreSQL call center application for OnPoint Marketing.
 | Doc | Role |
 |-----|------|
 | [plans/call-center-architecture.md](plans/call-center-architecture.md) | **Source of truth** — stack, data model, locked owner decisions |
+| [Docs/Help/about.md](Docs/Help/about.md) | About OnPoint Marketing’s Lead Booking Application (in-app Help → About) |
 | [Docs/COMMANDS.md](Docs/COMMANDS.md) | Copy-paste Docker / artisan / npm commands |
 | [Docs/REQUIREMENTS_chatgpt.md](Docs/REQUIREMENTS_chatgpt.md) | Requirements input (architecture wins on conflict) |
 | [Docs/SoftScore/soft-score-api.md](Docs/SoftScore/soft-score-api.md) | Soft Score API integration |

@@ -92,6 +92,7 @@ class AdminPanelProvider extends PanelProvider
                 NavigationGroup::make('Compliance'),
                 NavigationGroup::make('Configuration'),
                 NavigationGroup::make('Administration'),
+                NavigationGroup::make('Help'),
             ])
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\Filament\Widgets')
             ->renderHook(
