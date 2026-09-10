@@ -22,6 +22,7 @@ Thumbs.db
 NUL
 .idea/
 .vscode/
+.cursor/plans/
 .sf/
 *.swp
 *.swo
