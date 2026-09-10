@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\EnsureCanCall;
 use App\Http\Middleware\EnsurePasswordChanged;
+use App\Http\Middleware\RestoreAdminWebGuard;
 use App\Http\Middleware\SetCompanyContext;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Application;
@@ -24,6 +25,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->redirectGuestsTo(fn () => url('/'));
 
         $middleware->web(append: [
+            RestoreAdminWebGuard::class,
             SetCompanyContext::class,
         ]);
 

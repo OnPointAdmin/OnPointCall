@@ -98,7 +98,10 @@ class AgentAuthTest extends TestCase
         $this->get(route('choose'))
             ->assertOk()
             ->assertSee('Admin')
-            ->assertSee('Agent window');
+            ->assertSee('Agent window')
+            ->assertSee('href="'.url('/admin').'"', false)
+            ->assertSee('href="'.route('agent.workspace').'"', false)
+            ->assertDontSee('fi-btn', false);
     }
 
     public function test_agent_and_admin_sessions_can_coexist(): void

@@ -9,6 +9,7 @@ use App\Filament\Pages\CallDetail;
 use App\Filament\Pages\Dashboard;
 use App\Filament\Pages\QualifyLeads;
 use App\Http\Middleware\EnsurePasswordChanged;
+use App\Http\Middleware\RestoreAdminWebGuard;
 use App\Http\Middleware\SetCompanyContext;
 use Filament\Actions\Action;
 use Filament\Http\Middleware\Authenticate;
@@ -113,6 +114,7 @@ class AdminPanelProvider extends PanelProvider
                 AddQueuedCookiesToResponse::class,
                 StartSession::class,
                 AuthenticateSession::class,
+                RestoreAdminWebGuard::class,
                 ShareErrorsFromSession::class,
                 PreventRequestForgery::class,
                 SubstituteBindings::class,
