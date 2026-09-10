@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Enums\LeadTablePreset;
 use App\Exceptions\HoldingReleaseException;
 use App\Filament\Pages\Concerns\InteractsWithLeadPoolFilter;
 use App\Models\CallingList;
@@ -14,19 +15,23 @@ use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Actions;
 use Filament\Schemas\Components\EmbeddedSchema;
-use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Components\Form;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
-use Filament\Tables\Concerns\InteractsWithTable;
+use App\Filament\Pages\Concerns\InteractsWithPersistedLeadTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 
 class AssignLeads extends Page implements HasTable
 {
-    use InteractsWithLeadPoolFilter;
-    use InteractsWithTable;
+    use InteractsWithPersistedLeadTable, InteractsWithLeadPoolFilter {
+        InteractsWithLeadPoolFilter::updatedTableFilters insteadof InteractsWithPersistedLeadTable;
+        InteractsWithLeadPoolFilter::resetTableFiltersForm insteadof InteractsWithPersistedLeadTable;
+        InteractsWithLeadPoolFilter::getFilteredSortedTableQuery insteadof InteractsWithPersistedLeadTable;
+        InteractsWithLeadPoolFilter::getFilteredTableQuery insteadof InteractsWithPersistedLeadTable;
+        InteractsWithLeadPoolFilter::mountInteractsWithTable insteadof InteractsWithPersistedLeadTable;
+    }
 
     protected static string|\UnitEnum|null $navigationGroup = 'Leads';
 
@@ -45,13 +50,19 @@ class AssignLeads extends Page implements HasTable
      */
     public ?array $releaseData = [];
 
-    public function mount(HoldingReleaseService $releaseService): void
+    public function mount(): void
     {
-        $this->initializeLeadPoolFilter($releaseService);
+        $this->mountLeadPoolTable();
+        $this->refreshCount(app(HoldingReleaseService::class));
 
         $this->releaseForm->fill([
             'max_count' => null,
         ]);
+    }
+
+    protected function leadPoolPreset(): LeadTablePreset
+    {
+        return LeadTablePreset::Assign;
     }
 
     public function releaseForm(Schema $schema): Schema
@@ -63,7 +74,7 @@ class AssignLeads extends Page implements HasTable
                         Select::make('calling_list_id')
                             ->label('Target calling list')
                             ->options(function (): array {
-                                $leadType = $this->filterData['lead_type'] ?? null;
+                                $leadType = $this->selectedLeadType();
                                 $sourceCallingListId = $this->selectedSourceCallingListId();
 
                                 $query = CallingList::query()->where('active', true);
@@ -98,7 +109,6 @@ class AssignLeads extends Page implements HasTable
     {
         return $schema
             ->components([
-                $this->leadPoolFilterFormComponent(),
                 Form::make([EmbeddedSchema::make('releaseForm')])
                     ->id('releaseForm')
                     ->livewireSubmitHandler('release')
@@ -110,11 +120,7 @@ class AssignLeads extends Page implements HasTable
                                 ->color('primary'),
                         ]),
                     ]),
-                Section::make('Selected leads')
-                    ->description(fn (): string => $this->selectedLeadsDescription())
-                    ->schema([
-                        EmbeddedTable::make(),
-                    ]),
+                $this->leadPoolTableSection(),
             ]);
     }
 
@@ -126,6 +132,7 @@ class AssignLeads extends Page implements HasTable
     public function updatedReleaseData(): void
     {
         $this->resetSelectedLeadsTable();
+        $this->refreshCount(app(HoldingReleaseService::class));
     }
 
     public function release(HoldingReleaseService $releaseService): void

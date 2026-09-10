@@ -3,17 +3,14 @@
 namespace App\Filament\Pages\Concerns;
 
 use App\DataTransferObjects\HoldingFilter;
-use App\Enums\QualifiedPartnersMatch;
-use App\Filament\Support\LeadPoolFilterForm;
-use App\Filament\Support\LeadPoolPreviewTable;
+use App\Enums\LeadTablePreset;
+use App\Filament\Resources\Leads\Tables\LeadsTable;
+use App\Filament\Support\LeadTableFilterMapper;
 use App\Models\Lead;
 use App\Services\Import\HoldingReleaseService;
-use Filament\Actions\Action;
-use Filament\Schemas\Components\Actions;
-use Filament\Schemas\Components\EmbeddedSchema;
-use Filament\Schemas\Components\Form;
+use Filament\Schemas\Components\EmbeddedTable;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
-use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -21,62 +18,78 @@ trait InteractsWithLeadPoolFilter
 {
     public int $holdingCount = 0;
 
-    /**
-     * @var array<string, mixed>|null
-     */
-    public ?array $filterData = [];
+    abstract protected function leadPoolPreset(): LeadTablePreset;
 
-    /**
-     * @return array<Action>
-     */
-    protected function getHeaderActions(): array
+    protected function leadTablePreset(): LeadTablePreset
     {
-        return [
-            Action::make('clearFilters')
-                ->label('Clear Filters')
-                ->icon(Heroicon::OutlinedXMark)
-                ->color('gray')
-                ->action(function (HoldingReleaseService $releaseService): void {
-                    $this->clearFilters($releaseService);
-                }),
-        ];
+        return $this->leadPoolPreset();
     }
 
-    public function filterForm(Schema $schema): Schema
+    public function mountLeadPoolTable(): void
     {
-        return $schema
-            ->components(LeadPoolFilterForm::sections($this))
-            ->statePath('filterData');
+        $this->tableFilters = $this->leadPoolPreset()->defaultTableFilters();
     }
 
-    public function clearFilters(HoldingReleaseService $releaseService): void
+    public function mountInteractsWithTable(): void
     {
-        $reset = array_fill_keys(array_keys($this->filterData ?? []), null);
+        $this->filamentMountInteractsWithTable();
 
-        $this->filterForm->fill(array_merge($reset, $this->defaultFilterData()));
-        $this->refreshCount($releaseService);
+        if (blank($this->tableFilters)) {
+            $this->tableFilters = $this->leadPoolPreset()->defaultTableFilters();
+        }
     }
 
-    public function refreshCountAction(HoldingReleaseService $releaseService): void
+    public function bootedInteractsWithLeadPoolFilter(): void
     {
-        $this->refreshCount($releaseService);
-    }
+        if (blank($this->tableFilters)) {
+            $this->tableFilters = $this->leadPoolPreset()->defaultTableFilters();
+        }
 
-    public function updatedFilterData(): void
-    {
+        if (! isset($this->table)) {
+            return;
+        }
+
+        $this->getTableFiltersForm()->fill($this->tableFilters);
         $this->refreshCount(app(HoldingReleaseService::class));
+    }
+
+    public function updatedTableFilters(): void
+    {
+        $this->handleTableFilterUpdates();
+        $this->refreshCount(app(HoldingReleaseService::class));
+    }
+
+    public function resetTableFiltersForm(): void
+    {
+        $this->tableFilters = [];
+        $this->tableDeferredFilters = null;
+
+        if ($this->getTable()->hasDeferredFilters()) {
+            $this->tableFilters = $this->leadPoolPreset()->defaultTableFilters();
+            $this->getTableFiltersForm()->fill($this->tableFilters);
+        } else {
+            $this->tableFilters = $this->leadPoolPreset()->defaultTableFilters();
+        }
+
+        $this->handleTableFilterUpdates();
+        $this->refreshCount(app(HoldingReleaseService::class));
+    }
+
+    public function leadPoolAssignableOnly(): bool
+    {
+        return true;
     }
 
     public function selectedLeadType(): ?string
     {
-        $leadType = $this->filterData['lead_type'] ?? null;
+        $leadType = $this->tableFilters['lead_type']['value'] ?? null;
 
         return $leadType !== null && $leadType !== '' ? (string) $leadType : null;
     }
 
     public function selectedSourceCallingListId(): ?int
     {
-        $source = $this->filterData['source_calling_list_id'] ?? 'holding';
+        $source = $this->tableFilters['calling_list_id']['value'] ?? 'holding';
 
         if ($source === null || $source === '' || $source === 'holding') {
             return null;
@@ -85,46 +98,42 @@ trait InteractsWithLeadPoolFilter
         return (int) $source;
     }
 
-    public function leadPoolAssignableOnly(): bool
+    protected function leadPoolTableSection(): Section
     {
-        return true;
-    }
-
-    protected function initializeLeadPoolFilter(HoldingReleaseService $releaseService): void
-    {
-        $this->filterForm->fill($this->defaultFilterData());
-        $this->refreshCount($releaseService);
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    protected function defaultFilterData(): array
-    {
-        return [
-            'lead_type' => 'standard',
-            'source_calling_list_id' => 'holding',
-            'qualified_partners_match' => QualifiedPartnersMatch::InList->value,
-        ];
-    }
-
-    protected function leadPoolFilterFormComponent(): Form
-    {
-        return Form::make([EmbeddedSchema::make('filterForm')])
-            ->id('filterForm')
-            ->livewireSubmitHandler('refreshCountAction')
-            ->footer([
-                Actions::make([
-                    Action::make('applyFilters')
-                        ->label('Update count')
-                        ->action('refreshCountAction'),
-                ]),
+        return Section::make('Selected leads')
+            ->description(fn (): string => $this->selectedLeadsDescription())
+            ->schema([
+                EmbeddedTable::make(),
             ]);
     }
 
     protected function configureLeadPoolTable(Table $table): Table
     {
-        return LeadPoolPreviewTable::configure($table, fn (): Builder => $this->matchingLeadsQuery());
+        return LeadsTable::configure($table, $this->leadPoolPreset())
+            ->query(fn (): Builder => $this->poolLeadsQuery())
+            ->heading(null)
+            ->emptyStateHeading('No matching leads')
+            ->emptyStateDescription('Adjust the filters above to select leads.');
+    }
+
+    protected function poolLeadsQuery(): Builder
+    {
+        return app(HoldingReleaseService::class)->queryHolding(
+            (int) auth()->user()->company_id,
+            $this->buildFilter(),
+            $this->leadPoolAssignableOnly(),
+        )->with(['latestDisposition']);
+    }
+
+    public function getFilteredTableQuery(): ?Builder
+    {
+        if (! isset($this->table)) {
+            return null;
+        }
+
+        $query = $this->poolLeadsQuery();
+
+        return $this->applySearchToTableQuery($query);
     }
 
     protected function refreshCount(HoldingReleaseService $releaseService): void
@@ -148,19 +157,27 @@ trait InteractsWithLeadPoolFilter
         $this->flushCachedTableRecords();
     }
 
-    /**
-     * @return Builder<Lead>
-     */
-    protected function matchingLeadsQuery(): Builder
+    public function getFilteredSortedTableQuery(): ?Builder
     {
-        return app(HoldingReleaseService::class)
-            ->queryMatchingLeads(
-                (int) auth()->user()->company_id,
-                $this->buildFilter(),
-                $this->leadPoolPreviewMaxCount(),
-                $this->leadPoolAssignableOnly(),
-            )
-            ->with(['latestDisposition']);
+        $query = $this->filamentGetFilteredSortedTableQuery();
+
+        if (! $query) {
+            return null;
+        }
+
+        $maxCount = $this->leadPoolPreviewMaxCount();
+
+        if ($maxCount === null) {
+            return $query;
+        }
+
+        $ids = (clone $query)
+            ->reorder()
+            ->orderByDesc('imported_at')
+            ->limit($maxCount)
+            ->pluck('id');
+
+        return Lead::query()->whereIn('id', $ids);
     }
 
     protected function selectedLeadsDescription(): string
@@ -185,62 +202,9 @@ trait InteractsWithLeadPoolFilter
 
     protected function buildFilter(): HoldingFilter
     {
-        $data = $this->filterData ?? [];
-
-        return new HoldingFilter(
-            leadType: $this->selectedLeadType(),
-            sourceCallingListId: $this->selectedSourceCallingListId(),
-            state: $this->selectedList($data['state'] ?? null),
-            venue: $this->selectedList($data['venue'] ?? null),
-            event: $this->selectedList($data['event'] ?? null),
-            importBatchId: isset($data['import_batch_id']) ? (int) $data['import_batch_id'] : null,
-            importedFrom: $data['imported_from'] ?? null,
-            importedTo: $data['imported_to'] ?? null,
-            createdFrom: $data['created_from'] ?? null,
-            createdTo: $data['created_to'] ?? null,
-            zip: $data['zip'] ?? null,
-            partner: $this->selectedList($data['partner'] ?? null),
-            fileName: $data['file_name'] ?? null,
-            softScoreCode: $this->selectedList($data['soft_score_code'] ?? null),
-            ageRange: $this->selectedList($data['age_range'] ?? null),
-            annualIncome: $this->selectedList($data['annual_income'] ?? null),
-            maritalStatus: $this->selectedList($data['marital_status'] ?? null),
-            gender: $this->selectedList($data['gender'] ?? null),
-            homeOwner: $this->selectedList($data['home_owner'] ?? null),
-            tourLocation: $this->selectedList($data['tour_location'] ?? null),
-            tourDateStart: $this->selectedList($data['tour_date_start'] ?? null),
-            tourDate: $this->selectedList($data['tour_date'] ?? null),
-            tourResult: $this->selectedList($data['tour_result'] ?? null),
-            qualificationStatus: isset($data['qualification_status']) && $data['qualification_status'] !== ''
-                ? (string) $data['qualification_status']
-                : null,
-            lastDispositions: $this->selectedList($data['last_dispositions'] ?? null),
-            attemptCount: isset($data['attempt_count']) && $data['attempt_count'] !== ''
-                ? (int) $data['attempt_count']
-                : null,
-            qualifiedPartners: $this->selectedList($data['qualified_partners'] ?? null),
-            qualifiedPartnersMatch: isset($data['qualified_partners_match']) && $data['qualified_partners_match'] !== ''
-                ? (string) $data['qualified_partners_match']
-                : null,
+        return LeadTableFilterMapper::toHoldingFilter(
+            $this->tableFilters ?? $this->leadPoolPreset()->defaultTableFilters(),
         );
-    }
-
-    /**
-     * @return list<string>|null
-     */
-    protected function selectedList(mixed $value): ?array
-    {
-        if ($value === null || $value === '') {
-            return null;
-        }
-
-        $values = is_array($value) ? $value : [$value];
-        $normalized = array_values(array_filter(
-            array_map(static fn (mixed $item): string => trim((string) $item), $values),
-            static fn (string $item): bool => $item !== '',
-        ));
-
-        return $normalized === [] ? null : $normalized;
     }
 
     protected function maxCountFromValue(mixed $value): ?int

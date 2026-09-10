@@ -194,10 +194,7 @@ class AssignLeadsTest extends TestCase
         Livewire::actingAs($admin)
             ->test(AssignLeads::class)
             ->assertSet('holdingCount', 1)
-            ->fillForm([
-                'qualification_status' => QualificationStatus::Qualified->value,
-            ], 'filterForm')
-            ->call('refreshCountAction')
+            ->filterTable('qualification_status', QualificationStatus::Qualified->value)
             ->assertSet('holdingCount', 0);
     }
 
@@ -232,17 +229,12 @@ class AssignLeadsTest extends TestCase
         Livewire::actingAs($admin)
             ->test(AssignLeads::class)
             ->assertOk()
-            ->assertFormFieldExists('qualified_partners', 'filterForm')
-            ->assertFormFieldExists('qualified_partners_match', 'filterForm')
+            ->assertTableFilterExists('qualified_partners')
+            ->assertTableFilterExists('qualified_partners_match')
             ->assertSee('Qualified · Partners')
-            ->assertSee('In the list')
-            ->assertSee('Travel Partner')
             ->assertSet('holdingCount', 2)
             ->assertCanSeeTableRecords([$travel, $other])
-            ->fillForm([
-                'qualified_partners' => ['Travel Partner'],
-            ], 'filterForm')
-            ->call('refreshCountAction')
+            ->filterTable('qualified_partners', ['Travel Partner'])
             ->assertSet('holdingCount', 1)
             ->assertCanSeeTableRecords([$travel])
             ->assertCanNotSeeTableRecords([$other]);
@@ -279,18 +271,11 @@ class AssignLeadsTest extends TestCase
 
         Livewire::actingAs($admin)
             ->test(AssignLeads::class)
-            ->fillForm([
-                'qualified_partners' => ['Travel Partner'],
-                'qualified_partners_match' => QualifiedPartnersMatch::InList->value,
-            ], 'filterForm')
-            ->call('refreshCountAction')
+            ->filterTable('qualified_partners', ['Travel Partner'])
+            ->filterTable('qualified_partners_match', QualifiedPartnersMatch::InList->value)
             ->assertSet('holdingCount', 2)
             ->assertCanSeeTableRecords([$onlyTravel, $travelAndOther])
-            ->fillForm([
-                'qualified_partners' => ['Travel Partner'],
-                'qualified_partners_match' => QualifiedPartnersMatch::Only->value,
-            ], 'filterForm')
-            ->call('refreshCountAction')
+            ->filterTable('qualified_partners_match', QualifiedPartnersMatch::Only->value)
             ->assertSet('holdingCount', 1)
             ->assertCanSeeTableRecords([$onlyTravel])
             ->assertCanNotSeeTableRecords([$travelAndOther]);
@@ -318,10 +303,7 @@ class AssignLeadsTest extends TestCase
         Livewire::actingAs($admin)
             ->test(AssignLeads::class)
             ->assertSet('holdingCount', 2)
-            ->fillForm([
-                'qualified_partners' => ['none'],
-            ], 'filterForm')
-            ->call('refreshCountAction')
+            ->filterTable('qualified_partners', ['none'])
             ->assertSet('holdingCount', 1)
             ->assertCanSeeTableRecords([$none])
             ->assertCanNotSeeTableRecords([$travel]);
@@ -336,22 +318,15 @@ class AssignLeadsTest extends TestCase
 
         Livewire::actingAs($admin)
             ->test(AssignLeads::class)
-            ->assertActionExists('clearFilters')
-            ->assertSee('Clear Filters')
             ->assertSet('holdingCount', 2)
-            ->fillForm([
-                'created_from' => '2026-06-01',
-                'created_to' => '2026-06-30',
-            ], 'filterForm')
-            ->call('refreshCountAction')
+            ->filterTable('created_at', [
+                'start_date' => '2026-06-01',
+                'end_date' => '2026-06-30',
+            ])
             ->assertSet('holdingCount', 1)
             ->assertCanSeeTableRecords([$inside])
             ->assertCanNotSeeTableRecords([$outside])
-            ->callAction('clearFilters')
-            ->assertSet('filterData.created_from', null)
-            ->assertSet('filterData.created_to', null)
-            ->assertSet('filterData.lead_type', 'standard')
-            ->assertSet('filterData.source_calling_list_id', 'holding')
+            ->call('resetTableFiltersForm')
             ->assertSet('holdingCount', 2)
             ->assertCanSeeTableRecords([$inside, $outside]);
     }
@@ -367,13 +342,11 @@ class AssignLeadsTest extends TestCase
         Livewire::actingAs($admin)
             ->test(AssignLeads::class)
             ->assertSet('holdingCount', 3)
-            ->assertFormFieldExists('created_from', 'filterForm')
-            ->assertFormFieldExists('created_to', 'filterForm')
-            ->fillForm([
-                'created_from' => '2026-06-01',
-                'created_to' => '2026-06-30',
-            ], 'filterForm')
-            ->call('refreshCountAction')
+            ->assertTableFilterExists('created_at')
+            ->filterTable('created_at', [
+                'start_date' => '2026-06-01',
+                'end_date' => '2026-06-30',
+            ])
             ->assertSet('holdingCount', 1)
             ->assertCanSeeTableRecords([$inside])
             ->assertCanNotSeeTableRecords([$before, $after]);
@@ -390,10 +363,7 @@ class AssignLeadsTest extends TestCase
             ->test(AssignLeads::class)
             ->assertSet('holdingCount', 2)
             ->assertCanSeeTableRecords([$zeroAttempts, $twoAttempts])
-            ->fillForm([
-                'attempt_count' => 2,
-            ], 'filterForm')
-            ->call('refreshCountAction')
+            ->filterTable('attempt_count', ['attempt_count' => 2])
             ->assertSet('holdingCount', 1)
             ->assertCanSeeTableRecords([$twoAttempts])
             ->assertCanNotSeeTableRecords([$zeroAttempts]);
@@ -413,10 +383,7 @@ class AssignLeadsTest extends TestCase
 
         Livewire::actingAs($admin)
             ->test(AssignLeads::class)
-            ->fillForm([
-                'source_calling_list_id' => (string) $sourceList->id,
-            ], 'filterForm')
-            ->call('refreshCountAction')
+            ->filterTable('calling_list_id', (string) $sourceList->id)
             ->assertSet('holdingCount', 2)
             ->fillForm([
                 'calling_list_id' => $targetList->id,
@@ -450,9 +417,7 @@ class AssignLeadsTest extends TestCase
 
         Livewire::actingAs($admin)
             ->test(AssignLeads::class)
-            ->fillForm([
-                'source_calling_list_id' => (string) $sourceList->id,
-            ], 'filterForm')
+            ->filterTable('calling_list_id', (string) $sourceList->id)
             ->fillForm([
                 'calling_list_id' => $targetList->id,
                 'max_count' => null,

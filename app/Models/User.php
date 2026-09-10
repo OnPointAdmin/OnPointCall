@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\LeadTablePreset;
 use App\Enums\UserRole;
 use App\Mail\PasswordResetMail;
 use App\Models\Concerns\BelongsToCompany;
@@ -19,7 +20,7 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
-#[Fillable(['company_id', 'name', 'email', 'role', 'active', 'google_id', 'microsoft_id', 'salesforce_id', 'password', 'must_change_password', 'email_verified_at'])]
+#[Fillable(['company_id', 'name', 'email', 'role', 'active', 'google_id', 'microsoft_id', 'salesforce_id', 'password', 'must_change_password', 'lead_table_layouts', 'email_verified_at'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable implements FilamentUser
 {
@@ -34,7 +35,39 @@ class User extends Authenticatable implements FilamentUser
             'active' => 'boolean',
             'role' => UserRole::class,
             'must_change_password' => 'boolean',
+            'lead_table_layouts' => 'array',
         ];
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>|null
+     */
+    public function leadTableLayout(LeadTablePreset $preset): ?array
+    {
+        $layouts = $this->lead_table_layouts ?? [];
+        $layout = $layouts[$preset->value] ?? null;
+
+        return is_array($layout) ? $layout : null;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $layout
+     */
+    public function saveLeadTableLayout(LeadTablePreset $preset, array $layout): void
+    {
+        $layouts = $this->lead_table_layouts ?? [];
+        $layouts[$preset->value] = $layout;
+
+        $this->forceFill(['lead_table_layouts' => $layouts])->save();
+    }
+
+    public function clearLeadTableLayout(LeadTablePreset $preset): void
+    {
+        $layouts = $this->lead_table_layouts ?? [];
+
+        unset($layouts[$preset->value]);
+
+        $this->forceFill(['lead_table_layouts' => $layouts])->save();
     }
 
     public function mustChangePassword(): bool

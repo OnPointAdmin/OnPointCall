@@ -548,6 +548,26 @@ class HoldingReleaseService
         });
     }
 
+    public function applyAssignableScopesToQuery(Builder $query): void
+    {
+        $this->applyAssignableScopes($query);
+    }
+
+    public function applyPoolSourceToQuery(Builder $query, ?int $sourceCallingListId): void
+    {
+        $this->applySourceScope($query, $sourceCallingListId);
+    }
+
+    public function applyQualifiedPartnersToQuery(Builder $query, HoldingFilter $filter): void
+    {
+        $this->applyQualifiedPartnersFilter($query, $filter);
+    }
+
+    public function applyLastDispositionsToQuery(Builder $query, ?array $lastDispositions): void
+    {
+        $this->applyLastDispositionFilter($query, $lastDispositions);
+    }
+
     private function applyAssignableScopes(Builder $query): void
     {
         $this->applyRndAssignableScope($query);

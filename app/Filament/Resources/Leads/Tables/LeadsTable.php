@@ -2,15 +2,9 @@
 
 namespace App\Filament\Resources\Leads\Tables;
 
-use App\Models\DispositionDefinition;
-use App\Support\CompanyContext;
-use App\Enums\DncStatus;
-use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
-use App\Enums\QualificationStatus;
-use App\Enums\SoftScoreStatus;
-use App\Filament\Actions\ViewDncResultAction;
-use App\Filament\Actions\ViewQualificationResultAction;
+use App\Enums\LeadTablePreset;
+use App\Filament\Actions\ReassignCallbackAction;
 use App\Filament\Resources\Leads\Schemas\LeadForm;
 use App\Jobs\DncScrubJob;
 use App\Jobs\QualifyLeadJob;
@@ -18,7 +12,8 @@ use App\Jobs\RndLeadJob;
 use App\Jobs\SoftScoreLeadJob;
 use App\Models\CallingList;
 use App\Models\Lead;
-use App\Models\LeadTypeDefinition;
+use App\Models\User;
+use App\Services\Import\HoldingReleaseService;
 use App\Services\Leads\DispositionService;
 use App\Services\Leads\LeadMergeService;
 use App\Services\Leads\LeadRecycleService;
@@ -29,8 +24,7 @@ use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
 use Filament\Schemas\Schema;
 use Filament\Support\Enums\Width;
-use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Enums\FiltersLayout;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -38,401 +32,223 @@ use Illuminate\Support\Facades\Auth;
 
 class LeadsTable
 {
-    public static function configure(Table $table, bool $forCallingList = false): Table
+    public static function configure(Table $table, LeadTablePreset $preset = LeadTablePreset::AllLeads): Table
     {
-        $columns = [
-            TextColumn::make('phone')
-                ->searchable(),
-            TextColumn::make('external_lead_id')
-                ->label('External ID')
-                ->searchable()
-                ->placeholder('—')
-                ->toggleable(),
-            TextColumn::make('first_name')
-                ->searchable()
-                ->toggleable(),
-            TextColumn::make('last_name')
-                ->searchable()
-                ->toggleable(),
-            TextColumn::make('state')
-                ->searchable()
-                ->toggleable(),
-            TextColumn::make('venue')
-                ->searchable()
-                ->sortable()
-                ->placeholder('—')
-                ->toggleable(),
-            TextColumn::make('event')
-                ->searchable()
-                ->sortable()
-                ->placeholder('—')
-                ->toggleable(),
-            TextColumn::make('status')
-                ->badge()
-                ->searchable()
-                ->toggleable(),
-            TextColumn::make('last_disposition')
-                ->label('Last Disp')
-                ->badge()
-                ->placeholder('—')
-                ->toggleable()
-                ->getStateUsing(function (Lead $record): ?string {
-                    $value = $record->latestDisposition?->payload['disposition'] ?? null;
+        $filters = LeadsTableFilters::make($preset, $table);
+        $defaultSort = $preset->defaultSort();
 
-                    if (! is_string($value) || $value === '') {
-                        return null;
-                    }
+        $table = $table
+            ->modifyQueryUsing(function (Builder $query) use ($preset): Builder {
+                $query->with(['latestDisposition', 'callbackOwner', 'callingList']);
 
-                    return DispositionDefinition::labelForSlug($record->company_id, $value) ?? $value;
-                }),
-            TextColumn::make('last_attempt_at')
-                ->label('Last Call Date')
-                ->dateTime()
-                ->sortable()
-                ->placeholder('—')
-                ->toggleable(),
-            TextColumn::make('attempt_count')
-                ->numeric()
-                ->sortable()
-                ->toggleable(),
-            TextColumn::make('calling_list_assigned_at')
-                ->label('Added to list')
-                ->dateTime()
-                ->sortable()
-                ->placeholder('—')
-                ->toggleable(),
-        ];
+                if ($preset->appliesAssignableScope() && ! $preset->usesPoolSourceScope()) {
+                    app(HoldingReleaseService::class)->applyAssignableScopesToQuery($query);
+                }
 
-        if (! $forCallingList) {
-            $columns[] = TextColumn::make('callingList.name')
-                ->label('List')
-                ->searchable()
-                ->toggleable();
-        }
+                if ($preset === LeadTablePreset::Callbacks) {
+                    $query->where('status', LeadStatus::Callback);
+                }
 
-        $columns = [
-            ...$columns,
-            TextColumn::make('file_name')
-                ->label('Source file')
-                ->searchable()
-                ->toggleable(isToggledHiddenByDefault: true),
-            TextColumn::make('lead_type')
-                ->badge()
-                ->toggleable(),
-            TextColumn::make('soft_score_code')
-                ->label('Soft Score')
-                ->toggleable(),
-            TextColumn::make('soft_score_status')
-                ->label('Soft Score status')
-                ->badge()
-                ->formatStateUsing(fn (?SoftScoreStatus $state): ?string => $state?->label())
-                ->toggleable(),
-            TextColumn::make('soft_score_checked_at')
-                ->label('Soft Score last checked')
-                ->dateTime()
-                ->toggleable(isToggledHiddenByDefault: true),
-            TextColumn::make('qualification_status')
-                ->badge()
-                ->color(fn (?QualificationStatus $state): string => match ($state) {
-                    QualificationStatus::Qualified => 'success',
-                    QualificationStatus::NotQualified => 'warning',
-                    QualificationStatus::Error => 'danger',
-                    default => 'gray',
-                })
-                ->formatStateUsing(fn (?QualificationStatus $state): ?string => $state?->label())
-                ->tooltip(fn (Lead $record): ?string => $record->qualification_status
-                    ? 'View qualification response'
-                    : null)
-                ->action(ViewQualificationResultAction::make())
-                ->toggleable(),
-            TextColumn::make('dnc_status')
-                ->label('DNC')
-                ->badge()
-                ->color(fn (?DncStatus $state): string => match ($state) {
-                    DncStatus::Clear => 'success',
-                    DncStatus::Hit, DncStatus::Invalid => 'danger',
-                    DncStatus::Error => 'danger',
-                    default => 'gray',
-                })
-                ->formatStateUsing(fn (?DncStatus $state): ?string => $state?->label())
-                ->tooltip(fn (Lead $record): ?string => $record->dnc_status
-                    ? ($record->dncDetailLabel() ?? 'View DNC scrub result')
-                    : null)
-                ->action(ViewDncResultAction::make())
-                ->toggleable(),
-            TextColumn::make('callback_at')
-                ->dateTime()
-                ->sortable()
-                ->toggleable(isToggledHiddenByDefault: true),
-            TextColumn::make('imported_at')
-                ->dateTime()
-                ->sortable()
-                ->toggleable(isToggledHiddenByDefault: true),
-        ];
-
-        $filters = [
-            SelectFilter::make('status')
-                ->options(collect(LeadStatus::cases())->mapWithKeys(fn ($s) => [$s->value => $s->label()])),
-            SelectFilter::make('lead_type')
-                ->options(fn (): array => LeadTypeDefinition::allOptions()),
-        ];
-
-        if (! $forCallingList) {
-            $filters[] = SelectFilter::make('calling_list_id')
-                ->label('Calling list')
-                ->options(fn (): array => ['holding' => 'Holding'] + CallingList::query()->orderBy('name')->pluck('name', 'id')->all())
-                ->query(function (Builder $query, array $data): Builder {
-                    $value = $data['value'] ?? null;
-
-                    if ($value === null || $value === '') {
-                        return $query;
-                    }
-
-                    if ($value === 'holding') {
-                        return $query->whereNull('calling_list_id');
-                    }
-
-                    return $query->where('calling_list_id', $value);
-                });
-        }
-
-        $filters = [
-            ...$filters,
-            SelectFilter::make('venue')
-                ->label('Venue')
-                ->options(fn (): array => self::distinctLeadValues('venue', $table, $forCallingList))
-                ->searchable(),
-            SelectFilter::make('event')
-                ->label('Event')
-                ->options(fn (): array => self::distinctLeadValues('event', $table, $forCallingList))
-                ->searchable(),
-            SelectFilter::make('last_disposition')
-                ->label('Last Disp')
-                ->options(fn (): array => ['none' => 'None'] + DispositionDefinition::filterOptions(
-                    (int) (CompanyContext::idOrAuthenticated() ?? Auth::user()?->company_id),
-                ))
-                ->query(function (Builder $query, array $data): Builder {
-                    $value = $data['value'] ?? null;
-
-                    if ($value === null || $value === '') {
-                        return $query;
-                    }
-
-                    if ($value === 'none') {
-                        return $query->whereDoesntHave('history', function (Builder $history): void {
-                            $history->where('event_type', LeadHistoryType::Disposition->value);
-                        });
-                    }
-
-                    return $query->whereHas('latestDisposition', function (Builder $latest) use ($value): void {
-                        $latest->where('payload->disposition', $value);
-                    });
-                }),
-            SelectFilter::make('soft_score_status')
-                ->options(collect(SoftScoreStatus::cases())->mapWithKeys(fn ($s) => [$s->value => $s->label()])),
-            SelectFilter::make('qualification_status')
-                ->options(collect(QualificationStatus::cases())->mapWithKeys(fn ($s) => [$s->value => $s->label()])),
-            SelectFilter::make('dnc_status')
-                ->label('DNC')
-                ->options(collect(DncStatus::cases())->mapWithKeys(fn ($s) => [$s->value => $s->label()])),
-        ];
-
-        return $table
-            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with('latestDisposition'))
-            ->columns($columns)
-            ->filters($filters)
-            ->recordActions([
-                $forCallingList
-                    ? ViewAction::make()
-                        ->slideOver()
-                        ->modalWidth(Width::Full)
-                        ->schema(fn (Schema $schema): Schema => LeadForm::configure($schema, withHistory: true)->columns(2))
-                    : ViewAction::make(),
-            ])
+                return $query;
+            })
+            ->columns(LeadsTableColumns::make($preset))
+            ->filters($filters, layout: FiltersLayout::Modal)
+            ->filtersFormColumns(3)
+            ->filtersFormWidth(Width::SevenExtraLarge)
+            ->filtersFormMaxHeight('70vh')
+            ->filtersFormSchema(fn (array $filters): array => LeadsTableFilters::filterFormSchema($filters))
+            ->defaultSort($defaultSort['column'], $defaultSort['direction'])
+            ->paginated([10, 25, 50, 100])
+            ->defaultPaginationPageOption(25)
+            ->recordActions(self::recordActions($preset))
             ->toolbarActions([
-                BulkActionGroup::make([
-                    BulkAction::make('recycle')
-                        ->label('Recycle')
-                        ->icon('heroicon-o-arrow-path')
-                        ->requiresConfirmation()
-                        ->action(function (Collection $records): void {
-                            $service = app(LeadRecycleService::class);
-                            $count = 0;
-
-                            foreach ($records as $record) {
-                                try {
-                                    $service->recycle($record, Auth::user());
-                                    $count++;
-                                } catch (\InvalidArgumentException) {
-                                    // skip DNC
-                                }
-                            }
-
-                            Notification::make()
-                                ->title("Recycled {$count} lead(s)")
-                                ->success()
-                                ->send();
-                        }),
-                    BulkAction::make('markDnc')
-                        ->label('Mark DNC')
-                        ->color('danger')
-                        ->icon('heroicon-o-no-symbol')
-                        ->requiresConfirmation()
-                        ->action(function (Collection $records): void {
-                            $service = app(DispositionService::class);
-                            $user = Auth::user();
-
-                            foreach ($records as $record) {
-                                if ($record->status !== LeadStatus::Dnc) {
-                                    $service->apply($record, $user, 'dnc');
-                                }
-                            }
-
-                            Notification::make()
-                                ->title('Marked selected leads as DNC')
-                                ->success()
-                                ->send();
-                        }),
-                    BulkAction::make('moveList')
-                        ->label('Move to list')
-                        ->icon('heroicon-o-arrows-right-left')
-                        ->form([
-                            Select::make('calling_list_id')
-                                ->label('Target list')
-                                ->options(fn (): array => CallingList::query()->orderBy('name')->pluck('name', 'id')->all())
-                                ->searchable()
-                                ->required(),
-                        ])
-                        ->action(function (Collection $records, array $data): void {
-                            $target = CallingList::query()->findOrFail($data['calling_list_id']);
-                            $moved = 0;
-
-                            foreach ($records as $record) {
-                                if ($record->lead_type !== $target->lead_type) {
-                                    continue;
-                                }
-
-                                $record->update(['calling_list_id' => $target->id]);
-                                $moved++;
-                            }
-
-                            Notification::make()
-                                ->title("Moved {$moved} lead(s)")
-                                ->success()
-                                ->send();
-                        }),
-                    BulkAction::make('mergeDuplicates')
-                        ->label('Merge duplicates')
-                        ->icon('heroicon-o-link')
-                        ->requiresConfirmation()
-                        ->modalDescription('Merges selected leads into the first selected lead. History is consolidated.')
-                        ->action(function (Collection $records): void {
-                            if ($records->count() < 2) {
-                                Notification::make()
-                                    ->title('Select at least two leads to merge')
-                                    ->warning()
-                                    ->send();
-
-                                return;
-                            }
-
-                            $survivor = $records->first();
-                            $service = app(LeadMergeService::class);
-                            $merged = 0;
-
-                            foreach ($records->skip(1) as $duplicate) {
-                                $service->merge($survivor, $duplicate, Auth::user());
-                                $merged++;
-                            }
-
-                            Notification::make()
-                                ->title("Merged {$merged} duplicate lead(s)")
-                                ->success()
-                                ->send();
-                        }),
-                    BulkAction::make('rerunSoftScore')
-                        ->label('Re-run Soft Score')
-                        ->icon('heroicon-o-signal')
-                        ->requiresConfirmation()
-                        ->action(function (Collection $records): void {
-                            foreach ($records as $record) {
-                                SoftScoreLeadJob::dispatch($record->id, $record->import_batch_id, Auth::id());
-                            }
-
-                            Notification::make()
-                                ->title('Soft Score jobs queued')
-                                ->success()
-                                ->send();
-                        }),
-                    BulkAction::make('rerunRnd')
-                        ->label('Re-run RND')
-                        ->icon('heroicon-o-phone-arrow-up-right')
-                        ->requiresConfirmation()
-                        ->action(function (Collection $records): void {
-                            foreach ($records as $record) {
-                                RndLeadJob::dispatch($record->id, $record->import_batch_id, Auth::id());
-                            }
-
-                            Notification::make()
-                                ->title('RND jobs queued')
-                                ->success()
-                                ->send();
-                        }),
-                    BulkAction::make('rerunQualification')
-                        ->label('Re-run Qualification')
-                        ->icon('heroicon-o-check-badge')
-                        ->requiresConfirmation()
-                        ->action(function (Collection $records): void {
-                            foreach ($records as $record) {
-                                QualifyLeadJob::dispatch($record->id, $record->import_batch_id, Auth::id());
-                            }
-
-                            Notification::make()
-                                ->title('Qualification jobs queued')
-                                ->success()
-                                ->send();
-                        }),
-                    BulkAction::make('rerunDnc')
-                        ->label('Re-run DNC')
-                        ->icon('heroicon-o-no-symbol')
-                        ->requiresConfirmation()
-                        ->action(function (Collection $records): void {
-                            DncScrubJob::dispatchForLeadIds(
-                                $records->pluck('id')->all(),
-                                null,
-                                Auth::id(),
-                            );
-
-                            Notification::make()
-                                ->title('DNC jobs queued')
-                                ->success()
-                                ->send();
-                        }),
-                ]),
+                BulkActionGroup::make(self::bulkActions()),
             ]);
+
+        return $table;
     }
 
     /**
-     * @return array<string, string>
+     * @return list<ViewAction>
      */
-    private static function distinctLeadValues(string $column, Table $table, bool $forCallingList): array
+    private static function recordActions(LeadTablePreset $preset): array
     {
-        $query = Lead::query()
-            ->whereNotNull($column)
-            ->where($column, '!=', '');
+        $view = $preset->usesSlideOverView()
+            ? ViewAction::make()
+                ->slideOver()
+                ->modalWidth(Width::Full)
+                ->schema(fn (Schema $schema): Schema => LeadForm::configure($schema, withHistory: true)->columns(2))
+            : ViewAction::make();
 
-        if ($forCallingList) {
-            $owner = $table->getLivewire()->getOwnerRecord();
+        return [
+            $view,
+            ReassignCallbackAction::make(),
+        ];
+    }
 
-            if ($owner instanceof CallingList) {
-                $query->where('calling_list_id', $owner->id);
-            }
-        }
+    /**
+     * @return list<BulkAction>
+     */
+    private static function bulkActions(): array
+    {
+        return [
+            BulkAction::make('recycle')
+                ->label('Recycle')
+                ->icon('heroicon-o-arrow-path')
+                ->requiresConfirmation()
+                ->action(function (Collection $records): void {
+                    $service = app(LeadRecycleService::class);
+                    $count = 0;
 
-        return $query
-            ->distinct()
-            ->orderBy($column)
-            ->pluck($column, $column)
-            ->all();
+                    foreach ($records as $record) {
+                        try {
+                            $service->recycle($record, Auth::user());
+                            $count++;
+                        } catch (\InvalidArgumentException) {
+                            // skip DNC
+                        }
+                    }
+
+                    Notification::make()
+                        ->title("Recycled {$count} lead(s)")
+                        ->success()
+                        ->send();
+                }),
+            BulkAction::make('markDnc')
+                ->label('Mark DNC')
+                ->color('danger')
+                ->icon('heroicon-o-no-symbol')
+                ->requiresConfirmation()
+                ->action(function (Collection $records): void {
+                    $service = app(DispositionService::class);
+                    $user = Auth::user();
+
+                    foreach ($records as $record) {
+                        if ($record->status !== LeadStatus::Dnc) {
+                            $service->apply($record, $user, 'dnc');
+                        }
+                    }
+
+                    Notification::make()
+                        ->title('Marked selected leads as DNC')
+                        ->success()
+                        ->send();
+                }),
+            BulkAction::make('moveList')
+                ->label('Move to list')
+                ->icon('heroicon-o-arrows-right-left')
+                ->form([
+                    Select::make('calling_list_id')
+                        ->label('Target list')
+                        ->options(fn (): array => CallingList::query()->orderBy('name')->pluck('name', 'id')->all())
+                        ->searchable()
+                        ->required(),
+                ])
+                ->action(function (Collection $records, array $data): void {
+                    $target = CallingList::query()->findOrFail($data['calling_list_id']);
+                    $moved = 0;
+
+                    foreach ($records as $record) {
+                        if ($record->lead_type !== $target->lead_type) {
+                            continue;
+                        }
+
+                        $record->update(['calling_list_id' => $target->id]);
+                        $moved++;
+                    }
+
+                    Notification::make()
+                        ->title("Moved {$moved} lead(s)")
+                        ->success()
+                        ->send();
+                }),
+            BulkAction::make('mergeDuplicates')
+                ->label('Merge duplicates')
+                ->icon('heroicon-o-link')
+                ->requiresConfirmation()
+                ->modalDescription('Merges selected leads into the first selected lead. History is consolidated.')
+                ->action(function (Collection $records): void {
+                    if ($records->count() < 2) {
+                        Notification::make()
+                            ->title('Select at least two leads to merge')
+                            ->warning()
+                            ->send();
+
+                        return;
+                    }
+
+                    $survivor = $records->first();
+                    $service = app(LeadMergeService::class);
+                    $merged = 0;
+
+                    foreach ($records->skip(1) as $duplicate) {
+                        $service->merge($survivor, $duplicate, Auth::user());
+                        $merged++;
+                    }
+
+                    Notification::make()
+                        ->title("Merged {$merged} duplicate lead(s)")
+                        ->success()
+                        ->send();
+                }),
+            BulkAction::make('rerunSoftScore')
+                ->label('Re-run Soft Score')
+                ->icon('heroicon-o-signal')
+                ->requiresConfirmation()
+                ->action(function (Collection $records): void {
+                    foreach ($records as $record) {
+                        SoftScoreLeadJob::dispatch($record->id, $record->import_batch_id, Auth::id());
+                    }
+
+                    Notification::make()
+                        ->title('Soft Score jobs queued')
+                        ->success()
+                        ->send();
+                }),
+            BulkAction::make('rerunRnd')
+                ->label('Re-run RND')
+                ->icon('heroicon-o-phone-arrow-up-right')
+                ->requiresConfirmation()
+                ->action(function (Collection $records): void {
+                    foreach ($records as $record) {
+                        RndLeadJob::dispatch($record->id, $record->import_batch_id, Auth::id());
+                    }
+
+                    Notification::make()
+                        ->title('RND jobs queued')
+                        ->success()
+                        ->send();
+                }),
+            BulkAction::make('rerunQualification')
+                ->label('Re-run Qualification')
+                ->icon('heroicon-o-check-badge')
+                ->requiresConfirmation()
+                ->action(function (Collection $records): void {
+                    foreach ($records as $record) {
+                        QualifyLeadJob::dispatch($record->id, $record->import_batch_id, Auth::id());
+                    }
+
+                    Notification::make()
+                        ->title('Qualification jobs queued')
+                        ->success()
+                        ->send();
+                }),
+            BulkAction::make('rerunDnc')
+                ->label('Re-run DNC')
+                ->icon('heroicon-o-no-symbol')
+                ->requiresConfirmation()
+                ->action(function (Collection $records): void {
+                    DncScrubJob::dispatchForLeadIds(
+                        $records->pluck('id')->all(),
+                        null,
+                        Auth::id(),
+                    );
+
+                    Notification::make()
+                        ->title('DNC jobs queued')
+                        ->success()
+                        ->send();
+                }),
+        ];
     }
 }

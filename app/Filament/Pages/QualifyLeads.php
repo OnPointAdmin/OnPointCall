@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Enums\LeadTablePreset;
 use App\Filament\Navigation\QualifyNavigation;
 use App\Filament\Pages\Concerns\InteractsWithLeadPoolFilter;
 use App\Filament\Resources\QualifyBatches\QualifyBatchResource;
@@ -15,19 +16,23 @@ use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Actions;
 use Filament\Schemas\Components\EmbeddedSchema;
-use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Components\Form;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
-use Filament\Tables\Concerns\InteractsWithTable;
+use App\Filament\Pages\Concerns\InteractsWithPersistedLeadTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 
 class QualifyLeads extends Page implements HasTable
 {
-    use InteractsWithLeadPoolFilter;
-    use InteractsWithTable;
+    use InteractsWithPersistedLeadTable, InteractsWithLeadPoolFilter {
+        InteractsWithLeadPoolFilter::updatedTableFilters insteadof InteractsWithPersistedLeadTable;
+        InteractsWithLeadPoolFilter::resetTableFiltersForm insteadof InteractsWithPersistedLeadTable;
+        InteractsWithLeadPoolFilter::getFilteredSortedTableQuery insteadof InteractsWithPersistedLeadTable;
+        InteractsWithLeadPoolFilter::getFilteredTableQuery insteadof InteractsWithPersistedLeadTable;
+        InteractsWithLeadPoolFilter::mountInteractsWithTable insteadof InteractsWithPersistedLeadTable;
+    }
 
     protected static string|\UnitEnum|null $navigationGroup = QualifyNavigation::GROUP;
 
@@ -48,9 +53,10 @@ class QualifyLeads extends Page implements HasTable
      */
     public ?array $qualifyData = [];
 
-    public function mount(HoldingReleaseService $releaseService): void
+    public function mount(): void
     {
-        $this->initializeLeadPoolFilter($releaseService);
+        $this->mountLeadPoolTable();
+        $this->refreshCount(app(HoldingReleaseService::class));
 
         $this->qualifyForm->fill([
             'run_soft_score' => true,
@@ -61,6 +67,11 @@ class QualifyLeads extends Page implements HasTable
             'exclude_past_bookings' => true,
             'max_count' => null,
         ]);
+    }
+
+    protected function leadPoolPreset(): LeadTablePreset
+    {
+        return LeadTablePreset::Qualify;
     }
 
     public function leadPoolAssignableOnly(): bool
@@ -122,7 +133,6 @@ class QualifyLeads extends Page implements HasTable
     {
         return $schema
             ->components([
-                $this->leadPoolFilterFormComponent(),
                 Form::make([EmbeddedSchema::make('qualifyForm')])
                     ->id('qualifyForm')
                     ->livewireSubmitHandler('qualify')
@@ -137,11 +147,7 @@ class QualifyLeads extends Page implements HasTable
                                 ->modalDescription('Selected checks run for matching leads, including leads that already have a result. Holding leads stay unassignable while a check is Pending. RND reassigned numbers become Terminal. DNC hits are marked DNC. Booking hits are marked Booked.'),
                         ]),
                     ]),
-                Section::make('Selected leads')
-                    ->description(fn (): string => $this->selectedLeadsDescription())
-                    ->schema([
-                        EmbeddedTable::make(),
-                    ]),
+                $this->leadPoolTableSection(),
             ]);
     }
 
@@ -153,6 +159,7 @@ class QualifyLeads extends Page implements HasTable
     public function updatedQualifyData(): void
     {
         $this->resetSelectedLeadsTable();
+        $this->refreshCount(app(HoldingReleaseService::class));
     }
 
     public function qualify(QualifyLeadsService $qualifyLeadsService): void
