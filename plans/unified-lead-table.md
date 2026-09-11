@@ -22,7 +22,7 @@ One builder: `app/Filament/Resources/Leads/Tables/LeadsTable.php`.
 
 - **Search** on phone, names, state, external ID (and other searchable columns already on All Leads)
 - **Column picker** (`toggleable`) with the full field set available on every screen
-- **Filters** — one set, the union of All Leads + Qualify/Assign pool + batch check filters. Use a filter **modal** (multi-column) so the long list stays usable. Labels stay consistent (Start Date / End Date, Calling list, Last Disp, …)
+- **Filters** — one set, the union of All Leads + Qualify/Assign pool + batch check filters. The toolbar filter icon opens that set stacked **vertically** (dropdown, one column). Labels stay consistent (Start Date / End Date, Calling list, Last Disp, …)
 - **Pagination** `[10, 25, 50, 100]`, default 25
 - **Row action** — same as All Leads today: `ViewAction` to the lead view page
 - **Bulk actions** — Recycle, Mark DNC, Move to list, Merge, re-run Soft Score / RND / Qualification / DNC

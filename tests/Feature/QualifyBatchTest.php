@@ -15,6 +15,7 @@ use App\Models\QualifyBatch;
 use App\Models\User;
 use App\Services\SoftScore\SoftScoreService;
 use App\Support\CompanyContext;
+use Filament\Tables\Enums\FiltersLayout;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
@@ -281,6 +282,42 @@ class QualifyBatchTest extends TestCase
             ->filterTable('soft_score_code', 'NQ')
             ->assertCanSeeTableRecords([$nq])
             ->assertCanNotSeeTableRecords([$q, $pc1]);
+    }
+
+    public function test_leads_table_uses_vertical_dropdown_filters(): void
+    {
+        $company = Company::factory()->create();
+        $admin = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Admin,
+        ]);
+        CompanyContext::set($company->id);
+
+        $batch = QualifyBatch::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'user_id' => $admin->id,
+            'lead_count' => 0,
+            'status' => QualifyBatchStatus::Completed,
+        ]);
+
+        $component = Livewire::actingAs($admin)
+            ->test(LeadsRelationManager::class, [
+                'ownerRecord' => $batch,
+                'pageClass' => ViewQualifyBatch::class,
+            ])
+            ->assertOk()
+            ->assertTableFilterExists('status')
+            ->assertTableFilterExists('lead_type')
+            ->assertTableFilterExists('venue')
+            ->assertTableFilterExists('soft_score_code')
+            ->assertTableFilterExists('qualified_partners')
+            ->assertTableFilterExists('created_at')
+            ->assertTableFilterExists('tour_location');
+
+        $table = $component->instance()->getTable();
+
+        $this->assertSame(FiltersLayout::Dropdown, $table->getFiltersLayout());
+        $this->assertSame(1, $table->getFiltersFormColumns());
     }
 
     public function test_health_is_error_when_soft_score_errors_exist(): void

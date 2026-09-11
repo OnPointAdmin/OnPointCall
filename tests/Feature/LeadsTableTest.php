@@ -14,6 +14,7 @@ use App\Models\LeadHistory;
 use App\Models\User;
 use App\Support\CompanyContext;
 use Carbon\Carbon;
+use Filament\Tables\Enums\FiltersLayout;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Tests\Support\CreatesCadences;
@@ -157,6 +158,29 @@ class LeadsTableTest extends TestCase
             ->filterTable('event', 'Prime Expo')
             ->assertCanSeeTableRecords([$floridaPrime])
             ->assertCanNotSeeTableRecords([$floridaSpring, $georgiaPrime, $unlabeled]);
+    }
+
+    public function test_lead_list_uses_vertical_dropdown_filters(): void
+    {
+        [$company, $admin] = $this->makeAdminCompany();
+
+        CompanyContext::set($company->id);
+
+        $component = Livewire::actingAs($admin)
+            ->test(ListLeads::class)
+            ->assertOk()
+            ->assertTableFilterExists('status')
+            ->assertTableFilterExists('lead_type')
+            ->assertTableFilterExists('calling_list_id')
+            ->assertTableFilterExists('venue')
+            ->assertTableFilterExists('qualified_partners')
+            ->assertTableFilterExists('created_at')
+            ->assertTableFilterExists('tour_location');
+
+        $table = $component->instance()->getTable();
+
+        $this->assertSame(FiltersLayout::Dropdown, $table->getFiltersLayout());
+        $this->assertSame(1, $table->getFiltersFormColumns());
     }
 
     public function test_lead_list_can_change_next_day_part_from_row_and_bulk_actions(): void

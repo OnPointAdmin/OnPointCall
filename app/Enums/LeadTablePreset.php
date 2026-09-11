@@ -2,8 +2,6 @@
 
 namespace App\Enums;
 
-use App\Enums\QualifiedPartnersMatch;
-
 enum LeadTablePreset: string
 {
     case AllLeads = 'all_leads';

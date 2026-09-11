@@ -12,8 +12,6 @@ use App\Jobs\QualifyLeadJob;
 use App\Jobs\RndLeadJob;
 use App\Jobs\SoftScoreLeadJob;
 use App\Models\CallingList;
-use App\Models\Lead;
-use App\Models\User;
 use App\Services\Import\HoldingReleaseService;
 use App\Services\Leads\DispositionService;
 use App\Services\Leads\LeadMergeService;
@@ -54,18 +52,15 @@ class LeadsTable
                 return $query;
             })
             ->columns(LeadsTableColumns::make($preset))
-            ->filters($filters, layout: FiltersLayout::Modal)
-            ->filtersFormColumns(3)
-            ->filtersFormWidth(Width::SevenExtraLarge)
-            ->filtersFormMaxHeight('70vh')
-            ->filtersFormSchema(fn (array $filters): array => LeadsTableFilters::filterFormSchema($filters))
             ->defaultSort($defaultSort['column'], $defaultSort['direction'])
             ->paginated([10, 25, 50, 100])
             ->defaultPaginationPageOption(25)
             ->recordActions(self::recordActions($preset))
             ->toolbarActions([
                 BulkActionGroup::make(self::bulkActions()),
-            ]);
+            ])
+            ->filters($filters, layout: FiltersLayout::Dropdown)
+            ->filtersFormColumns(1);
 
         return $table;
     }

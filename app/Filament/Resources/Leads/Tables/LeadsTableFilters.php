@@ -6,7 +6,6 @@ use App\DataTransferObjects\HoldingFilter;
 use App\Enums\BookingCheckStatus;
 use App\Enums\Disposition;
 use App\Enums\DncStatus;
-use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
 use App\Enums\LeadTablePreset;
 use App\Enums\QualificationStatus;
@@ -14,22 +13,17 @@ use App\Enums\QualifiedPartnersMatch;
 use App\Enums\RndStatus;
 use App\Enums\SoftScoreStatus;
 use App\Filament\Support\LeadTableFilterMapper;
-use App\Filament\Support\LeadTypeSelect;
 use App\Models\CallingList;
 use App\Models\DispositionDefinition;
 use App\Models\ImportBatch;
 use App\Models\Lead;
 use App\Models\LeadTypeDefinition;
-use App\Models\QualifyBatch;
 use App\Services\Import\HoldingReleaseService;
 use App\Support\CompanyContext;
-use App\Support\CompanyTimezone;
 use App\Support\LeadDemographicOptions;
 use Carbon\Carbon;
 use Filament\Forms\Components\DatePicker;
-use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
-use Filament\Schemas\Components\Section;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
@@ -44,20 +38,31 @@ class LeadsTableFilters
      */
     public static function make(LeadTablePreset $preset, Table $table): array
     {
-        $filters = [];
+        $filters = self::definitions($preset, $table);
 
-        if ($preset->usesPoolSourceScope()) {
-            $filters[] = SelectFilter::make('lead_type')
-                ->label('Lead type')
-                ->options(fn (): array => LeadTypeDefinition::allOptions())
-                ->default('standard');
-        } else {
-            $filters[] = SelectFilter::make('lead_type')
-                ->options(fn (): array => LeadTypeDefinition::allOptions());
+        if ($preset->hidesCallingListFilter()) {
+            unset($filters['calling_list_id']);
         }
 
-        if (! $preset->hidesCallingListFilter()) {
-            $filters[] = SelectFilter::make('calling_list_id')
+        return array_values($filters);
+    }
+
+    /**
+     * @return array<string, SelectFilter|Filter>
+     */
+    private static function definitions(LeadTablePreset $preset, Table $table): array
+    {
+        $leadType = $preset->usesPoolSourceScope()
+            ? SelectFilter::make('lead_type')
+                ->label('Lead type')
+                ->options(fn (): array => LeadTypeDefinition::allOptions())
+                ->default('standard')
+            : SelectFilter::make('lead_type')
+                ->options(fn (): array => LeadTypeDefinition::allOptions());
+
+        return [
+            'lead_type' => $leadType,
+            'calling_list_id' => SelectFilter::make('calling_list_id')
                 ->label('Calling list')
                 ->options(fn (): array => ['holding' => 'Holding'] + CallingList::query()->orderBy('name')->pluck('name', 'id')->all())
                 ->default($preset->usesPoolSourceScope() ? 'holding' : null)
@@ -80,18 +85,14 @@ class LeadsTableFilters
                     }
 
                     return $query->where('calling_list_id', $value);
-                });
-        }
-
-        $filters = [
-            ...$filters,
-            SelectFilter::make('status')
+                }),
+            'status' => SelectFilter::make('status')
                 ->options(collect(LeadStatus::cases())->mapWithKeys(fn ($s) => [$s->value => $s->label()])),
-            SelectFilter::make('import_batch_id')
+            'import_batch_id' => SelectFilter::make('import_batch_id')
                 ->label('Import batch')
                 ->options(fn (): array => ImportBatch::query()->orderByDesc('imported_at')->pluck('source_filename', 'id')->all())
                 ->searchable(),
-            Filter::make('file_name')
+            'file_name' => Filter::make('file_name')
                 ->label('Source file')
                 ->schema([
                     TextInput::make('file_name')
@@ -106,7 +107,7 @@ class LeadsTableFilters
 
                     return $query->where('file_name', 'ilike', '%'.$value.'%');
                 }),
-            Filter::make('imported_at')
+            'imported_at' => Filter::make('imported_at')
                 ->label('Import date')
                 ->schema([
                     DatePicker::make('start_date')->label('Import Start Date'),
@@ -123,7 +124,7 @@ class LeadsTableFilters
 
                     return $query;
                 }),
-            Filter::make('created_at')
+            'created_at' => Filter::make('created_at')
                 ->label('Create date')
                 ->schema([
                     DatePicker::make('start_date')->label('Create Start Date'),
@@ -140,24 +141,24 @@ class LeadsTableFilters
 
                     return $query;
                 }),
-            SelectFilter::make('venue')
+            'venue' => SelectFilter::make('venue')
                 ->label('Venue')
                 ->multiple()
                 ->options(fn (): array => self::distinctLeadValues('venue', $table, $preset))
                 ->searchable()
                 ->query(fn (Builder $query, array $data): Builder => self::applyInFilter($query, 'venue', $data)),
-            SelectFilter::make('event')
+            'event' => SelectFilter::make('event')
                 ->label('Event')
                 ->multiple()
                 ->options(fn (): array => self::distinctLeadValues('event', $table, $preset))
                 ->searchable()
                 ->query(fn (Builder $query, array $data): Builder => self::applyInFilter($query, 'event', $data)),
-            SelectFilter::make('state')
+            'state' => SelectFilter::make('state')
                 ->multiple()
                 ->options(fn (): array => self::distinctLeadValues('state', $table, $preset))
                 ->searchable()
                 ->query(fn (Builder $query, array $data): Builder => self::applyInFilter($query, 'state', $data, upper: true)),
-            Filter::make('zip')
+            'zip' => Filter::make('zip')
                 ->schema([
                     TextInput::make('zip')
                         ->label('Zip')
@@ -172,7 +173,7 @@ class LeadsTableFilters
 
                     return $query->where('zip', 'like', substr((string) $zip, 0, 5).'%');
                 }),
-            SelectFilter::make('partner')
+            'partner' => SelectFilter::make('partner')
                 ->label('Partner')
                 ->multiple()
                 ->options(fn (): array => self::poolDistinct($table, 'partner'))
@@ -190,18 +191,18 @@ class LeadsTableFilters
                         }
                     });
                 }),
-            self::demographicFilter('age_range', 'Age range'),
-            self::demographicFilter('annual_income', 'Income range'),
-            self::demographicFilter('marital_status', 'Marital status'),
-            self::demographicFilter('gender', 'Gender'),
-            self::demographicFilter('home_owner', 'Home owner'),
-            SelectFilter::make('soft_score_code')
+            'age_range' => self::demographicFilter('age_range', 'Age range'),
+            'annual_income' => self::demographicFilter('annual_income', 'Income range'),
+            'marital_status' => self::demographicFilter('marital_status', 'Marital status'),
+            'gender' => self::demographicFilter('gender', 'Gender'),
+            'home_owner' => self::demographicFilter('home_owner', 'Home owner'),
+            'soft_score_code' => SelectFilter::make('soft_score_code')
                 ->label('Soft score code')
                 ->multiple()
                 ->options(fn (): array => self::distinctLeadValues('soft_score_code', $table, $preset))
                 ->searchable()
                 ->query(fn (Builder $query, array $data): Builder => self::applyInFilter($query, 'soft_score_code', $data)),
-            SelectFilter::make('last_disposition')
+            'last_disposition' => SelectFilter::make('last_disposition')
                 ->label('Last Disp')
                 ->multiple()
                 ->options(fn (): array => ['none' => 'None'] + collect(Disposition::cases())->mapWithKeys(
@@ -221,7 +222,7 @@ class LeadsTableFilters
 
                     return $query;
                 }),
-            Filter::make('attempt_count')
+            'attempt_count' => Filter::make('attempt_count')
                 ->schema([
                     TextInput::make('attempt_count')
                         ->label('Attempts')
@@ -238,22 +239,22 @@ class LeadsTableFilters
 
                     return $query->where('attempt_count', (int) $value);
                 }),
-            SelectFilter::make('soft_score_status')
+            'soft_score_status' => SelectFilter::make('soft_score_status')
                 ->label('Soft score status')
                 ->options(collect(SoftScoreStatus::cases())->mapWithKeys(fn ($s) => [$s->value => $s->label()])),
-            SelectFilter::make('qualification_status')
+            'qualification_status' => SelectFilter::make('qualification_status')
                 ->label('Qualification')
                 ->options(collect(QualificationStatus::cases())->mapWithKeys(fn ($s) => [$s->value => $s->label()])),
-            SelectFilter::make('dnc_status')
+            'dnc_status' => SelectFilter::make('dnc_status')
                 ->label('DNC')
                 ->options(collect(DncStatus::cases())->mapWithKeys(fn ($s) => [$s->value => $s->label()])),
-            SelectFilter::make('rnd_status')
+            'rnd_status' => SelectFilter::make('rnd_status')
                 ->label('RND')
                 ->options(collect(RndStatus::cases())->mapWithKeys(fn ($s) => [$s->value => $s->label()])),
-            SelectFilter::make('booking_check_status')
+            'booking_check_status' => SelectFilter::make('booking_check_status')
                 ->label('Booking')
                 ->options(collect(BookingCheckStatus::cases())->mapWithKeys(fn ($s) => [$s->value => $s->label()])),
-            SelectFilter::make('qualified_partners')
+            'qualified_partners' => SelectFilter::make('qualified_partners')
                 ->label('Qualified · Partners')
                 ->multiple()
                 ->options(fn (): array => ['none' => 'None'] + self::poolQualifiedPartners($table))
@@ -277,7 +278,7 @@ class LeadsTableFilters
 
                     return $query;
                 }),
-            SelectFilter::make('qualified_partners_match')
+            'qualified_partners_match' => SelectFilter::make('qualified_partners_match')
                 ->label('Qualified · Match')
                 ->options(QualifiedPartnersMatch::options())
                 ->default(QualifiedPartnersMatch::InList->value)
@@ -300,102 +301,30 @@ class LeadsTableFilters
 
                     return $query;
                 }),
-            SelectFilter::make('tour_location')
+            'tour_location' => SelectFilter::make('tour_location')
                 ->label('Tour Location')
                 ->multiple()
                 ->options(fn (): array => self::distinctLeadValues('tour_location', $table, $preset))
                 ->searchable()
                 ->query(fn (Builder $query, array $data): Builder => self::applyInFilter($query, 'tour_location', $data)),
-            SelectFilter::make('tour_date_start')
+            'tour_date_start' => SelectFilter::make('tour_date_start')
                 ->label('Tour Date Start')
                 ->multiple()
                 ->options(fn (): array => self::distinctLeadValues('tour_date_start', $table, $preset))
                 ->searchable()
                 ->query(fn (Builder $query, array $data): Builder => self::applyInFilter($query, 'tour_date_start', $data)),
-            SelectFilter::make('tour_date')
+            'tour_date' => SelectFilter::make('tour_date')
                 ->label('Tour Date')
                 ->multiple()
                 ->options(fn (): array => self::distinctLeadValues('tour_date', $table, $preset))
                 ->searchable()
                 ->query(fn (Builder $query, array $data): Builder => self::applyInFilter($query, 'tour_date', $data)),
-            SelectFilter::make('tour_result')
+            'tour_result' => SelectFilter::make('tour_result')
                 ->label('Tour Result')
                 ->multiple()
                 ->options(fn (): array => self::distinctLeadValues('tour_result', $table, $preset))
                 ->searchable()
                 ->query(fn (Builder $query, array $data): Builder => self::applyInFilter($query, 'tour_result', $data)),
-        ];
-
-        return $filters;
-    }
-
-    /**
-     * @return list<Section>
-     */
-    public static function filterFormSchema(array $filters): array
-    {
-        $importFields = [
-            $filters['lead_type'],
-            $filters['import_batch_id'],
-            $filters['file_name'],
-            $filters['imported_at'],
-            $filters['created_at'],
-        ];
-
-        if (isset($filters['calling_list_id'])) {
-            array_splice($importFields, 1, 0, [$filters['calling_list_id']]);
-        }
-
-        return [
-            Section::make('Import')
-                ->schema(array_values(array_filter($importFields)))
-                ->columns(3)
-                ->columnSpanFull(),
-            Section::make('Venue & event')
-                ->schema([
-                    $filters['venue'],
-                    $filters['event'],
-                    $filters['partner'],
-                ])
-                ->columns(3)
-                ->columnSpanFull(),
-            Section::make('Lead profile')
-                ->schema([
-                    $filters['age_range'],
-                    $filters['annual_income'],
-                    $filters['marital_status'],
-                    $filters['gender'],
-                    $filters['home_owner'],
-                    $filters['state'],
-                    $filters['zip'],
-                    $filters['soft_score_code'],
-                    $filters['last_disposition'],
-                    $filters['attempt_count'],
-                    $filters['qualification_status'],
-                    $filters['qualified_partners'],
-                    $filters['qualified_partners_match'],
-                ])
-                ->columns(3)
-                ->columnSpanFull(),
-            Section::make('Checks')
-                ->schema([
-                    $filters['status'],
-                    $filters['soft_score_status'],
-                    $filters['rnd_status'],
-                    $filters['dnc_status'],
-                    $filters['booking_check_status'],
-                ])
-                ->columns(3)
-                ->columnSpanFull(),
-            Section::make('Tour Info')
-                ->schema([
-                    $filters['tour_location'],
-                    $filters['tour_date_start'],
-                    $filters['tour_date'],
-                    $filters['tour_result'],
-                ])
-                ->columns(3)
-                ->columnSpanFull(),
         ];
     }
 

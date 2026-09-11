@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\DataTransferObjects\HoldingFilter;
 use App\Enums\DncStatus;
 use App\Enums\LeadStatus;
 use App\Enums\QualificationStatus;
@@ -23,6 +24,7 @@ use App\Models\QualifyBatch;
 use App\Models\User;
 use App\Services\Qualify\QualifyLeadsService;
 use App\Support\CompanyContext;
+use Filament\Tables\Enums\FiltersLayout;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
@@ -143,7 +145,7 @@ class QualifyLeadsTest extends TestCase
 
         app(QualifyLeadsService::class)->queue(
             companyId: $admin->company_id,
-            filter: new \App\DataTransferObjects\HoldingFilter(leadType: 'standard'),
+            filter: new HoldingFilter(leadType: 'standard'),
             runSoftScore: true,
             runRndCheck: false,
             runQualification: false,
@@ -183,7 +185,7 @@ class QualifyLeadsTest extends TestCase
 
         app(QualifyLeadsService::class)->queue(
             companyId: $admin->company_id,
-            filter: new \App\DataTransferObjects\HoldingFilter(leadType: 'standard'),
+            filter: new HoldingFilter(leadType: 'standard'),
             runSoftScore: true,
             runRndCheck: false,
             runQualification: true,
@@ -201,6 +203,24 @@ class QualifyLeadsTest extends TestCase
                 && $job->force === true,
         );
         Queue::assertNotPushed(QualifyLeadJob::class);
+    }
+
+    public function test_qualify_leads_uses_vertical_dropdown_filters(): void
+    {
+        [$admin] = $this->setUpQualifyPage();
+
+        $component = Livewire::actingAs($admin)
+            ->test(QualifyLeads::class)
+            ->assertOk()
+            ->assertTableFilterExists('status')
+            ->assertTableFilterExists('qualified_partners')
+            ->assertTableFilterExists('created_at')
+            ->assertTableFilterExists('tour_location');
+
+        $table = $component->instance()->getTable();
+
+        $this->assertSame(FiltersLayout::Dropdown, $table->getFiltersLayout());
+        $this->assertSame(1, $table->getFiltersFormColumns());
     }
 
     /**
