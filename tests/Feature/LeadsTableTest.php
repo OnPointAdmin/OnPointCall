@@ -159,6 +159,52 @@ class LeadsTableTest extends TestCase
             ->assertCanNotSeeTableRecords([$floridaSpring, $georgiaPrime, $unlabeled]);
     }
 
+    public function test_lead_list_can_change_next_day_part_from_row_and_bulk_actions(): void
+    {
+        [$company, $admin] = $this->makeAdminCompany();
+
+        $rowLead = $this->makeLead($company->id, phone: '4045559001');
+        $rowLead->update(['next_day_part' => 'afternoon']);
+
+        $bulkAfternoon = $this->makeLead($company->id, phone: '4045559002');
+        $bulkAfternoon->update(['next_day_part' => 'afternoon']);
+        $bulkEvening = $this->makeLead($company->id, phone: '4045559003');
+        $bulkEvening->update(['next_day_part' => 'evening']);
+
+        CompanyContext::set($company->id);
+
+        Livewire::actingAs($admin)
+            ->test(ListLeads::class)
+            ->assertTableActionExists('changeNextDayPart')
+            ->callTableAction('changeNextDayPart', $rowLead, data: [
+                'next_day_part' => 'evening',
+            ])
+            ->assertTableBulkActionExists('changeNextDayPart')
+            ->callTableBulkAction('changeNextDayPart', [$bulkAfternoon, $bulkEvening], data: [
+                'next_day_part' => 'any',
+            ]);
+
+        $this->assertSame('evening', $rowLead->fresh()->next_day_part);
+        $this->assertNull($bulkAfternoon->fresh()->next_day_part);
+        $this->assertNull($bulkEvening->fresh()->next_day_part);
+
+        $this->assertDatabaseHas('lead_history', [
+            'lead_id' => $rowLead->id,
+            'actor_id' => $admin->id,
+            'event_type' => LeadHistoryType::FieldEdit->value,
+        ]);
+        $this->assertDatabaseHas('lead_history', [
+            'lead_id' => $bulkAfternoon->id,
+            'actor_id' => $admin->id,
+            'event_type' => LeadHistoryType::FieldEdit->value,
+        ]);
+        $this->assertDatabaseHas('lead_history', [
+            'lead_id' => $bulkEvening->id,
+            'actor_id' => $admin->id,
+            'event_type' => LeadHistoryType::FieldEdit->value,
+        ]);
+    }
+
     /**
      * @return array{0: Company, 1: User}
      */

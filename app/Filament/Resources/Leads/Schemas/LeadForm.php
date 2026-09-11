@@ -7,7 +7,9 @@ use App\Enums\LeadStatus;
 use App\Enums\QualificationStatus;
 use App\Enums\SoftScoreStatus;
 use App\Filament\Support\LeadTypeSelect;
+use App\Filament\Support\NextDayPartField;
 use App\Models\Lead;
+use App\Support\CadenceDefaults;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
@@ -70,7 +72,9 @@ class LeadForm
                 ->required()
                 ->numeric()
                 ->default(0),
-            TextInput::make('next_day_part'),
+            NextDayPartField::make()
+                ->formatStateUsing(fn (?string $state): string => CadenceDefaults::formValue($state))
+                ->dehydrateStateUsing(fn (?string $state): ?string => CadenceDefaults::storedValue($state)),
             DateTimePicker::make('last_attempt_at'),
             DateTimePicker::make('callback_at'),
             Select::make('callback_owner_id')

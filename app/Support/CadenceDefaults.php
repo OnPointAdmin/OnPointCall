@@ -30,6 +30,38 @@ class CadenceDefaults
     }
 
     /**
+     * @return array<string, string>
+     */
+    public static function selectOptions(): array
+    {
+        $options = [];
+
+        foreach (self::DAY_PARTS as $part) {
+            $options[$part] = self::label($part);
+        }
+
+        return $options;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function selectOptionsWithAny(): array
+    {
+        return ['any' => 'Any (current window)'] + self::selectOptions();
+    }
+
+    public static function formValue(?string $stored): string
+    {
+        return in_array($stored, self::DAY_PARTS, true) ? $stored : 'any';
+    }
+
+    public static function storedValue(?string $formValue): ?string
+    {
+        return in_array($formValue, self::DAY_PARTS, true) ? $formValue : null;
+    }
+
+    /**
      * @return array{wait_after_value: int|null, wait_after_unit: string|null}
      */
     public static function defaultWaitAfterDialFor(string $dayPart): array

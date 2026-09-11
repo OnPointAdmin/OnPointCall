@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Leads\Tables;
 
 use App\Enums\LeadStatus;
 use App\Enums\LeadTablePreset;
+use App\Filament\Actions\ChangeNextDayPartAction;
 use App\Filament\Actions\ReassignCallbackAction;
 use App\Filament\Resources\Leads\Schemas\LeadForm;
 use App\Jobs\DncScrubJob;
@@ -17,6 +18,7 @@ use App\Services\Import\HoldingReleaseService;
 use App\Services\Leads\DispositionService;
 use App\Services\Leads\LeadMergeService;
 use App\Services\Leads\LeadRecycleService;
+use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\ViewAction;
@@ -69,7 +71,7 @@ class LeadsTable
     }
 
     /**
-     * @return list<ViewAction>
+     * @return list<ViewAction|Action>
      */
     private static function recordActions(LeadTablePreset $preset): array
     {
@@ -82,6 +84,7 @@ class LeadsTable
 
         return [
             $view,
+            ChangeNextDayPartAction::make(),
             ReassignCallbackAction::make(),
         ];
     }
@@ -92,6 +95,7 @@ class LeadsTable
     private static function bulkActions(): array
     {
         return [
+            ChangeNextDayPartAction::makeBulk(),
             BulkAction::make('recycle')
                 ->label('Recycle')
                 ->icon('heroicon-o-arrow-path')

@@ -8,6 +8,7 @@ use App\Enums\QualificationStatus;
 use App\Enums\RndStatus;
 use App\Enums\SoftScoreStatus;
 use App\Models\Lead;
+use App\Support\CadenceDefaults;
 use App\Support\CompanyTimezone;
 use App\Support\PhoneNormalizer;
 use Filament\Infolists\Components\KeyValueEntry;
@@ -45,7 +46,8 @@ class LeadInfolist
                             ->label('Attempts'),
                         TextEntry::make('next_day_part')
                             ->label('Next day part')
-                            ->placeholder('—'),
+                            ->formatStateUsing(fn (?string $state): ?string => $state ? CadenceDefaults::label($state) : null)
+                            ->placeholder('Any (current window)'),
                         TextEntry::make('last_attempt_at')
                             ->label('Last attempt')
                             ->formatStateUsing(fn (Lead $record): ?string => CompanyTimezone::display(

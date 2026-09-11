@@ -91,7 +91,9 @@ class ViewLeadTest extends TestCase
             ->assertDontSee('Save changes')
             ->assertSee('Contact')
             ->assertSee('Qualification')
-            ->assertSee('History');
+            ->assertSee('History')
+            ->assertSee('Change next day part')
+            ->assertActionExists('changeNextDayPart');
 
         Livewire::actingAs($admin)
             ->test(HistoryRelationManager::class, [
@@ -152,6 +154,49 @@ class ViewLeadTest extends TestCase
             ->assertSee('Travel Partner')
             ->assertSee('RND')
             ->assertSee('Clear');
+    }
+
+    public function test_lead_view_can_change_next_day_part(): void
+    {
+        $company = Company::factory()->create();
+        $admin = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Admin,
+            'active' => true,
+        ]);
+
+        $lead = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045559003',
+            'first_name' => 'Pat',
+            'last_name' => 'Callahan',
+            'state' => 'NY',
+            'timezone' => 'America/New_York',
+            'status' => LeadStatus::Callable,
+            'lead_type' => 'standard',
+            'imported_at' => now(),
+            'next_day_part' => 'afternoon',
+            'attempt_count' => 1,
+        ]);
+
+        CompanyContext::set($company->id);
+
+        Livewire::actingAs($admin)
+            ->test(ViewLead::class, ['record' => $lead->getRouteKey()])
+            ->assertOk()
+            ->callAction('changeNextDayPart', [
+                'next_day_part' => 'evening',
+            ]);
+
+        $lead->refresh();
+
+        $this->assertSame('evening', $lead->next_day_part);
+        $this->assertSame(1, $lead->attempt_count);
+        $this->assertDatabaseHas('lead_history', [
+            'lead_id' => $lead->id,
+            'actor_id' => $admin->id,
+            'event_type' => LeadHistoryType::FieldEdit->value,
+        ]);
     }
 
     public function test_lead_history_detail_label_formats_disposition_and_status_change(): void
