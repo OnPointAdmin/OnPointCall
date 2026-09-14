@@ -127,6 +127,9 @@ class LeadInfolist
                         TextEntry::make('home_owner')
                             ->label('Homeowner')
                             ->placeholder('—'),
+                        TextEntry::make('credit_card_type')
+                            ->label('Credit Card Type')
+                            ->placeholder('—'),
                     ])
                     ->columns(3),
                 Section::make('Source')

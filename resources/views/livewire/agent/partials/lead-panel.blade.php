@@ -19,6 +19,7 @@
     $maritalStatusOptions = LeadDemographicOptions::for('marital_status', $companyId, $lead->marital_status);
     $genderOptions = LeadDemographicOptions::for('gender', $companyId, $lead->gender);
     $homeownerOptions = LeadDemographicOptions::for('home_owner', $companyId, $lead->home_owner);
+    $creditCardTypeOptions = LeadDemographicOptions::for('credit_card_type', $companyId, $lead->credit_card_type);
 
     $isTnb = $lead->lead_type === 'tnb';
     $filled = fn ($value) => $value !== null && $value !== '';
@@ -49,7 +50,7 @@
 
     $sectionedKeys = [
         'address', 'address_2', 'zip', 'email', 'age_range', 'annual_income', 'marital_status',
-        'gender', 'home_owner', 'original_lead_submit_date', 'booking_id', 'phone_2',
+        'gender', 'home_owner', 'credit_card_type', 'original_lead_submit_date', 'booking_id', 'phone_2',
         'tour_location', 'tour_date_start', 'tour_date', 'premiums', 'tour_result', 'tour_or_no_show',
         'external_lead_id', 'first_name', 'last_name', 'phone', 'city', 'state',
     ];
@@ -367,6 +368,16 @@
                         <select wire:model="editable.home_owner" class="mt-0.5 w-full rounded-md border border-blue-300 bg-blue-50 px-2 py-1.5 text-sm dark:bg-blue-500/10">
                             <option value="">—</option>
                             @foreach ($homeownerOptions as $opt)<option value="{{ $opt }}">{{ $opt }}</option>@endforeach
+                        </select>
+                    </template>
+                </div>
+                <div>
+                    <p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">Credit Card Type</p>
+                    <template x-if="!editMode"><p class="m-0 mt-0.5 select-none text-sm text-slate-900 dark:text-slate-100" oncopy="return false">{{ $lead->credit_card_type ?: '—' }}</p></template>
+                    <template x-if="editMode">
+                        <select wire:model="editable.credit_card_type" class="mt-0.5 w-full rounded-md border border-blue-300 bg-blue-50 px-2 py-1.5 text-sm dark:bg-blue-500/10">
+                            <option value="">—</option>
+                            @foreach ($creditCardTypeOptions as $opt)<option value="{{ $opt }}">{{ $opt }}</option>@endforeach
                         </select>
                     </template>
                 </div>

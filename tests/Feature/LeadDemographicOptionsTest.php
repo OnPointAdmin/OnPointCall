@@ -54,6 +54,7 @@ class LeadDemographicOptionsTest extends TestCase
             'marital_status' => 'Widowed',
             'gender' => 'Non-binary',
             'home_owner' => 'Renter',
+            'credit_card_type' => 'Visa',
             'imported_at' => now(),
         ]);
 
@@ -61,6 +62,7 @@ class LeadDemographicOptionsTest extends TestCase
         $this->assertContains('Widowed', LeadDemographicOptions::for('marital_status', $company->id));
         $this->assertContains('Non-binary', LeadDemographicOptions::for('gender', $company->id));
         $this->assertContains('Renter', LeadDemographicOptions::for('home_owner', $company->id));
+        $this->assertContains('Visa', LeadDemographicOptions::for('credit_card_type', $company->id));
 
         $this->assertSame(
             LeadDemographicOptions::INCOMES,

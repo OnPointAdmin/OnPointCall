@@ -31,6 +31,7 @@ class HoldingReleaseService
         'marital_status',
         'gender',
         'home_owner',
+        'credit_card_type',
         'tour_location',
         'tour_date_start',
         'tour_date',
@@ -57,6 +58,7 @@ class HoldingReleaseService
         $this->applyExactInFilter($query, 'marital_status', $filter->maritalStatus);
         $this->applyExactInFilter($query, 'gender', $filter->gender);
         $this->applyExactInFilter($query, 'home_owner', $filter->homeOwner);
+        $this->applyExactInFilter($query, 'credit_card_type', $filter->creditCardType);
         $this->applyExactInFilter($query, 'tour_location', $filter->tourLocation);
         $this->applyExactInFilter($query, 'tour_date_start', $filter->tourDateStart);
         $this->applyExactInFilter($query, 'tour_date', $filter->tourDate);
@@ -337,7 +339,7 @@ class HoldingReleaseService
         $match = QualifiedPartnersMatch::tryFrom((string) ($filter->qualifiedPartnersMatch ?? ''))
             ?? QualifiedPartnersMatch::InList;
 
-        $query->where(function (Builder $group) use ($hasNone, $namedPartners, $existsSql, $countSql, $match, $driver): void {
+        $query->where(function (Builder $group) use ($hasNone, $namedPartners, $existsSql, $countSql, $match): void {
             if ($hasNone) {
                 $group->orWhereRaw($countSql, [0]);
             }
@@ -347,7 +349,7 @@ class HoldingReleaseService
             }
 
             if ($match === QualifiedPartnersMatch::Only) {
-                $group->orWhere(function (Builder $onlyGroup) use ($namedPartners, $existsSql, $countSql, $driver): void {
+                $group->orWhere(function (Builder $onlyGroup) use ($namedPartners, $existsSql, $countSql): void {
                     foreach ($namedPartners as $partner) {
                         $onlyGroup->whereRaw($existsSql, [$partner]);
                     }

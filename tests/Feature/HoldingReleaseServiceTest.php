@@ -265,6 +265,39 @@ class HoldingReleaseServiceTest extends TestCase
         );
     }
 
+    public function test_query_holding_filters_by_credit_card_type(): void
+    {
+        $company = Company::factory()->create();
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045557001',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'credit_card_type' => 'Visa',
+            'imported_at' => now(),
+        ]);
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045557002',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'credit_card_type' => 'Mastercard',
+            'imported_at' => now(),
+        ]);
+
+        $service = app(HoldingReleaseService::class);
+
+        $this->assertSame(
+            1,
+            $service->countHolding($company->id, new HoldingFilter(
+                leadType: 'standard',
+                creditCardType: ['Visa'],
+            )),
+        );
+    }
+
     public function test_distinct_holding_column_rejects_unknown_columns(): void
     {
         $company = Company::factory()->create();

@@ -44,6 +44,7 @@ class LeadTableFilterMapper
             maritalStatus: self::selectValues($tableFilters, 'marital_status'),
             gender: self::selectValues($tableFilters, 'gender'),
             homeOwner: self::selectValues($tableFilters, 'home_owner'),
+            creditCardType: self::selectValues($tableFilters, 'credit_card_type'),
             tourLocation: self::selectValues($tableFilters, 'tour_location'),
             tourDateStart: self::selectValues($tableFilters, 'tour_date_start'),
             tourDate: self::selectValues($tableFilters, 'tour_date'),

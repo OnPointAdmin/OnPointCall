@@ -196,6 +196,7 @@ class LeadsTableFilters
             'marital_status' => self::demographicFilter('marital_status', 'Marital status'),
             'gender' => self::demographicFilter('gender', 'Gender'),
             'home_owner' => self::demographicFilter('home_owner', 'Home owner'),
+            'credit_card_type' => self::demographicFilter('credit_card_type', 'Credit Card Type'),
             'soft_score_code' => SelectFilter::make('soft_score_code')
                 ->label('Soft score code')
                 ->multiple()

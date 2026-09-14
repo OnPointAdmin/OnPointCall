@@ -164,6 +164,8 @@ class LeadImportServiceTest extends TestCase
         $this->assertSame('Lead Submit Date', $mapping->column_map['original_lead_submit_date'] ?? null);
         $this->assertSame('Phone 2', $mapping->column_map['phone_2'] ?? null);
         $this->assertSame('Tour Location', $mapping->column_map['tour_location'] ?? null);
+        $this->assertSame('Type_of_Credit_Card__c', $mapping->column_map['credit_card_type'] ?? null);
+        $this->assertSame('Credit Card Type', LeadImportService::KNOWN_IMPORT_FIELDS['credit_card_type'] ?? null);
 
         $csv = implode("\n", [
             'Lead ID,Phone,First Name,Last Name,First Name 2,Last Name 2,Address,City,State,Zip,Email,Age Range,Annual Income,Marital Status,Gender,Home Owner,Venue,Event,Lead Submit Date,Partner List,File Name,Booking Id,Phone 2,Address 2,Tour Location,Tour Date,Premiums,Tour Result,Tour Or No Show',
@@ -250,6 +252,7 @@ class LeadImportServiceTest extends TestCase
         $this->assertTrue($ssis->is_default);
         $this->assertSame('standard', $ssis->lead_type);
         $this->assertSame('AgeRange', $ssis->column_map['age_range'] ?? null);
+        $this->assertSame('Type_of_Credit_Card__c', $ssis->column_map['credit_card_type'] ?? null);
 
         $csv = implode("\n", [
             'caller_id,first_name,last_name,address,city,state,zip,email,AgeRange,annual_income,Marital Status,Gender,HomeOwner,OP_Id,jornayaleadid,trustedform,Venue,Event,original_lead_submit_date,PartnerList,File Name',
@@ -291,6 +294,43 @@ class LeadImportServiceTest extends TestCase
         $this->assertNull($lead->extra_fields);
     }
 
+    public function test_import_maps_type_of_credit_card_onto_credit_card_type(): void
+    {
+        $company = Company::factory()->create();
+        CompanyContext::set($company->id);
+
+        $csv = implode("\n", [
+            'Phone,Type_of_Credit_Card__c',
+            '4045554444,Visa',
+        ]);
+
+        $path = storage_path('app/imports/credit-card-type-import.csv');
+        if (! is_dir(dirname($path))) {
+            mkdir(dirname($path), 0777, true);
+        }
+        file_put_contents($path, $csv);
+
+        $service = app(LeadImportService::class);
+        $batch = $service->createBatch($company->id, 'credit-card-type-import.csv', 'standard', false);
+
+        $result = $service->process($batch, $path, [
+            'phone' => 'Phone',
+            'credit_card_type' => 'Type_of_Credit_Card__c',
+        ], 'standard');
+
+        CompanyContext::clear();
+
+        $this->assertSame(1, $result['inserted_count']);
+
+        $lead = Lead::withoutGlobalScopes()
+            ->where('company_id', $company->id)
+            ->where('phone', '4045554444')
+            ->first();
+
+        $this->assertNotNull($lead);
+        $this->assertSame('Visa', $lead->credit_card_type);
+    }
+
     public function test_tnb_mapping_imports_tour_fields_and_normalizes_phone(): void
     {
         $company = Company::factory()->create();
@@ -305,6 +345,7 @@ class LeadImportServiceTest extends TestCase
         $this->assertSame('tnb', $tnb->lead_type);
         $this->assertSame('caller_id', $tnb->column_map['phone'] ?? null);
         $this->assertSame('Phone_2', $tnb->column_map['phone_2'] ?? null);
+        $this->assertSame('Type_of_Credit_Card__c', $tnb->column_map['credit_card_type'] ?? null);
 
         $csv = implode("\n", [
             'caller_id,first_name,last_name,address,city,state,zip,email,AgeRange,annual_income,Marital Status,Gender,HomeOwner,OP_Id,Venue,Event,original_lead_submit_date,PartnerList,File Name,BookingId,Phone_2,FirstName2,LastName2,Address2,TourLocation,TourDate,Premiums,Tour_Result,TourOrNoShow',

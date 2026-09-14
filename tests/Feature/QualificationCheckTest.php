@@ -144,7 +144,8 @@ class QualificationCheckTest extends TestCase
                 && ($body['customerData']['income'] ?? null) === '$75,000 - $99,999'
                 && ($body['customerData']['zipCode'] ?? null) === '30303'
                 && ($body['customerData']['qualificationCode'] ?? null) === 'A'
-                && ($body['customerData']['country'] ?? null) === 'United States';
+                && ($body['customerData']['country'] ?? null) === 'United States'
+                && ($body['customerData']['card'] ?? null) === '';
         });
     }
 
@@ -346,6 +347,57 @@ class QualificationCheckTest extends TestCase
             }
 
             return ($request->data()['customerData']['qualificationCode'] ?? null) === 'C3';
+        });
+    }
+
+    public function test_qualification_sends_card_from_credit_card_type_and_ignores_extra_fields(): void
+    {
+        config([
+            'services.qualification.client_id' => 'sf-client',
+            'services.qualification.client_secret' => 'sf-secret',
+            'services.qualification.instance_url' => 'https://onpointmrg.my.salesforce.com',
+        ]);
+
+        Http::fake([
+            '*/services/oauth2/token' => Http::response([
+                'access_token' => 'sf-token',
+                'expires_in' => 3600,
+            ]),
+            '*/services/apexrest/CustomerQualification' => Http::response([
+                'qualifiedCompaniesLead' => [],
+                'qualifiedCompaniesBooking' => [],
+                'errorMessage' => null,
+            ]),
+        ]);
+
+        $company = Company::factory()->create(['salesforce_id' => '001000000000001AAA']);
+
+        $lead = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045553333',
+            'status' => 'holding',
+            'lead_type' => 'standard',
+            'imported_at' => now(),
+            'credit_card_type' => 'Visa',
+            'extra_fields' => [
+                'card' => 'Amex',
+                'credit' => 'Good',
+                'credit_range' => 'Excellent',
+            ],
+        ]);
+
+        app(QualificationService::class)->qualifyLead($lead);
+
+        Http::assertSent(function ($request): bool {
+            if (! str_contains($request->url(), 'CustomerQualification')) {
+                return false;
+            }
+
+            $customerData = $request->data()['customerData'] ?? [];
+
+            return ($customerData['card'] ?? null) === 'Visa'
+                && ! array_key_exists('credit', $customerData)
+                && ! array_key_exists('credit_range', $customerData);
         });
     }
 }

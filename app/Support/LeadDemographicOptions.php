@@ -45,6 +45,10 @@ class LeadDemographicOptions
         'Currently Rent/Lease',
     ];
 
+    public const CREDIT_CARD_TYPES = [
+        'Do Not Have A Credit Card',
+    ];
+
     /**
      * @var array<string, list<string>>
      */
@@ -54,6 +58,7 @@ class LeadDemographicOptions
         'marital_status' => self::MARITAL_STATUSES,
         'gender' => self::GENDERS,
         'home_owner' => self::HOMEOWNERS,
+        'credit_card_type' => self::CREDIT_CARD_TYPES,
     ];
 
     /**

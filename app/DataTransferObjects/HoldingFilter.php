@@ -15,6 +15,7 @@ readonly class HoldingFilter
      * @param  list<string>|null  $maritalStatus
      * @param  list<string>|null  $gender
      * @param  list<string>|null  $homeOwner
+     * @param  list<string>|null  $creditCardType
      * @param  list<string>|null  $tourLocation
      * @param  list<string>|null  $tourDateStart
      * @param  list<string>|null  $tourDate
@@ -42,6 +43,7 @@ readonly class HoldingFilter
         public ?array $maritalStatus = null,
         public ?array $gender = null,
         public ?array $homeOwner = null,
+        public ?array $creditCardType = null,
         public ?array $tourLocation = null,
         public ?array $tourDateStart = null,
         public ?array $tourDate = null,
@@ -78,6 +80,7 @@ readonly class HoldingFilter
             'marital_status' => $this->maritalStatus,
             'gender' => $this->gender,
             'home_owner' => $this->homeOwner,
+            'credit_card_type' => $this->creditCardType,
             'tour_location' => $this->tourLocation,
             'tour_date_start' => $this->tourDateStart,
             'tour_date' => $this->tourDate,

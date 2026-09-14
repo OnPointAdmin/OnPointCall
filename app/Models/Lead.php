@@ -41,6 +41,7 @@ class Lead extends Model
         'marital_status',
         'gender',
         'home_owner',
+        'credit_card_type',
         'original_lead_submit_date',
         'venue',
         'event',

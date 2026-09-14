@@ -51,6 +51,8 @@ class LeadForm
             TextInput::make('marital_status'),
             TextInput::make('gender'),
             TextInput::make('home_owner'),
+            TextInput::make('credit_card_type')
+                ->label('Credit Card Type'),
             TextInput::make('original_lead_submit_date'),
             TextInput::make('venue'),
             TextInput::make('event'),

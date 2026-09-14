@@ -101,6 +101,7 @@ class AgentWorkspaceTest extends TestCase
             ->set('editable.marital_status', 'Married')
             ->set('editable.gender', 'Female')
             ->set('editable.home_owner', 'Homeowner (3+ years)')
+            ->set('editable.credit_card_type', 'Visa')
             ->call('saveLeadEdits')
             ->assertSet('leadId', $lead->id)
             ->assertSet('editable', []);
@@ -117,6 +118,7 @@ class AgentWorkspaceTest extends TestCase
         $this->assertSame('Married', $lead->marital_status);
         $this->assertSame('Female', $lead->gender);
         $this->assertSame('Homeowner (3+ years)', $lead->home_owner);
+        $this->assertSame('Visa', $lead->credit_card_type);
 
         $edits = LeadHistory::withoutGlobalScopes()
             ->where('lead_id', $lead->id)
@@ -167,6 +169,7 @@ class AgentWorkspaceTest extends TestCase
             'marital_status' => 'Widowed',
             'gender' => 'Non-binary',
             'home_owner' => 'Renter',
+            'credit_card_type' => 'Do Not Have A Credit Card',
             'imported_at' => now(),
         ]);
 
@@ -186,7 +189,8 @@ class AgentWorkspaceTest extends TestCase
             ->assertSeeHtml('value="$80,000 - $90,000"')
             ->assertSeeHtml('value="Widowed"')
             ->assertSeeHtml('value="Non-binary"')
-            ->assertSeeHtml('value="Renter"');
+            ->assertSeeHtml('value="Renter"')
+            ->assertSeeHtml('value="Do Not Have A Credit Card"');
     }
 
     public function test_save_lead_edits_writes_one_field_edit_history_row(): void
@@ -761,6 +765,33 @@ class AgentWorkspaceTest extends TestCase
         Livewire::test(Workspace::class)
             ->call('startEdit')
             ->set('editable.age_range', '55-64')
+            ->call('saveLeadEdits')
+            ->assertDontSeeHtml('data-score-check="soft-score"')
+            ->assertSeeHtml('data-score-check="qualification"')
+            ->assertSeeHtml('wire:poll.2s');
+
+        Queue::assertNotPushed(SoftScoreLeadJob::class);
+        Queue::assertPushed(
+            QualifyLeadJob::class,
+            fn (QualifyLeadJob $job): bool => $job->force === true,
+        );
+    }
+
+    public function test_saving_credit_card_type_forces_qualification_only(): void
+    {
+        [$user] = $this->makeWorkableLead([
+            'credit_card_type' => 'Visa',
+            'soft_score_status' => SoftScoreStatus::Complete,
+            'soft_score_code' => 'A',
+            'soft_score_checked_at' => now()->subDay(),
+            'qualification_status' => QualificationStatus::Qualified,
+            'qualification_checked_at' => now()->subDay(),
+        ]);
+        $this->actingAs($user, 'agent');
+
+        Livewire::test(Workspace::class)
+            ->call('startEdit')
+            ->set('editable.credit_card_type', 'Mastercard')
             ->call('saveLeadEdits')
             ->assertDontSeeHtml('data-score-check="soft-score"')
             ->assertSeeHtml('data-score-check="qualification"')

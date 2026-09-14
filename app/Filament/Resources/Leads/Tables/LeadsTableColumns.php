@@ -4,8 +4,6 @@ namespace App\Filament\Resources\Leads\Tables;
 
 use App\Enums\BookingCheckStatus;
 use App\Enums\DncStatus;
-use App\Enums\LeadHistoryType;
-use App\Enums\LeadStatus;
 use App\Enums\LeadTablePreset;
 use App\Enums\QualificationStatus;
 use App\Enums\RndStatus;
@@ -259,6 +257,9 @@ class LeadsTableColumns
                 ->toggleable(isToggledHiddenByDefault: $hidden('gender')),
             TextColumn::make('home_owner')
                 ->toggleable(isToggledHiddenByDefault: $hidden('home_owner')),
+            TextColumn::make('credit_card_type')
+                ->label('Credit Card Type')
+                ->toggleable(isToggledHiddenByDefault: $hidden('credit_card_type')),
             TextColumn::make('tour_location')
                 ->toggleable(isToggledHiddenByDefault: $hidden('tour_location')),
             TextColumn::make('tour_date_start')

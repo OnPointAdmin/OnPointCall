@@ -53,6 +53,7 @@ class Workspace extends Component
         'marital_status',
         'gender',
         'home_owner',
+        'credit_card_type',
     ];
 
     private const SOFT_SCORE_TRIGGER_FIELDS = [
@@ -77,6 +78,7 @@ class Workspace extends Component
         'marital_status',
         'gender',
         'home_owner',
+        'credit_card_type',
     ];
 
     public ?int $leadId = null;
@@ -177,6 +179,7 @@ class Workspace extends Component
             'marital_status' => $lead->marital_status ?? '',
             'gender' => $lead->gender ?? '',
             'home_owner' => $lead->home_owner ?? '',
+            'credit_card_type' => $lead->credit_card_type ?? '',
         ];
     }
 

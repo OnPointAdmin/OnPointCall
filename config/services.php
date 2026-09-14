@@ -76,6 +76,13 @@ return [
                 'Agent Callback',
             ],
         ],
+        'leads' => [
+            'object' => 'Lead',
+            'fields' => [
+                'id' => 'Id',
+                'credit_card_type' => 'Type_of_Credit_Card__c',
+            ],
+        ],
     ],
 
     'dnc' => [

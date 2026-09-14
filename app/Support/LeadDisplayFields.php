@@ -19,6 +19,7 @@ class LeadDisplayFields
         'marital_status' => 'Marital status',
         'gender' => 'Gender',
         'home_owner' => 'Homeowner',
+        'credit_card_type' => 'Credit Card Type',
         'original_lead_submit_date' => 'Original submit date',
         'booking_id' => 'Booking ID',
         'phone_2' => 'Phone 2',

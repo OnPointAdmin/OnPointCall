@@ -121,7 +121,7 @@ These are the keys qualification **criteria** `Field_Name__c` values typically u
 | `Age_Range__c` | `age` |
 | `Marital_Status__c` | `marital` |
 | `Income__c` | `income` |
-| `Credit_Range__c` | `card` |
+| `Credit_Range__c` (survey) or `Type_of_Credit_Card__c` (call-center imported leads) | `card` |
 | `Country__c` | `country` |
 | `Employment_Status__c` | `employment` |
 | `Zip_Code__c` | `zipCode` |

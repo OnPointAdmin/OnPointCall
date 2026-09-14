@@ -144,7 +144,7 @@ class QualificationClient
             'homeOwner' => (string) ($lead->home_owner ?? ''),
             'qualificationCode' => (string) ($lead->soft_score_code ?? ''),
             'country' => $this->stringFromExtra($extra, ['country']) ?: 'United States',
-            'card' => $this->stringFromExtra($extra, ['card', 'credit', 'credit_range']),
+            'card' => (string) ($lead->credit_card_type ?? ''),
             'employment' => $this->stringFromExtra($extra, ['employment', 'employment_status']),
             'stayType' => $this->stringFromExtra($extra, ['stayType', 'stay_type']),
             'scheduled' => $this->stringFromExtra($extra, ['scheduled']),
@@ -155,7 +155,7 @@ class QualificationClient
                 continue;
             }
 
-            if (in_array($key, ['venueId', 'venue_id', 'VenueId'], true)) {
+            if (in_array($key, ['venueId', 'venue_id', 'VenueId', 'card', 'credit', 'credit_range'], true)) {
                 continue;
             }
 
