@@ -29,9 +29,12 @@ class DncBatchFormSection
                     TextInput::make('dnc_invalid')
                         ->label('Invalid number')
                         ->numeric(),
-                    TextInput::make('dnc_error')
-                        ->label('Errors')
-                        ->numeric(),
+                    BatchCheckErrorField::make(
+                        'dnc_error',
+                        'dnc_status',
+                        'dnc_last_error',
+                        'DNC errors',
+                    ),
                     self::breakdownField('dnc_hit_litigator', 'Litigator'),
                     self::breakdownField('dnc_hit_internal', 'Internal DNC'),
                     self::breakdownField('dnc_hit_national', 'National DNC'),

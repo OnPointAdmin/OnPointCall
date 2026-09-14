@@ -27,9 +27,10 @@
                             · RND errors: {{ (int) $record->rnd_error }}
                             · Qualification errors: {{ (int) $record->qualification_error }}
                             · DNC errors: {{ (int) $record->dnc_error }}
+                            · Booking errors: {{ (int) $record->booking_check_error }}
                         </p>
                         <p class="mt-1 text-danger-600/80 dark:text-danger-300/80">
-                            See the Error column in the leads list below for details.
+                            Click View next to an Errors count, or click Error in the leads list, for details.
                         </p>
                     @endif
                 </div>

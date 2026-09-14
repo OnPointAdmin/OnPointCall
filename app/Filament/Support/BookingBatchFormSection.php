@@ -28,9 +28,12 @@ class BookingBatchFormSection
                     TextInput::make('booking_past_hit')
                         ->label('Past bookings')
                         ->numeric(),
-                    TextInput::make('booking_check_error')
-                        ->label('Errors')
-                        ->numeric(),
+                    BatchCheckErrorField::make(
+                        'booking_check_error',
+                        'booking_check_status',
+                        'booking_check_last_error',
+                        'Booking check errors',
+                    ),
                 ])
                 ->columns(5)
                 ->visible(fn (Get $get): bool => (bool) $get('exclude_future_bookings') || (bool) $get('exclude_past_bookings'))),

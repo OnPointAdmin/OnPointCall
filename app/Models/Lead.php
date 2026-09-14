@@ -374,6 +374,31 @@ class Lead extends Model
         return $parts !== [] ? implode(' — ', $parts) : null;
     }
 
+    /**
+     * @return list<array{check: string, message: string}>
+     */
+    public function checkLastErrors(): array
+    {
+        $errors = [];
+
+        foreach ([
+            'Soft Score' => $this->soft_score_last_error,
+            'RND' => $this->rnd_last_error,
+            'Qualification' => $this->qualification_last_error,
+            'DNC' => $this->dnc_last_error,
+            'Booking' => $this->booking_check_last_error,
+        ] as $check => $message) {
+            if (filled($message)) {
+                $errors[] = [
+                    'check' => $check,
+                    'message' => $message,
+                ];
+            }
+        }
+
+        return $errors;
+    }
+
     private static function nullableTrimmedString(mixed $value): ?string
     {
         if (! is_string($value) || trim($value) === '') {

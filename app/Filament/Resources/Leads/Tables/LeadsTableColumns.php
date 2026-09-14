@@ -10,9 +10,13 @@ use App\Enums\RndStatus;
 use App\Enums\SoftScoreStatus;
 use App\Filament\Actions\ViewBookingCheckResultAction;
 use App\Filament\Actions\ViewDncResultAction;
+use App\Filament\Actions\ViewLeadCheckErrorsAction;
 use App\Filament\Actions\ViewQualificationResultAction;
+use App\Filament\Actions\ViewRndResultAction;
+use App\Filament\Actions\ViewSoftScoreResultAction;
 use App\Models\DispositionDefinition;
 use App\Models\Lead;
+use BackedEnum;
 use Filament\Tables\Columns\TextColumn;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -144,13 +148,31 @@ class LeadsTableColumns
             TextColumn::make('soft_score_code')
                 ->label('Soft score')
                 ->badge()
-                ->placeholder(fn (Lead $record): string => match ($record->soft_score_status) {
-                    SoftScoreStatus::Pending => 'Pending',
-                    SoftScoreStatus::Error => 'Error',
-                    SoftScoreStatus::Complete => '—',
-                    SoftScoreStatus::Recent => 'Recently checked',
-                    default => '—',
+                ->color(fn (Lead $record): string => match ($record->soft_score_status) {
+                    SoftScoreStatus::Error => 'danger',
+                    SoftScoreStatus::Pending => 'warning',
+                    default => 'gray',
                 })
+                ->getStateUsing(function (Lead $record): ?string {
+                    if (filled($record->soft_score_code)) {
+                        return $record->soft_score_code;
+                    }
+
+                    return match ($record->soft_score_status) {
+                        SoftScoreStatus::Pending => 'Pending',
+                        SoftScoreStatus::Error => 'Error',
+                        SoftScoreStatus::Complete => '—',
+                        SoftScoreStatus::Recent => 'Recently checked',
+                        default => null,
+                    };
+                })
+                ->tooltip(fn (Lead $record): ?string => self::checkErrorTooltip(
+                    $record->soft_score_last_error,
+                    $record->soft_score_status,
+                    'View Soft Score result',
+                ))
+                ->action(ViewSoftScoreResultAction::make())
+                ->disabledClick(fn (Lead $record): bool => $record->soft_score_status === null)
                 ->sortable()
                 ->toggleable(isToggledHiddenByDefault: $hidden('soft_score_code')),
             TextColumn::make('soft_score_status')
@@ -165,7 +187,20 @@ class LeadsTableColumns
             TextColumn::make('rnd_status')
                 ->label('RND')
                 ->badge()
+                ->color(fn (?RndStatus $state): string => match ($state) {
+                    RndStatus::Error => 'danger',
+                    RndStatus::Reassigned => 'warning',
+                    RndStatus::Clear => 'success',
+                    default => 'gray',
+                })
                 ->formatStateUsing(fn (?RndStatus $state): ?string => $state?->label())
+                ->tooltip(fn (Lead $record): ?string => self::checkErrorTooltip(
+                    $record->rnd_last_error,
+                    $record->rnd_status,
+                    'View RND result',
+                ))
+                ->action(ViewRndResultAction::make())
+                ->disabledClick(fn (Lead $record): bool => $record->rnd_status === null)
                 ->sortable()
                 ->toggleable(isToggledHiddenByDefault: $hidden('rnd_status')),
             TextColumn::make('qualification_status')
@@ -178,10 +213,13 @@ class LeadsTableColumns
                     default => 'gray',
                 })
                 ->formatStateUsing(fn (?QualificationStatus $state): ?string => $state?->label())
-                ->tooltip(fn (Lead $record): ?string => $record->qualification_status
-                    ? 'View qualification response'
-                    : null)
+                ->tooltip(fn (Lead $record): ?string => self::checkErrorTooltip(
+                    $record->qualification_last_error,
+                    $record->qualification_status,
+                    'View qualification response',
+                ))
                 ->action(ViewQualificationResultAction::make())
+                ->disabledClick(fn (Lead $record): bool => $record->qualification_status === null)
                 ->sortable()
                 ->toggleable(isToggledHiddenByDefault: $hidden('qualification_status')),
             TextColumn::make('dnc_status')
@@ -194,10 +232,13 @@ class LeadsTableColumns
                     default => 'gray',
                 })
                 ->formatStateUsing(fn (?DncStatus $state): ?string => $state?->label())
-                ->tooltip(fn (Lead $record): ?string => $record->dnc_status
-                    ? ($record->dncDetailLabel() ?? 'View DNC scrub result')
-                    : null)
+                ->tooltip(fn (Lead $record): ?string => self::checkErrorTooltip(
+                    $record->dnc_last_error,
+                    $record->dnc_status,
+                    $record->dncDetailLabel() ?? 'View DNC scrub result',
+                ))
                 ->action(ViewDncResultAction::make())
+                ->disabledClick(fn (Lead $record): bool => $record->dnc_status === null)
                 ->sortable()
                 ->toggleable(isToggledHiddenByDefault: $hidden('dnc_status')),
             TextColumn::make('booking_check_status')
@@ -209,10 +250,13 @@ class LeadsTableColumns
                     default => 'gray',
                 })
                 ->formatStateUsing(fn (?BookingCheckStatus $state): ?string => $state?->label())
-                ->tooltip(fn (Lead $record): ?string => $record->booking_check_status
-                    ? ($record->bookingDetailLabel() ?? 'View booking check result')
-                    : null)
+                ->tooltip(fn (Lead $record): ?string => self::checkErrorTooltip(
+                    $record->booking_check_last_error,
+                    $record->booking_check_status,
+                    $record->bookingDetailLabel() ?? 'View booking check result',
+                ))
                 ->action(ViewBookingCheckResultAction::make())
+                ->disabledClick(fn (Lead $record): bool => $record->booking_check_status === null)
                 ->sortable()
                 ->toggleable(isToggledHiddenByDefault: $hidden('booking_check_status')),
             TextColumn::make('error')
@@ -231,6 +275,8 @@ class LeadsTableColumns
 
                     return $parts === [] ? null : implode(' | ', $parts);
                 })
+                ->action(ViewLeadCheckErrorsAction::make())
+                ->disabledClick(fn (Lead $record): bool => $record->checkLastErrors() === [])
                 ->toggleable(isToggledHiddenByDefault: $hidden('error')),
             TextColumn::make('callback_at')
                 ->dateTime()
@@ -275,5 +321,18 @@ class LeadsTableColumns
         ];
 
         return $columns;
+    }
+
+    private static function checkErrorTooltip(?string $lastError, ?BackedEnum $status, string $fallback): ?string
+    {
+        if ($status === null) {
+            return null;
+        }
+
+        if ($status->value === 'error' && filled($lastError)) {
+            return $lastError;
+        }
+
+        return $fallback;
     }
 }

@@ -54,9 +54,12 @@ class BatchCheckFormSections
                 TextInput::make('soft_score_not_qualified')
                     ->label('Not qualified')
                     ->numeric(),
-                TextInput::make('soft_score_error')
-                    ->label('Errors')
-                    ->numeric(),
+                BatchCheckErrorField::make(
+                    'soft_score_error',
+                    'soft_score_status',
+                    'soft_score_last_error',
+                    'Soft Score errors',
+                ),
             ])
             ->columns(4)
             ->visible(fn (Get $get): bool => (bool) $get('run_soft_score')));
@@ -78,9 +81,12 @@ class BatchCheckFormSections
                 TextInput::make('rnd_no_data')
                     ->label('No data')
                     ->numeric(),
-                TextInput::make('rnd_error')
-                    ->label('Errors')
-                    ->numeric(),
+                BatchCheckErrorField::make(
+                    'rnd_error',
+                    'rnd_status',
+                    'rnd_last_error',
+                    'RND errors',
+                ),
             ])
             ->columns(5)
             ->visible(fn (Get $get): bool => (bool) $get('run_rnd_check')));
@@ -99,9 +105,12 @@ class BatchCheckFormSections
                 TextInput::make('qualification_not_qualified')
                     ->label('Not qualified')
                     ->numeric(),
-                TextInput::make('qualification_error')
-                    ->label('Errors')
-                    ->numeric(),
+                BatchCheckErrorField::make(
+                    'qualification_error',
+                    'qualification_status',
+                    'qualification_last_error',
+                    'Qualification errors',
+                ),
             ])
             ->columns(4)
             ->visible(fn (Get $get): bool => (bool) $get('run_qualification')));
