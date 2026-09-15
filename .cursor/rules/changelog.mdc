@@ -1,0 +1,31 @@
+---
+description: Add every committed change to CHANGELOG.md under Unreleased
+alwaysApply: true
+---
+
+# Changelog on every commit
+
+When the user asks to commit, update [CHANGELOG.md](CHANGELOG.md) in the **same commit** as the code.
+
+## Where
+
+Add one bullet under `## Unreleased`, in **Added**, **Changed**, **Fixed**, or **Removed**.
+
+On **deploy prod**, move Unreleased bullets into a new `## YYYY-MM-DD` heading (today's date) and leave a fresh empty Unreleased section.
+
+## What to write
+
+- One user-facing sentence, same voice as recent git subjects (`Let managers…`, `Show…`, `Fix…`)
+- Describe the change, not a file list
+- Skip a bullet only for merge commits, changelog-only edits, and Salesforce metadata-catalog timestamp noise
+
+```markdown
+# BAD — commit has no changelog bullet
+git commit -m "Add Credit Card Type field"
+
+# GOOD — Unreleased bullet in the same commit
+### Added
+- Credit Card Type on leads, backfilled from Salesforce.
+```
+
+Do not add a bullet whose only change is updating `CHANGELOG.md`.
