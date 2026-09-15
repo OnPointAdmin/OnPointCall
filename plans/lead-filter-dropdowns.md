@@ -9,7 +9,7 @@ Clicking the **filter icon** on All Leads, calling-list Leads, Qualify/Import ba
 In `app/Filament/Resources/Leads/Tables/LeadsTable.php`:
 
 - Most presets: `->filters($filters, layout: FiltersLayout::Dropdown)` and `->filtersFormColumns(1)`
-- Qualify / Assign: `FiltersLayout::AboveContent`, `deferFilters(false)`, and `LeadsTableFilters::filterFormSchema()`
+- Qualify / Assign: `FiltersLayout::Hidden`, `deferFilters(false)`, page-chrome `tableFiltersForm`, and `LeadsTableFilters::filterFormSchema()`
 
 `LeadsTableFilters::make()` keeps the full shared filter set on all screens. Qualify/Assign keep their default values (Holding + standard) only.
 
