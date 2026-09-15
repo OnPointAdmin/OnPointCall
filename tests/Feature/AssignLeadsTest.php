@@ -58,6 +58,7 @@ class AssignLeadsTest extends TestCase
             ->assertSee('Calling list')
             ->assertSee('Import')
             ->assertSee('Venue & event')
+            ->assertSee('Update count')
             ->assertTableFilterExists('qualified_partners')
             ->assertTableFilterExists('created_at')
             ->assertTableFilterExists('last_disposition');

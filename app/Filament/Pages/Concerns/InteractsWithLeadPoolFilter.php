@@ -80,6 +80,11 @@ trait InteractsWithLeadPoolFilter
         $this->refreshCount(app(HoldingReleaseService::class));
     }
 
+    public function refreshCountAction(HoldingReleaseService $releaseService): void
+    {
+        $this->refreshCount($releaseService);
+    }
+
     public function leadPoolAssignableOnly(): bool
     {
         return true;
@@ -114,6 +119,11 @@ trait InteractsWithLeadPoolFilter
                     ->action('resetTableFiltersForm'),
             ])->alignment(Alignment::End),
             EmbeddedSchema::make('tableFiltersForm'),
+            Actions::make([
+                Action::make('refreshCount')
+                    ->label('Update count')
+                    ->action('refreshCountAction'),
+            ]),
         ])->columnSpanFull();
     }
 
