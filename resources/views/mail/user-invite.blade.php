@@ -2,10 +2,10 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>OnPoint Call invite</title>
+    <title>{{ config('app.name') }} invite</title>
 </head>
 <body style="font-family: sans-serif; color: #1e293b; line-height: 1.5;">
-    <h1 style="font-size: 20px;">You're invited to OnPoint Call</h1>
+    <h1 style="font-size: 20px;">You're invited to {{ config('app.name') }}</h1>
     <p>Hi {{ $user->name }},</p>
     <p>An account has been created for you. Use these credentials to sign in, then choose a new password:</p>
     <ul>

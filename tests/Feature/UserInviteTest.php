@@ -58,7 +58,7 @@ class UserInviteTest extends TestCase
         Mail::assertSent(UserInviteMail::class, function (UserInviteMail $mail) use ($user): bool {
             return $mail->hasTo($user->email)
                 && $mail->user->is($user)
-                && $mail->envelope()->subject === 'You are invited to OnPoint Call';
+                && $mail->envelope()->subject === 'You are invited to '.config('app.name');
         });
     }
 

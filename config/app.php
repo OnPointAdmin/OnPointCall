@@ -13,7 +13,7 @@ return [
     |
     */
 
-    'name' => env('APP_NAME', 'On Point Call'),
+    'name' => env('APP_NAME', 'On Point Contact Assist'),
 
     /*
     |--------------------------------------------------------------------------

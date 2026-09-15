@@ -17,7 +17,7 @@ class PasswordResetMail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Reset your OnPoint Call password',
+            subject: 'Reset your '.config('app.name').' password',
         );
     }
 

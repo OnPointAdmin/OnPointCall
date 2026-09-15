@@ -7,7 +7,7 @@
 <body style="font-family: sans-serif; color: #1e293b; line-height: 1.5;">
     <h1 style="font-size: 20px;">Reset your password</h1>
     <p>Hi {{ $user->name }},</p>
-    <p>You requested a password reset for your OnPoint Call account. Click the link below to choose a new password:</p>
+    <p>You requested a password reset for your {{ config('app.name') }} account. Click the link below to choose a new password:</p>
     <p>
         <a href="{{ $resetUrl }}">{{ $resetUrl }}</a>
     </p>

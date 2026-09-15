@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Per-boot Cloud Agent start step for the OnPoint Call app.
+# Per-boot Cloud Agent start step for the On Point Contact Assist app.
 # Brings up PostgreSQL, launches the queue worker in the background, then
 # runs the Laravel dev server in the foreground so it stays attached.
 set -euo pipefail

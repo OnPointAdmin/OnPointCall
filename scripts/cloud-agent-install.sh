@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Idempotent Cloud Agent install step for the OnPoint Call app.
+# Idempotent Cloud Agent install step for the On Point Contact Assist app.
 # Runs from the repo root after a fresh checkout. Prepares dependencies,
 # environment file, and the PostgreSQL schema/seed data. Must terminate.
 set -euo pipefail

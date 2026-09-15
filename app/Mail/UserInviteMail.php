@@ -29,7 +29,7 @@ class UserInviteMail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'You are invited to OnPoint Call',
+            subject: 'You are invited to '.config('app.name'),
         );
     }
 

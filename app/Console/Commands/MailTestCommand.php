@@ -16,9 +16,9 @@ class MailTestCommand extends Command
         $email = (string) $this->argument('email');
 
         Mail::raw(
-            'If you can read this, On Point Call mail is working ('.config('mail.default').').',
+            'If you can read this, '.config('app.name').' mail is working ('.config('mail.default').').',
             function ($message) use ($email): void {
-                $message->to($email)->subject('On Point Call mail test');
+                $message->to($email)->subject(config('app.name').' mail test');
             },
         );
 
