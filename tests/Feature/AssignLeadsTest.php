@@ -9,6 +9,7 @@ use App\Enums\QualificationStatus;
 use App\Enums\QualifiedPartnersMatch;
 use App\Enums\UserRole;
 use App\Filament\Pages\AssignLeads;
+use App\Filament\Support\LeadTableFilterCascade;
 use App\Models\CallingList;
 use App\Models\Company;
 use App\Models\Lead;
@@ -203,6 +204,99 @@ class AssignLeadsTest extends TestCase
         $this->assertSame($list->id, $newest->calling_list_id);
     }
 
+    public function test_filter_cascade_narrows_state_options_by_lead_type(): void
+    {
+        [$admin] = $this->setUpAssignPage();
+
+        LeadTypeDefinition::createFromName('TNB', 'tnb');
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $admin->company_id,
+            'phone' => '4045558201',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'state' => 'FL',
+            'qualification_status' => QualificationStatus::Qualified,
+            'imported_at' => now(),
+        ]);
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $admin->company_id,
+            'phone' => '4045558202',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'state' => 'GA',
+            'qualification_status' => QualificationStatus::Qualified,
+            'imported_at' => now(),
+        ]);
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $admin->company_id,
+            'phone' => '4045558203',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'tnb',
+            'state' => 'NV',
+            'qualification_status' => QualificationStatus::Qualified,
+            'imported_at' => now(),
+        ]);
+
+        $component = Livewire::actingAs($admin)
+            ->test(AssignLeads::class)
+            ->assertOk();
+
+        $table = $component->instance()->getTable();
+
+        $this->assertSame(
+            ['FL' => 'FL', 'GA' => 'GA'],
+            LeadTableFilterCascade::optionsFor('state', $table),
+        );
+
+        $component->filterTable('lead_type', 'tnb');
+
+        $this->assertSame(
+            ['NV' => 'NV'],
+            LeadTableFilterCascade::optionsFor('state', $component->instance()->getTable()),
+        );
+    }
+
+    public function test_changing_lead_type_clears_invalid_state_selection(): void
+    {
+        [$admin] = $this->setUpAssignPage();
+
+        LeadTypeDefinition::createFromName('TNB', 'tnb');
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $admin->company_id,
+            'phone' => '4045558301',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'state' => 'FL',
+            'qualification_status' => QualificationStatus::Qualified,
+            'imported_at' => now(),
+        ]);
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $admin->company_id,
+            'phone' => '4045558302',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'tnb',
+            'state' => 'NV',
+            'qualification_status' => QualificationStatus::Qualified,
+            'imported_at' => now(),
+        ]);
+
+        Livewire::actingAs($admin)
+            ->test(AssignLeads::class)
+            ->filterTable('state', ['FL'])
+            ->assertSet('holdingCount', 1)
+            ->filterTable('lead_type', 'tnb')
+            ->assertSet('tableFilters.state.values', [])
+            ->assertSet('holdingCount', 1)
+            ->assertCanSeeTableRecords(
+                Lead::withoutGlobalScopes()->where('phone', '4045558302')->get(),
+            );
+    }
+
     public function test_null_qualification_holding_leads_are_included_by_default(): void
     {
         [$admin] = $this->setUpAssignPage();
@@ -216,11 +310,24 @@ class AssignLeadsTest extends TestCase
             'imported_at' => now(),
         ]);
 
+        $qualified = Lead::withoutGlobalScopes()->create([
+            'company_id' => $admin->company_id,
+            'phone' => '4045558002',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'qualification_status' => QualificationStatus::Qualified,
+            'imported_at' => now(),
+        ]);
+
         Livewire::actingAs($admin)
             ->test(AssignLeads::class)
-            ->assertSet('holdingCount', 1)
+            ->assertSet('holdingCount', 2)
             ->filterTable('qualification_status', QualificationStatus::Qualified->value)
-            ->assertSet('holdingCount', 0);
+            ->assertSet('holdingCount', 1)
+            ->assertCanSeeTableRecords([$qualified])
+            ->assertCanNotSeeTableRecords(
+                Lead::withoutGlobalScopes()->where('phone', '4045558001')->get(),
+            );
     }
 
     public function test_qualified_partners_filter_limits_matching_leads(): void

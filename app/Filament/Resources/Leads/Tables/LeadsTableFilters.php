@@ -12,6 +12,7 @@ use App\Enums\QualificationStatus;
 use App\Enums\QualifiedPartnersMatch;
 use App\Enums\RndStatus;
 use App\Enums\SoftScoreStatus;
+use App\Filament\Support\LeadTableFilterCascade;
 use App\Filament\Support\LeadTableFilterMapper;
 use App\Models\CallingList;
 use App\Models\DispositionDefinition;
@@ -135,7 +136,12 @@ class LeadsTableFilters
         $leadType = $preset->usesPoolSourceScope()
             ? SelectFilter::make('lead_type')
                 ->label('Lead type')
-                ->options(fn (): array => LeadTypeDefinition::allOptions())
+                ->options(fn (): array => self::filterOptions(
+                    'lead_type',
+                    $table,
+                    $preset,
+                    fn (): array => LeadTypeDefinition::allOptions(),
+                ))
                 ->default('standard')
             : SelectFilter::make('lead_type')
                 ->options(fn (): array => LeadTypeDefinition::allOptions());
@@ -144,7 +150,12 @@ class LeadsTableFilters
             'lead_type' => $leadType,
             'calling_list_id' => SelectFilter::make('calling_list_id')
                 ->label('Calling list')
-                ->options(fn (): array => ['holding' => 'Holding'] + CallingList::query()->orderBy('name')->pluck('name', 'id')->all())
+                ->options(fn (): array => self::filterOptions(
+                    'calling_list_id',
+                    $table,
+                    $preset,
+                    fn (): array => ['holding' => 'Holding'] + CallingList::query()->orderBy('name')->pluck('name', 'id')->all(),
+                ))
                 ->default($preset->usesPoolSourceScope() ? 'holding' : null)
                 ->query(function (Builder $query, array $data) use ($preset): Builder {
                     $value = $data['value'] ?? null;
@@ -170,7 +181,12 @@ class LeadsTableFilters
                 ->options(collect(LeadStatus::cases())->mapWithKeys(fn ($s) => [$s->value => $s->label()])),
             'import_batch_id' => SelectFilter::make('import_batch_id')
                 ->label('Import batch')
-                ->options(fn (): array => ImportBatch::query()->orderByDesc('imported_at')->pluck('source_filename', 'id')->all())
+                ->options(fn (): array => self::filterOptions(
+                    'import_batch_id',
+                    $table,
+                    $preset,
+                    fn (): array => ImportBatch::query()->orderByDesc('imported_at')->pluck('source_filename', 'id')->all(),
+                ))
                 ->searchable(),
             'file_name' => Filter::make('file_name')
                 ->label('Source file')
@@ -224,18 +240,33 @@ class LeadsTableFilters
             'venue' => SelectFilter::make('venue')
                 ->label('Venue')
                 ->multiple()
-                ->options(fn (): array => self::distinctLeadValues('venue', $table, $preset))
+                ->options(fn (): array => self::filterOptions(
+                    'venue',
+                    $table,
+                    $preset,
+                    fn (): array => self::distinctLeadValues('venue', $table, $preset),
+                ))
                 ->searchable()
                 ->query(fn (Builder $query, array $data): Builder => self::applyInFilter($query, 'venue', $data)),
             'event' => SelectFilter::make('event')
                 ->label('Event')
                 ->multiple()
-                ->options(fn (): array => self::distinctLeadValues('event', $table, $preset))
+                ->options(fn (): array => self::filterOptions(
+                    'event',
+                    $table,
+                    $preset,
+                    fn (): array => self::distinctLeadValues('event', $table, $preset),
+                ))
                 ->searchable()
                 ->query(fn (Builder $query, array $data): Builder => self::applyInFilter($query, 'event', $data)),
             'state' => SelectFilter::make('state')
                 ->multiple()
-                ->options(fn (): array => self::distinctLeadValues('state', $table, $preset))
+                ->options(fn (): array => self::filterOptions(
+                    'state',
+                    $table,
+                    $preset,
+                    fn (): array => self::distinctLeadValues('state', $table, $preset),
+                ))
                 ->searchable()
                 ->query(fn (Builder $query, array $data): Builder => self::applyInFilter($query, 'state', $data, upper: true)),
             'zip' => Filter::make('zip')
@@ -256,7 +287,12 @@ class LeadsTableFilters
             'partner' => SelectFilter::make('partner')
                 ->label('Partner')
                 ->multiple()
-                ->options(fn (): array => self::poolDistinct($table, 'partner'))
+                ->options(fn (): array => self::filterOptions(
+                    'partner',
+                    $table,
+                    $preset,
+                    fn (): array => self::poolDistinct($table, 'partner'),
+                ))
                 ->searchable()
                 ->query(function (Builder $query, array $data): Builder {
                     $partners = self::normalizedValues($data);
@@ -271,25 +307,35 @@ class LeadsTableFilters
                         }
                     });
                 }),
-            'age_range' => self::demographicFilter('age_range', 'Age range'),
-            'annual_income' => self::demographicFilter('annual_income', 'Income range'),
-            'marital_status' => self::demographicFilter('marital_status', 'Marital status'),
-            'gender' => self::demographicFilter('gender', 'Gender'),
-            'home_owner' => self::demographicFilter('home_owner', 'Home owner'),
-            'credit_card_type' => self::demographicFilter('credit_card_type', 'Credit Card Type'),
+            'age_range' => self::demographicFilter('age_range', 'Age range', $table, $preset),
+            'annual_income' => self::demographicFilter('annual_income', 'Income range', $table, $preset),
+            'marital_status' => self::demographicFilter('marital_status', 'Marital status', $table, $preset),
+            'gender' => self::demographicFilter('gender', 'Gender', $table, $preset),
+            'home_owner' => self::demographicFilter('home_owner', 'Home owner', $table, $preset),
+            'credit_card_type' => self::demographicFilter('credit_card_type', 'Credit Card Type', $table, $preset),
             'soft_score_code' => SelectFilter::make('soft_score_code')
                 ->label('Soft score code')
                 ->multiple()
-                ->options(fn (): array => self::distinctLeadValues('soft_score_code', $table, $preset))
+                ->options(fn (): array => self::filterOptions(
+                    'soft_score_code',
+                    $table,
+                    $preset,
+                    fn (): array => self::distinctLeadValues('soft_score_code', $table, $preset),
+                ))
                 ->searchable()
                 ->query(fn (Builder $query, array $data): Builder => self::applyInFilter($query, 'soft_score_code', $data)),
             'last_disposition' => SelectFilter::make('last_disposition')
                 ->label('Last Disp')
                 ->multiple()
-                ->options(fn (): array => ['none' => 'None'] + collect(Disposition::cases())->mapWithKeys(
-                    fn (Disposition $disposition): array => [$disposition->value => $disposition->label()],
-                )->all() + DispositionDefinition::filterOptions(
-                    (int) (CompanyContext::idOrAuthenticated() ?? Auth::user()?->company_id),
+                ->options(fn (): array => self::filterOptions(
+                    'last_disposition',
+                    $table,
+                    $preset,
+                    fn (): array => ['none' => 'None'] + collect(Disposition::cases())->mapWithKeys(
+                        fn (Disposition $disposition): array => [$disposition->value => $disposition->label()],
+                    )->all() + DispositionDefinition::filterOptions(
+                        (int) (CompanyContext::idOrAuthenticated() ?? Auth::user()?->company_id),
+                    ),
                 ))
                 ->searchable()
                 ->query(function (Builder $query, array $data): Builder {
@@ -325,7 +371,12 @@ class LeadsTableFilters
                 ->options(collect(SoftScoreStatus::cases())->mapWithKeys(fn ($s) => [$s->value => $s->label()])),
             'qualification_status' => SelectFilter::make('qualification_status')
                 ->label('Qualification')
-                ->options(collect(QualificationStatus::cases())->mapWithKeys(fn ($s) => [$s->value => $s->label()])),
+                ->options(fn (): array => self::filterOptions(
+                    'qualification_status',
+                    $table,
+                    $preset,
+                    fn (): array => collect(QualificationStatus::cases())->mapWithKeys(fn ($s) => [$s->value => $s->label()])->all(),
+                )),
             'dnc_status' => SelectFilter::make('dnc_status')
                 ->label('DNC')
                 ->options(collect(DncStatus::cases())->mapWithKeys(fn ($s) => [$s->value => $s->label()])),
@@ -338,7 +389,12 @@ class LeadsTableFilters
             'qualified_partners' => SelectFilter::make('qualified_partners')
                 ->label('Qualified · Partners')
                 ->multiple()
-                ->options(fn (): array => ['none' => 'None'] + self::poolQualifiedPartners($table))
+                ->options(fn (): array => self::filterOptions(
+                    'qualified_partners',
+                    $table,
+                    $preset,
+                    fn (): array => ['none' => 'None'] + self::poolQualifiedPartners($table),
+                ))
                 ->searchable()
                 ->query(function (Builder $query, array $data) use ($table): Builder {
                     $values = self::normalizedValues($data);
@@ -385,42 +441,76 @@ class LeadsTableFilters
             'tour_location' => SelectFilter::make('tour_location')
                 ->label('Tour Location')
                 ->multiple()
-                ->options(fn (): array => self::distinctLeadValues('tour_location', $table, $preset))
+                ->options(fn (): array => self::filterOptions(
+                    'tour_location',
+                    $table,
+                    $preset,
+                    fn (): array => self::distinctLeadValues('tour_location', $table, $preset),
+                ))
                 ->searchable()
                 ->query(fn (Builder $query, array $data): Builder => self::applyInFilter($query, 'tour_location', $data)),
             'tour_date_start' => SelectFilter::make('tour_date_start')
                 ->label('Tour Date Start')
                 ->multiple()
-                ->options(fn (): array => self::distinctLeadValues('tour_date_start', $table, $preset))
+                ->options(fn (): array => self::filterOptions(
+                    'tour_date_start',
+                    $table,
+                    $preset,
+                    fn (): array => self::distinctLeadValues('tour_date_start', $table, $preset),
+                ))
                 ->searchable()
                 ->query(fn (Builder $query, array $data): Builder => self::applyInFilter($query, 'tour_date_start', $data)),
             'tour_date' => SelectFilter::make('tour_date')
                 ->label('Tour Date')
                 ->multiple()
-                ->options(fn (): array => self::distinctLeadValues('tour_date', $table, $preset))
+                ->options(fn (): array => self::filterOptions(
+                    'tour_date',
+                    $table,
+                    $preset,
+                    fn (): array => self::distinctLeadValues('tour_date', $table, $preset),
+                ))
                 ->searchable()
                 ->query(fn (Builder $query, array $data): Builder => self::applyInFilter($query, 'tour_date', $data)),
             'tour_result' => SelectFilter::make('tour_result')
                 ->label('Tour Result')
                 ->multiple()
-                ->options(fn (): array => self::distinctLeadValues('tour_result', $table, $preset))
+                ->options(fn (): array => self::filterOptions(
+                    'tour_result',
+                    $table,
+                    $preset,
+                    fn (): array => self::distinctLeadValues('tour_result', $table, $preset),
+                ))
                 ->searchable()
                 ->query(fn (Builder $query, array $data): Builder => self::applyInFilter($query, 'tour_result', $data)),
         ];
     }
 
-    private static function demographicFilter(string $column, string $label): SelectFilter
+    private static function demographicFilter(string $column, string $label, Table $table, LeadTablePreset $preset): SelectFilter
     {
         return SelectFilter::make($column)
             ->label($label)
             ->multiple()
-            ->options(function () use ($column): array {
-                $values = LeadDemographicOptions::for($column, Auth::user()?->company_id);
+            ->options(function () use ($column, $table, $preset): array {
+                return self::filterOptions($column, $table, $preset, function () use ($column): array {
+                    $values = LeadDemographicOptions::for($column, Auth::user()?->company_id);
 
-                return $values === [] ? [] : array_combine($values, $values);
+                    return $values === [] ? [] : array_combine($values, $values);
+                });
             })
             ->searchable()
             ->query(fn (Builder $query, array $data): Builder => self::applyInFilter($query, $column, $data));
+    }
+
+    /**
+     * @return array<string|int, string>
+     */
+    private static function filterOptions(string $name, Table $table, LeadTablePreset $preset, callable $default): array
+    {
+        if (LeadTableFilterCascade::usesCascade($preset)) {
+            return LeadTableFilterCascade::optionsFor($name, $table);
+        }
+
+        return $default();
     }
 
     /**

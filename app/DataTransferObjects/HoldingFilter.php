@@ -92,4 +92,81 @@ readonly class HoldingFilter
             'qualified_partners_match' => $this->qualifiedPartnersMatch,
         ];
     }
+
+    /**
+     * @param  list<string>  $keys  Table filter names to clear for dependent-option queries.
+     */
+    public function withoutFields(string ...$keys): self
+    {
+        $exclude = array_fill_keys($keys, true);
+
+        $clearPartners = isset($exclude['qualified_partners']);
+
+        return new self(
+            leadType: isset($exclude['lead_type']) ? null : $this->leadType,
+            sourceCallingListId: isset($exclude['calling_list_id']) ? null : $this->sourceCallingListId,
+            state: isset($exclude['state']) ? null : $this->state,
+            venue: isset($exclude['venue']) ? null : $this->venue,
+            event: isset($exclude['event']) ? null : $this->event,
+            importBatchId: isset($exclude['import_batch_id']) ? null : $this->importBatchId,
+            importedFrom: isset($exclude['imported_at']) ? null : $this->importedFrom,
+            importedTo: isset($exclude['imported_at']) ? null : $this->importedTo,
+            createdFrom: isset($exclude['created_at']) ? null : $this->createdFrom,
+            createdTo: isset($exclude['created_at']) ? null : $this->createdTo,
+            zip: isset($exclude['zip']) ? null : $this->zip,
+            partner: isset($exclude['partner']) ? null : $this->partner,
+            fileName: isset($exclude['file_name']) ? null : $this->fileName,
+            softScoreCode: isset($exclude['soft_score_code']) ? null : $this->softScoreCode,
+            ageRange: isset($exclude['age_range']) ? null : $this->ageRange,
+            annualIncome: isset($exclude['annual_income']) ? null : $this->annualIncome,
+            maritalStatus: isset($exclude['marital_status']) ? null : $this->maritalStatus,
+            gender: isset($exclude['gender']) ? null : $this->gender,
+            homeOwner: isset($exclude['home_owner']) ? null : $this->homeOwner,
+            creditCardType: isset($exclude['credit_card_type']) ? null : $this->creditCardType,
+            tourLocation: isset($exclude['tour_location']) ? null : $this->tourLocation,
+            tourDateStart: isset($exclude['tour_date_start']) ? null : $this->tourDateStart,
+            tourDate: isset($exclude['tour_date']) ? null : $this->tourDate,
+            tourResult: isset($exclude['tour_result']) ? null : $this->tourResult,
+            qualificationStatus: isset($exclude['qualification_status']) ? null : $this->qualificationStatus,
+            lastDispositions: isset($exclude['last_disposition']) ? null : $this->lastDispositions,
+            attemptCount: isset($exclude['attempt_count']) ? null : $this->attemptCount,
+            qualifiedPartners: $clearPartners ? null : $this->qualifiedPartners,
+            qualifiedPartnersMatch: $clearPartners ? null : $this->qualifiedPartnersMatch,
+        );
+    }
+
+    public function withSource(?int $sourceCallingListId): self
+    {
+        return new self(
+            leadType: $this->leadType,
+            sourceCallingListId: $sourceCallingListId,
+            state: $this->state,
+            venue: $this->venue,
+            event: $this->event,
+            importBatchId: $this->importBatchId,
+            importedFrom: $this->importedFrom,
+            importedTo: $this->importedTo,
+            createdFrom: $this->createdFrom,
+            createdTo: $this->createdTo,
+            zip: $this->zip,
+            partner: $this->partner,
+            fileName: $this->fileName,
+            softScoreCode: $this->softScoreCode,
+            ageRange: $this->ageRange,
+            annualIncome: $this->annualIncome,
+            maritalStatus: $this->maritalStatus,
+            gender: $this->gender,
+            homeOwner: $this->homeOwner,
+            creditCardType: $this->creditCardType,
+            tourLocation: $this->tourLocation,
+            tourDateStart: $this->tourDateStart,
+            tourDate: $this->tourDate,
+            tourResult: $this->tourResult,
+            qualificationStatus: $this->qualificationStatus,
+            lastDispositions: $this->lastDispositions,
+            attemptCount: $this->attemptCount,
+            qualifiedPartners: $this->qualifiedPartners,
+            qualifiedPartnersMatch: $this->qualifiedPartnersMatch,
+        );
+    }
 }

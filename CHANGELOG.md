@@ -6,9 +6,11 @@ Work that has landed on `master` but is not yet dated sits under **Unreleased**.
 
 ## Unreleased
 
-### Added
+### Changed
 
-- Project changelog backfilled from git, plus a Cursor rule to keep Unreleased in sync with commits.
+- Cascade Assign and Qualify filter options from the matching holding pool and clear stale selections when filters change.
+
+### Added
 
 ## 2026-09-14
 

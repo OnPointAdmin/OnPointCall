@@ -1515,4 +1515,49 @@ class HoldingReleaseServiceTest extends TestCase
             $service->distinctHoldingColumn($company->id, 'standard', 'venue', null, false),
         );
     }
+
+    public function test_distinct_filtered_column_excludes_self_and_respects_other_filters(): void
+    {
+        $company = Company::factory()->create();
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045558401',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'state' => 'FL',
+            'imported_at' => now(),
+        ]);
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045558402',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'state' => 'GA',
+            'imported_at' => now(),
+        ]);
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045558403',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'tnb',
+            'state' => 'NV',
+            'imported_at' => now(),
+        ]);
+
+        $service = app(HoldingReleaseService::class);
+        $filter = new HoldingFilter(leadType: 'tnb', state: ['FL']);
+
+        $this->assertSame(
+            ['NV' => 'NV'],
+            $service->distinctFilteredColumn($company->id, $filter, 'state', true, 'state'),
+        );
+
+        $this->assertSame(
+            ['standard', 'tnb'],
+            $service->distinctFilteredLeadTypes($company->id, new HoldingFilter, true),
+        );
+    }
 }

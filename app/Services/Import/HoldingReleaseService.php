@@ -4,6 +4,7 @@ namespace App\Services\Import;
 
 use App\DataTransferObjects\HoldingFilter;
 use App\Enums\BookingCheckStatus;
+use App\Enums\Disposition;
 use App\Enums\DncStatus;
 use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
@@ -13,6 +14,7 @@ use App\Enums\RndStatus;
 use App\Enums\SoftScoreStatus;
 use App\Exceptions\HoldingReleaseException;
 use App\Models\CallingList;
+use App\Models\ImportBatch;
 use App\Models\Lead;
 use App\Models\LeadHistory;
 use Illuminate\Database\Eloquent\Builder;
@@ -202,6 +204,262 @@ class HoldingReleaseService
         ksort($partners);
 
         return $partners;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function distinctFilteredColumn(
+        int $companyId,
+        HoldingFilter $filter,
+        string $column,
+        bool $assignableOnly,
+        string $excludeFilterKey,
+    ): array {
+        if (! in_array($column, self::DISTINCT_COLUMNS, true)) {
+            throw new InvalidArgumentException("Unsupported holding filter column: {$column}");
+        }
+
+        $values = $this->queryHolding($companyId, $filter->withoutFields($excludeFilterKey), $assignableOnly)
+            ->whereNotNull($column)
+            ->where($column, '!=', '')
+            ->distinct()
+            ->orderBy($column)
+            ->pluck($column);
+
+        $options = [];
+
+        foreach ($values as $value) {
+            $options[(string) $value] = (string) $value;
+        }
+
+        return $options;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function distinctFilteredPartners(
+        int $companyId,
+        HoldingFilter $filter,
+        bool $assignableOnly,
+        string $excludeFilterKey = 'partner',
+    ): array {
+        $partnerLists = $this->queryHolding($companyId, $filter->withoutFields($excludeFilterKey), $assignableOnly)
+            ->whereNotNull('partner_list')
+            ->where('partner_list', '!=', '')
+            ->pluck('partner_list');
+
+        $partners = [];
+
+        foreach ($partnerLists as $partnerList) {
+            foreach ($this->splitPartnerList((string) $partnerList) as $partner) {
+                $partners[$partner] = $partner;
+            }
+        }
+
+        ksort($partners);
+
+        return $partners;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function distinctFilteredQualifiedPartners(
+        int $companyId,
+        HoldingFilter $filter,
+        bool $assignableOnly,
+        string $excludeFilterKey = 'qualified_partners',
+    ): array {
+        $partners = [];
+
+        $this->queryHolding($companyId, $filter->withoutFields($excludeFilterKey), $assignableOnly)
+            ->whereNotNull('qualification_result')
+            ->select(['id', 'qualification_result'])
+            ->cursor()
+            ->each(function (Lead $lead) use (&$partners): void {
+                foreach ($lead->qualifiedPartnerNames() as $name) {
+                    $partners[$name] = $name;
+                }
+            });
+
+        ksort($partners);
+
+        return $partners;
+    }
+
+    /**
+     * @return array<int|string, string>
+     */
+    public function distinctFilteredImportBatchOptions(
+        int $companyId,
+        HoldingFilter $filter,
+        bool $assignableOnly,
+        string $excludeFilterKey = 'import_batch_id',
+    ): array {
+        $batchIds = $this->queryHolding($companyId, $filter->withoutFields($excludeFilterKey), $assignableOnly)
+            ->whereNotNull('import_batch_id')
+            ->distinct()
+            ->pluck('import_batch_id');
+
+        if ($batchIds->isEmpty()) {
+            return [];
+        }
+
+        return ImportBatch::query()
+            ->whereIn('id', $batchIds)
+            ->orderByDesc('imported_at')
+            ->pluck('source_filename', 'id')
+            ->all();
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function distinctFilteredLeadTypes(
+        int $companyId,
+        HoldingFilter $filter,
+        bool $assignableOnly,
+        string $excludeFilterKey = 'lead_type',
+    ): array {
+        return $this->queryHolding($companyId, $filter->withoutFields($excludeFilterKey), $assignableOnly)
+            ->whereNotNull('lead_type')
+            ->where('lead_type', '!=', '')
+            ->distinct()
+            ->orderBy('lead_type')
+            ->pluck('lead_type')
+            ->map(static fn (mixed $value): string => (string) $value)
+            ->all();
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function distinctFilteredQualificationStatuses(
+        int $companyId,
+        HoldingFilter $filter,
+        bool $assignableOnly,
+        string $excludeFilterKey = 'qualification_status',
+    ): array {
+        $values = $this->queryHolding($companyId, $filter->withoutFields($excludeFilterKey), $assignableOnly)
+            ->whereNotNull('qualification_status')
+            ->distinct()
+            ->pluck('qualification_status');
+
+        $options = [];
+
+        foreach ($values as $value) {
+            $status = $value instanceof QualificationStatus
+                ? $value
+                : QualificationStatus::tryFrom((string) $value);
+
+            if ($status !== null) {
+                $options[$status->value] = $status->label();
+            }
+        }
+
+        return $options;
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    public function distinctFilteredAttemptCounts(
+        int $companyId,
+        HoldingFilter $filter,
+        bool $assignableOnly,
+        string $excludeFilterKey = 'attempt_count',
+    ): array {
+        $counts = $this->queryHolding($companyId, $filter->withoutFields($excludeFilterKey), $assignableOnly)
+            ->distinct()
+            ->orderBy('attempt_count')
+            ->pluck('attempt_count');
+
+        $options = [];
+
+        foreach ($counts as $count) {
+            $options[(int) $count] = (int) $count;
+        }
+
+        return $options;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function filteredCallingListOptions(
+        int $companyId,
+        HoldingFilter $filter,
+        bool $assignableOnly,
+    ): array {
+        $scoped = $filter->withoutFields('calling_list_id');
+        $options = [];
+
+        if ($this->countHolding($companyId, $scoped->withSource(null), $assignableOnly) > 0) {
+            $options['holding'] = 'Holding';
+        }
+
+        $lists = CallingList::query()
+            ->where('active', true)
+            ->when(
+                $filter->leadType,
+                fn (Builder $query): Builder => $query->where('lead_type', $filter->leadType),
+            )
+            ->orderBy('name')
+            ->get();
+
+        foreach ($lists as $list) {
+            if ($this->countHolding($companyId, $scoped->withSource((int) $list->id), $assignableOnly) > 0) {
+                $options[(string) $list->id] = $list->name;
+            }
+        }
+
+        return $options;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function distinctFilteredLastDispositions(
+        int $companyId,
+        HoldingFilter $filter,
+        bool $assignableOnly,
+        string $excludeFilterKey = 'last_disposition',
+    ): array {
+        $options = [];
+        $hasNone = false;
+
+        $this->queryHolding($companyId, $filter->withoutFields($excludeFilterKey), $assignableOnly)
+            ->select(['id'])
+            ->with('latestDisposition')
+            ->cursor()
+            ->each(function (Lead $lead) use (&$options, &$hasNone): void {
+                $latest = $lead->latestDisposition;
+
+                if ($latest === null) {
+                    $hasNone = true;
+
+                    return;
+                }
+
+                $disposition = $latest->payload['disposition'] ?? null;
+
+                if (! is_string($disposition) || $disposition === '') {
+                    $hasNone = true;
+
+                    return;
+                }
+
+                $enum = Disposition::tryFrom($disposition);
+                $options[$disposition] = $enum?->label() ?? $disposition;
+            });
+
+        if ($hasNone) {
+            $options = ['none' => 'None'] + $options;
+        }
+
+        return $options;
     }
 
     public function countHolding(int $companyId, HoldingFilter $filter, bool $assignableOnly = true): int

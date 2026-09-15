@@ -5,6 +5,7 @@ namespace App\Filament\Pages\Concerns;
 use App\DataTransferObjects\HoldingFilter;
 use App\Enums\LeadTablePreset;
 use App\Filament\Resources\Leads\Tables\LeadsTable;
+use App\Filament\Support\LeadTableFilterCascade;
 use App\Filament\Support\LeadTableFilterMapper;
 use App\Models\Lead;
 use App\Services\Import\HoldingReleaseService;
@@ -59,6 +60,24 @@ trait InteractsWithLeadPoolFilter
 
     public function updatedTableFilters(): void
     {
+        $this->onLeadPoolFiltersChanged(null);
+    }
+
+    public function updated(mixed $name): void
+    {
+        if (is_string($name) && str_starts_with($name, 'tableFilters.') && $name !== 'tableFilters') {
+            $changedFilter = explode('.', $name, 3)[1] ?? null;
+
+            $this->onLeadPoolFiltersChanged($changedFilter !== '' ? $changedFilter : null);
+        }
+    }
+
+    protected function onLeadPoolFiltersChanged(?string $changedFilter): void
+    {
+        if (LeadTableFilterCascade::prune($this->tableFilters, $this->getTable(), $this->leadPoolPreset(), $changedFilter)) {
+            $this->getTableFiltersForm()->fill($this->tableFilters);
+        }
+
         $this->handleTableFilterUpdates();
         $this->refreshCount(app(HoldingReleaseService::class));
     }
