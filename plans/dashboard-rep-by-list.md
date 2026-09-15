@@ -36,7 +36,7 @@ flowchart TD
 - On expand, list rows are **sibling table rows** inserted under that rep, stacking vertically so later reps (and the Total footer) shift down.
 - Child rows use the same metric definitions and the same % rule: **% of that row’s Total Leads Called**.
 - List name goes in the sticky first column (indented). Null `calling_list_id` labels as **Holding**.
-- Show the chevron only when a rep has **more than one** list in the breakdown. A single-list rep (including when the Calling list filter is already set) stays a flat row.
+- Show the chevron whenever a rep has list rows, including a **single** list. A TNB-only day should still expand to `TNB - NY` so managers can see which list the rollup came from.
 - Alpine.js on the existing Filament page (no Livewire round-trip). Filter/refresh re-renders the table and collapses again, which is fine.
 - **Attribution:** the lead’s **current** `calling_list_id`, same as today’s calling-list filter and Queue status. If a lead moved lists after the call, the result follows the current list. Do not snapshot list onto `lead_history` in this pass.
 - **Overdue Call Backs** on child rows: live snapshot grouped by `callback_owner_id` + current `calling_list_id` (same live meaning as the parent column).
@@ -53,15 +53,15 @@ While walking history (already loaded in PHP), bucket by `actor_id` and `lead.ca
 
 In [`resources/views/filament/pages/dashboard.blade.php`](../resources/views/filament/pages/dashboard.blade.php), wrap the Results by Rep card in Alpine state.
 
-- Section header: **Expand all** / **Collapse all** (hidden if no rep has multiple lists).
-- Rep name cell: toggle button + chevron when `count(lists) > 1`.
+- Section header: **Expand all** / **Collapse all** (hidden if no rep has list rows).
+- Rep name cell: toggle button + chevron when the rep has list rows, including a single list.
 - Immediately after each rep `<tr>`, emit one sibling `<tr class="list-row">` per list. `x-show` on those rows so the table height grows when opened.
 
 Styles in [`public/css/manager-dashboard.css`](../public/css/manager-dashboard.css): indent, slightly muted nested background, sticky first-column background that matches the nested row.
 
 ## Daily dashboard email
 
-[`DashboardDigestService`](../app/Services/Dashboard/DashboardDigestService.php) calls `report()` for the prior local day via `dateRange()` and renders the same metric grid in [`resources/views/mail/dashboard-digest.blade.php`](../resources/views/mail/dashboard-digest.blade.php) with inline styles. List rows are always stacked (email has no Alpine). Nested rows only when that rep has more than one list.
+[`DashboardDigestService`](../app/Services/Dashboard/DashboardDigestService.php) calls `report()` for the prior local day via `dateRange()` and renders the same metric grid in [`resources/views/mail/dashboard-digest.blade.php`](../resources/views/mail/dashboard-digest.blade.php) with inline styles. List rows are always stacked (email has no Alpine). Nested rows whenever that rep has list rows, including a single list.
 
 ## Out of scope
 

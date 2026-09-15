@@ -6,8 +6,8 @@
         $agents = $report['agents'] ?? [];
         $metricDefinitions = $this->metricDefinitions();
         $expandableMetricKeys = array_keys($breakdowns);
-        $multiListAgentIds = collect($agents)
-            ->filter(fn (array $agent): bool => count($agent['lists'] ?? []) > 1)
+        $expandableAgentIds = collect($agents)
+            ->filter(fn (array $agent): bool => ($agent['lists'] ?? []) !== [])
             ->pluck('user_id')
             ->map(fn (mixed $id): int => (int) $id)
             ->values()
@@ -165,7 +165,7 @@
             class="dashboard-card dashboard-table"
             x-data="{
                 expandedIds: [],
-                multiIds: {{ json_encode($multiListAgentIds) }},
+                expandableIds: @js($expandableAgentIds),
                 toggle(id) {
                     const index = this.expandedIds.indexOf(id);
                     if (index === -1) {
@@ -175,7 +175,7 @@
                     }
                 },
                 expandAll() {
-                    this.expandedIds = [...this.multiIds];
+                    this.expandedIds = [...this.expandableIds];
                 },
                 collapseAll() {
                     this.expandedIds = [];
@@ -185,7 +185,7 @@
             <div class="dashboard-section-header">
                 <h2 class="dashboard-section-title">Results by Rep</h2>
 
-                <div class="dashboard-expand-actions" x-show="multiIds.length > 0" x-cloak>
+                <div class="dashboard-expand-actions" x-show="expandableIds.length > 0" x-cloak>
                     <button type="button" class="dashboard-expand-btn" x-on:click="expandAll()">Expand all</button>
                     <button type="button" class="dashboard-expand-btn" x-on:click="collapseAll()">Collapse all</button>
                 </div>
@@ -202,7 +202,7 @@
                             @php
                                 $agentId = (int) $agent['user_id'];
                                 $agentLists = $agent['lists'] ?? [];
-                                $canExpand = count($agentLists) > 1;
+                                $canExpand = $agentLists !== [];
                             @endphp
                             <tr>
                                 <td class="col-start">

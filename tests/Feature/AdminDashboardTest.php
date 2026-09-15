@@ -519,7 +519,61 @@ class AdminDashboardTest extends TestCase
             ->assertSee('Standard AM')
             ->assertSee('TNB')
             ->assertSee('Expand all')
-            ->assertSee('Collapse all');
+            ->assertSee('Collapse all')
+            ->assertSeeHtml('dashboard-rep-toggle')
+            ->assertSeeHtml('toggle('.$agent->id.')');
+    }
+
+    public function test_dashboard_lets_single_list_reps_expand_to_calling_list_detail(): void
+    {
+        $company = Company::factory()->create();
+        $admin = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Admin,
+            'active' => true,
+        ]);
+        $agent = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Agent,
+            'active' => true,
+            'name' => 'Jesus Sanchez',
+        ]);
+
+        AppSetting::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'max_attempts' => 6,
+            'claim_ttl_minutes' => 20,
+            'dashboard_email_timezone' => 'America/New_York',
+        ]);
+
+        $tnbList = $this->createCallingList($company->id, overrides: ['name' => 'TNB - NY']);
+        $lead = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045559303',
+            'status' => LeadStatus::Callable,
+            'lead_type' => 'tnb',
+            'calling_list_id' => $tnbList->id,
+            'imported_at' => now(),
+        ]);
+
+        LeadHistory::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'lead_id' => $lead->id,
+            'actor_id' => $agent->id,
+            'event_type' => LeadHistoryType::Disposition,
+            'occurred_at' => now(),
+            'payload' => ['disposition' => Disposition::Booked->value],
+        ]);
+
+        CompanyContext::set($company->id);
+
+        Livewire::actingAs($admin)
+            ->test(Dashboard::class)
+            ->assertSee('Jesus Sanchez')
+            ->assertSee('TNB - NY')
+            ->assertSee('Expand all')
+            ->assertSeeHtml('dashboard-rep-toggle')
+            ->assertSeeHtml('toggle('.$agent->id.')');
     }
 
     public function test_dashboard_totals_counts_are_clickable_and_open_leads_modal(): void

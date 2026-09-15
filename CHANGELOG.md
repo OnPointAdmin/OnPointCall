@@ -8,6 +8,10 @@ Work that has landed on `master` but is not yet dated sits under **Unreleased**.
 
 ### Added
 
+### Fixed
+
+- Let reps expand Results by Rep to calling-list detail even when they only worked one list.
+
 ## 2026-09-14
 
 ### Added

@@ -128,7 +128,7 @@
                 @foreach ($agents as $agent)
                     @php
                         $agentLists = $agent['lists'] ?? [];
-                        $showLists = count($agentLists) > 1;
+                        $showLists = $agentLists !== [];
                     @endphp
                     <tr>
                         <td style="{{ $left }}">{{ $agent['name'] }}</td>
