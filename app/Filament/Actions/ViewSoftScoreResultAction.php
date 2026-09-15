@@ -14,7 +14,7 @@ class ViewSoftScoreResultAction
             ->modalDescription(fn (Lead $record): ?string => $record->soft_score_status?->label())
             ->modalSubmitAction(false)
             ->modalCancelActionLabel('Close')
-            ->modalWidth('lg')
+            ->modalWidth('2xl')
             ->modalContent(fn (Lead $record) => view('filament.soft-score-result', [
                 'lead' => $record,
             ]));

@@ -72,6 +72,26 @@ class ImportBatchCheckErrorDisplayTest extends TestCase
             ->assertSee('Soft Score credentials missing');
     }
 
+    public function test_json_api_errors_are_formatted_in_the_result_modal(): void
+    {
+        [$batch, $lead, $admin] = $this->makeBatchWithErrors();
+
+        $lead->update([
+            'booking_check_last_error' => 'Salesforce query failed: [{"message":"No such column \'Phone_Cleaned__c\' on entity \'Booking__c\'.","errorCode":"INVALID_FIELD"}]',
+        ]);
+
+        Livewire::actingAs($admin)
+            ->test(LeadsRelationManager::class, [
+                'ownerRecord' => $batch,
+                'pageClass' => ViewImportBatch::class,
+            ])
+            ->mountTableAction('viewBookingCheckResult', $lead)
+            ->assertSee('Salesforce query failed')
+            ->assertSee('INVALID_FIELD')
+            ->assertSee('No such column')
+            ->assertSee('Phone_Cleaned__c');
+    }
+
     public function test_viewing_batch_error_counts_shows_grouped_messages(): void
     {
         [$batch, , $admin] = $this->makeBatchWithErrors();

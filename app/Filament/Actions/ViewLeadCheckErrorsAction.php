@@ -13,7 +13,7 @@ class ViewLeadCheckErrorsAction
             ->modalHeading(fn (Lead $record): string => 'Check errors — '.($record->fullName() ?: $record->phone))
             ->modalSubmitAction(false)
             ->modalCancelActionLabel('Close')
-            ->modalWidth('lg')
+            ->modalWidth('2xl')
             ->modalContent(fn (Lead $record) => view('filament.lead-check-errors', [
                 'lead' => $record,
             ]));

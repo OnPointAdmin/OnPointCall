@@ -14,7 +14,7 @@ class ViewRndResultAction
             ->modalDescription(fn (Lead $record): ?string => $record->rnd_status?->label())
             ->modalSubmitAction(false)
             ->modalCancelActionLabel('Close')
-            ->modalWidth('lg')
+            ->modalWidth('2xl')
             ->modalContent(fn (Lead $record) => view('filament.rnd-result', [
                 'lead' => $record,
             ]));

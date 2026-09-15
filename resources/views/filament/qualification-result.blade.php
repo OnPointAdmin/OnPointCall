@@ -21,10 +21,7 @@
     </div>
 
     @if ($lead->qualification_last_error)
-        <div class="rounded-lg border border-danger-300 bg-danger-50 p-3 text-danger-800 dark:border-danger-500/40 dark:bg-danger-500/10 dark:text-danger-300">
-            <p class="text-xs font-semibold uppercase tracking-wide">Error</p>
-            <p class="mt-1 whitespace-pre-wrap">{{ $lead->qualification_last_error }}</p>
-        </div>
+        @include('filament.partials.check-error', ['message' => $lead->qualification_last_error])
     @endif
 
     <div>
