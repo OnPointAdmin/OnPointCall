@@ -108,6 +108,11 @@ enum LeadTablePreset: string
         return in_array($this, [self::Qualify, self::Assign], true);
     }
 
+    public function usesAlwaysOnFilters(): bool
+    {
+        return $this->usesPoolSourceScope();
+    }
+
     public function appliesAssignableScope(): bool
     {
         return $this === self::Assign;

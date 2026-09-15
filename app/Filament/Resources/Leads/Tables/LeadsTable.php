@@ -58,11 +58,19 @@ class LeadsTable
             ->recordActions(self::recordActions($preset))
             ->toolbarActions([
                 BulkActionGroup::make(self::bulkActions()),
-            ])
+            ]);
+
+        if ($preset->usesAlwaysOnFilters()) {
+            return $table
+                ->filters($filters, layout: FiltersLayout::Hidden)
+                ->filtersFormColumns(1)
+                ->deferFilters(false)
+                ->filtersFormSchema(fn (array $filters): array => LeadsTableFilters::filterFormSchema($filters));
+        }
+
+        return $table
             ->filters($filters, layout: FiltersLayout::Dropdown)
             ->filtersFormColumns(1);
-
-        return $table;
     }
 
     /**

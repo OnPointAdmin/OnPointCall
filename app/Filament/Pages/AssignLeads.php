@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use App\Enums\LeadTablePreset;
 use App\Exceptions\HoldingReleaseException;
 use App\Filament\Pages\Concerns\InteractsWithLeadPoolFilter;
+use App\Filament\Pages\Concerns\InteractsWithPersistedLeadTable;
 use App\Models\CallingList;
 use App\Services\Import\HoldingReleaseService;
 use BackedEnum;
@@ -19,13 +20,12 @@ use Filament\Schemas\Components\Form;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
-use App\Filament\Pages\Concerns\InteractsWithPersistedLeadTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 
 class AssignLeads extends Page implements HasTable
 {
-    use InteractsWithPersistedLeadTable, InteractsWithLeadPoolFilter {
+    use InteractsWithLeadPoolFilter, InteractsWithPersistedLeadTable {
         InteractsWithLeadPoolFilter::updatedTableFilters insteadof InteractsWithPersistedLeadTable;
         InteractsWithLeadPoolFilter::resetTableFiltersForm insteadof InteractsWithPersistedLeadTable;
         InteractsWithLeadPoolFilter::getFilteredSortedTableQuery insteadof InteractsWithPersistedLeadTable;
@@ -109,6 +109,7 @@ class AssignLeads extends Page implements HasTable
     {
         return $schema
             ->components([
+                $this->leadPoolFilterPanel(),
                 Form::make([EmbeddedSchema::make('releaseForm')])
                     ->id('releaseForm')
                     ->livewireSubmitHandler('release')

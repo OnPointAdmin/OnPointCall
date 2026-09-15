@@ -16,6 +16,7 @@ use App\Models\LeadHistory;
 use App\Models\LeadTypeDefinition;
 use App\Models\User;
 use App\Support\CompanyContext;
+use Filament\Tables\Enums\FiltersLayout;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Tests\Support\CreatesCadences;
@@ -43,6 +44,29 @@ class AssignLeadsTest extends TestCase
             ->assertFormFieldDoesNotExist('release_mode', 'releaseForm')
             ->assertSee($list->name)
             ->assertCanSeeTableRecords([$first, $second]);
+    }
+
+    public function test_assign_leads_shows_always_on_filter_panel(): void
+    {
+        [$admin] = $this->setUpAssignPage();
+
+        $component = Livewire::actingAs($admin)
+            ->test(AssignLeads::class)
+            ->assertOk()
+            ->assertSee('Selection')
+            ->assertSee('Lead type')
+            ->assertSee('Calling list')
+            ->assertSee('Import')
+            ->assertSee('Venue & event')
+            ->assertTableFilterExists('qualified_partners')
+            ->assertTableFilterExists('created_at')
+            ->assertTableFilterExists('last_disposition');
+
+        $table = $component->instance()->getTable();
+
+        $this->assertSame(FiltersLayout::Hidden, $table->getFiltersLayout());
+        $this->assertFalse($table->hasDeferredFilters());
+        $this->assertTrue($table->hasColumnManager());
     }
 
     public function test_selected_leads_table_view_opens_slide_over_with_full_record_and_history(): void

@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use App\Enums\LeadTablePreset;
 use App\Filament\Navigation\QualifyNavigation;
 use App\Filament\Pages\Concerns\InteractsWithLeadPoolFilter;
+use App\Filament\Pages\Concerns\InteractsWithPersistedLeadTable;
 use App\Filament\Resources\QualifyBatches\QualifyBatchResource;
 use App\Services\Import\HoldingReleaseService;
 use App\Services\Qualify\QualifyLeadsService;
@@ -20,13 +21,12 @@ use Filament\Schemas\Components\Form;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
-use App\Filament\Pages\Concerns\InteractsWithPersistedLeadTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 
 class QualifyLeads extends Page implements HasTable
 {
-    use InteractsWithPersistedLeadTable, InteractsWithLeadPoolFilter {
+    use InteractsWithLeadPoolFilter, InteractsWithPersistedLeadTable {
         InteractsWithLeadPoolFilter::updatedTableFilters insteadof InteractsWithPersistedLeadTable;
         InteractsWithLeadPoolFilter::resetTableFiltersForm insteadof InteractsWithPersistedLeadTable;
         InteractsWithLeadPoolFilter::getFilteredSortedTableQuery insteadof InteractsWithPersistedLeadTable;
@@ -133,6 +133,7 @@ class QualifyLeads extends Page implements HasTable
     {
         return $schema
             ->components([
+                $this->leadPoolFilterPanel(),
                 Form::make([EmbeddedSchema::make('qualifyForm')])
                     ->id('qualifyForm')
                     ->livewireSubmitHandler('qualify')

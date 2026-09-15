@@ -8,9 +8,13 @@ use App\Filament\Resources\Leads\Tables\LeadsTable;
 use App\Filament\Support\LeadTableFilterMapper;
 use App\Models\Lead;
 use App\Services\Import\HoldingReleaseService;
+use Filament\Actions\Action;
+use Filament\Schemas\Components\Actions;
+use Filament\Schemas\Components\EmbeddedSchema;
 use Filament\Schemas\Components\EmbeddedTable;
+use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Section;
-use Filament\Schemas\Schema;
+use Filament\Support\Enums\Alignment;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -69,6 +73,7 @@ trait InteractsWithLeadPoolFilter
             $this->getTableFiltersForm()->fill($this->tableFilters);
         } else {
             $this->tableFilters = $this->leadPoolPreset()->defaultTableFilters();
+            $this->getTableFiltersForm()->fill($this->tableFilters);
         }
 
         $this->handleTableFilterUpdates();
@@ -96,6 +101,20 @@ trait InteractsWithLeadPoolFilter
         }
 
         return (int) $source;
+    }
+
+    protected function leadPoolFilterPanel(): Group
+    {
+        return Group::make([
+            Actions::make([
+                Action::make('resetTableFilters')
+                    ->label(__('filament-tables::table.filters.actions.reset.label'))
+                    ->color('danger')
+                    ->link()
+                    ->action('resetTableFiltersForm'),
+            ])->alignment(Alignment::End),
+            EmbeddedSchema::make('tableFiltersForm'),
+        ])->columnSpanFull();
     }
 
     protected function leadPoolTableSection(): Section

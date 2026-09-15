@@ -24,6 +24,8 @@ use App\Support\LeadDemographicOptions;
 use Carbon\Carbon;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\TextInput;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
@@ -45,6 +47,84 @@ class LeadsTableFilters
         }
 
         return array_values($filters);
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return list<Section>
+     */
+    public static function filterFormSchema(array $filters): array
+    {
+        $pick = static fn (string ...$names): array => array_values(array_filter(
+            array_map(static fn (string $name): mixed => $filters[$name] ?? null, $names),
+        ));
+
+        return [
+            Section::make('Selection')
+                ->schema($pick(
+                    'lead_type',
+                    'calling_list_id',
+                    'last_disposition',
+                    'attempt_count',
+                    'qualification_status',
+                    'qualified_partners',
+                    'qualified_partners_match',
+                ))
+                ->columns(3)
+                ->columnSpanFull(),
+            Section::make('Import')
+                ->schema($pick(
+                    'import_batch_id',
+                    'file_name',
+                    'imported_at',
+                    'created_at',
+                ))
+                ->columns(3)
+                ->columnSpanFull()
+                ->collapsed(),
+            Section::make('Venue & event')
+                ->schema($pick('venue', 'event', 'partner'))
+                ->columns(3)
+                ->columnSpanFull()
+                ->collapsed(),
+            Section::make('Lead profile')
+                ->schema($pick(
+                    'age_range',
+                    'annual_income',
+                    'marital_status',
+                    'gender',
+                    'home_owner',
+                    'credit_card_type',
+                    'state',
+                    'zip',
+                    'soft_score_code',
+                ))
+                ->columns(3)
+                ->columnSpanFull()
+                ->collapsed(),
+            Section::make('Check status')
+                ->schema($pick(
+                    'status',
+                    'soft_score_status',
+                    'rnd_status',
+                    'dnc_status',
+                    'booking_check_status',
+                ))
+                ->columns(3)
+                ->columnSpanFull()
+                ->collapsed(),
+            Section::make('Tour Info')
+                ->schema($pick(
+                    'tour_location',
+                    'tour_date_start',
+                    'tour_date',
+                    'tour_result',
+                ))
+                ->columns(3)
+                ->columnSpanFull()
+                ->collapsed()
+                ->visible(fn (Get $get): bool => (string) ($get('lead_type.value') ?? '') === 'tnb'),
+        ];
     }
 
     /**

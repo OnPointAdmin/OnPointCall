@@ -205,13 +205,18 @@ class QualifyLeadsTest extends TestCase
         Queue::assertNotPushed(QualifyLeadJob::class);
     }
 
-    public function test_qualify_leads_uses_vertical_dropdown_filters(): void
+    public function test_qualify_leads_shows_always_on_filter_panel(): void
     {
         [$admin] = $this->setUpQualifyPage();
 
         $component = Livewire::actingAs($admin)
             ->test(QualifyLeads::class)
             ->assertOk()
+            ->assertSee('Selection')
+            ->assertSee('Lead type')
+            ->assertSee('Calling list')
+            ->assertSee('Import')
+            ->assertSee('Venue & event')
             ->assertTableFilterExists('status')
             ->assertTableFilterExists('qualified_partners')
             ->assertTableFilterExists('created_at')
@@ -219,8 +224,9 @@ class QualifyLeadsTest extends TestCase
 
         $table = $component->instance()->getTable();
 
-        $this->assertSame(FiltersLayout::Dropdown, $table->getFiltersLayout());
-        $this->assertSame(1, $table->getFiltersFormColumns());
+        $this->assertSame(FiltersLayout::Hidden, $table->getFiltersLayout());
+        $this->assertFalse($table->hasDeferredFilters());
+        $this->assertTrue($table->hasColumnManager());
     }
 
     /**
