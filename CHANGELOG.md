@@ -6,11 +6,6 @@ Work that has landed on `master` but is not yet dated sits under **Unreleased**.
 
 ## Unreleased
 
-### Changed
-
-- Cascade Assign and Qualify filter options from the matching holding pool and clear stale selections when filters change.
-- Sort import batches by Imported At, newest first.
-
 ### Added
 
 ## 2026-09-14
@@ -21,6 +16,8 @@ Work that has landed on `master` but is not yet dated sits under **Unreleased**.
 
 ### Changed
 
+- Cascade Assign and Qualify filter options from the matching holding pool and clear stale selections when filters change.
+- Sort import batches by Imported At, newest first.
 - Rename the application to On Point Contact Assist.
 - Move Assign and Qualify filters to page chrome so the table toolbar keeps search and the column chooser.
 
