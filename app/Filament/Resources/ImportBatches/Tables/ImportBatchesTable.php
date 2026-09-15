@@ -25,6 +25,7 @@ class ImportBatchesTable
     public static function configure(Table $table): Table
     {
         return $table
+            ->defaultSort('imported_at', 'desc')
             ->columns([
                 TextColumn::make('health')
                     ->label('Health')

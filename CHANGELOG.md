@@ -9,6 +9,7 @@ Work that has landed on `master` but is not yet dated sits under **Unreleased**.
 ### Changed
 
 - Cascade Assign and Qualify filter options from the matching holding pool and clear stale selections when filters change.
+- Sort import batches by Imported At, newest first.
 
 ### Added
 

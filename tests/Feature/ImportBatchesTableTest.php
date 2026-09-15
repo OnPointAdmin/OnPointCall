@@ -71,6 +71,29 @@ class ImportBatchesTableTest extends TestCase
             ->assertCanNotSeeTableRecords([$failedStandard, $pendingTnb, $errorTnb]);
     }
 
+    public function test_list_defaults_to_imported_at_descending(): void
+    {
+        [$company, $admin] = $this->makeAdminCompany();
+        CompanyContext::set($company->id);
+
+        $older = $this->makeBatch($company->id, [
+            'source_filename' => 'older.csv',
+            'imported_at' => now()->subDays(2),
+        ]);
+        $newest = $this->makeBatch($company->id, [
+            'source_filename' => 'newest.csv',
+            'imported_at' => now(),
+        ]);
+        $middle = $this->makeBatch($company->id, [
+            'source_filename' => 'middle.csv',
+            'imported_at' => now()->subDay(),
+        ]);
+
+        Livewire::actingAs($admin)
+            ->test(ListImportBatches::class)
+            ->assertCanSeeTableRecords([$newest, $middle, $older], inOrder: true);
+    }
+
     public function test_list_can_filter_by_imported_date_range(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-09-04 15:00:00', 'America/New_York')->utc());
