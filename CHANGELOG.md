@@ -10,6 +10,10 @@ Work that has landed on `master` but is not yet dated sits under **Unreleased**.
 
 - Serve the app at https://opcontact.com with automatic HTTPS.
 
+### Fixed
+
+- Fit the On Point Contact Assist name on the login card.
+
 ## 2026-09-15
 
 ### Fixed

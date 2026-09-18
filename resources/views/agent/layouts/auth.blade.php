@@ -50,8 +50,8 @@
                 <div class="fi-simple-page">
                     <div class="fi-simple-page-content">
                         <header class="fi-simple-header">
-                            <div class="fi-logo" style="height: 3.75rem;">
-                                <x-brand-mark size="lg" :fill="true" />
+                            <div class="fi-logo" style="height: auto; width: 100%;">
+                                <x-brand-mark size="lg" stack />
                             </div>
                             <h1 class="fi-simple-header-heading" style="color: #fff;">
                                 @yield('heading')
