@@ -8,6 +8,8 @@ Work that has landed on `master` but is not yet dated sits under **Unreleased**.
 
 ### Added
 
+- Serve the app at https://opcontact.com with automatic HTTPS.
+
 ## 2026-09-15
 
 ### Fixed

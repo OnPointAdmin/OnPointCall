@@ -11,6 +11,7 @@ use Filament\Auth\Http\Responses\Contracts\LoginResponse as FilamentLoginRespons
 use Filament\Support\Facades\FilamentTimezone;
 use Illuminate\Console\Events\CommandStarting;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 use RuntimeException;
 
@@ -33,6 +34,10 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         FilamentTimezone::set(fn (): string => CompanyTimezone::forAuthenticated());
+
+        if (str_starts_with((string) config('app.url'), 'https://')) {
+            URL::forceScheme('https');
+        }
 
         $this->ignoreDockerBladeUtimeFailures();
         Event::listen(CommandStarting::class, function (CommandStarting $event): void {

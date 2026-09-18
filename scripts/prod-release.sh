@@ -41,7 +41,7 @@ git log -1 --oneline
 
 echo '==== HEALTH ===='
 sleep 3
-curl -fsS -o /dev/null -w 'up:%{http_code}\n' http://localhost/up
-curl -fsS -o /dev/null -w 'admin:%{http_code}\n' http://localhost/admin/login
-curl -fsS -o /dev/null -w 'agent:%{http_code}\n' http://localhost/agent/login
+curl -fsS -o /dev/null -w 'up:%{http_code}\n' https://opcontact.com/up
+curl -fsS -o /dev/null -w 'admin:%{http_code}\n' https://opcontact.com/admin/login
+curl -fsS -o /dev/null -w 'agent:%{http_code}\n' https://opcontact.com/agent/login
 docker compose ps --format 'table {{.Name}}\t{{.Status}}'

@@ -1,0 +1,21 @@
+{
+    email {$CADDY_EMAIL}
+}
+
+(app) {
+    root * /var/www/html/public
+    encode gzip
+    php_fastcgi app:9000 {
+        dial_timeout 10s
+        read_timeout 120s
+    }
+    file_server
+}
+
+opcontact.com, www.opcontact.com {
+    import app
+}
+
+http://86.48.30.69 {
+    redir https://opcontact.com{uri} permanent
+}
