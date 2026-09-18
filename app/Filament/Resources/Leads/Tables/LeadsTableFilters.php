@@ -133,18 +133,13 @@ class LeadsTableFilters
      */
     private static function definitions(LeadTablePreset $preset, Table $table): array
     {
-        $leadType = $preset->usesPoolSourceScope()
-            ? SelectFilter::make('lead_type')
-                ->label('Lead type')
-                ->options(fn (): array => self::filterOptions(
-                    'lead_type',
-                    $table,
-                    $preset,
-                    fn (): array => LeadTypeDefinition::allOptions(),
-                ))
-                ->default('standard')
-            : SelectFilter::make('lead_type')
-                ->options(fn (): array => LeadTypeDefinition::allOptions());
+        $leadType = SelectFilter::make('lead_type')
+            ->label('Lead type')
+            ->options(fn (): array => LeadTypeDefinition::allOptions());
+
+        if ($preset->usesPoolSourceScope()) {
+            $leadType->default('standard');
+        }
 
         return [
             'lead_type' => $leadType,

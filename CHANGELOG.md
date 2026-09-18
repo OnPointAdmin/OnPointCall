@@ -12,6 +12,7 @@ Work that has landed on `master` but is not yet dated sits under **Unreleased**.
 
 ### Fixed
 
+- Show TNB and other defined lead types on Qualify and Assign even when the current pool has none.
 - Fit the On Point Contact Assist name on the login card.
 
 ## 2026-09-15

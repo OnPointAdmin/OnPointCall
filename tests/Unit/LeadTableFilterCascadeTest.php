@@ -73,4 +73,46 @@ class LeadTableFilterCascadeTest extends TestCase
         $this->assertSame([], $tableFilters['state']['values']);
         $this->assertSame('tnb', $tableFilters['lead_type']['value']);
     }
+
+    public function test_lead_type_options_include_defined_types_without_matching_holding_leads(): void
+    {
+        $company = Company::factory()->create();
+        $admin = User::factory()->create([
+            'company_id' => $company->id,
+            'role' => UserRole::Admin,
+            'active' => true,
+        ]);
+
+        CompanyContext::set($company->id);
+
+        LeadTypeDefinition::createFromName('Standard', 'standard');
+        LeadTypeDefinition::createFromName('TNB', 'tnb');
+
+        Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045558401',
+            'status' => LeadStatus::Holding,
+            'lead_type' => 'standard',
+            'qualification_status' => QualificationStatus::Qualified,
+            'imported_at' => now(),
+        ]);
+
+        $component = Livewire::actingAs($admin)->test(AssignLeads::class);
+        $table = $component->instance()->getTable();
+
+        $this->assertSame(
+            ['standard' => 'Standard', 'tnb' => 'TNB'],
+            LeadTableFilterCascade::optionsFor('lead_type', $table),
+        );
+
+        $tableFilters = [
+            'lead_type' => ['value' => 'tnb'],
+            'calling_list_id' => ['value' => 'holding'],
+            'qualified_partners_match' => ['value' => QualifiedPartnersMatch::InList->value],
+        ];
+
+        LeadTableFilterCascade::prune($tableFilters, $table, LeadTablePreset::Assign, 'lead_type');
+
+        $this->assertSame('tnb', $tableFilters['lead_type']['value']);
+    }
 }

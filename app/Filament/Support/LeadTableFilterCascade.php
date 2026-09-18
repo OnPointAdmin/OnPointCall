@@ -58,7 +58,7 @@ class LeadTableFilterCascade
         $service = app(HoldingReleaseService::class);
 
         return match ($filterName) {
-            'lead_type' => self::leadTypeOptions($filter, $context, $service),
+            'lead_type' => LeadTypeDefinition::allOptions(),
             'calling_list_id' => $service->filteredCallingListOptions(
                 $context['companyId'],
                 $filter,
@@ -164,24 +164,6 @@ class LeadTableFilterCascade
         }
 
         return $changed;
-    }
-
-    /**
-     * @return array<string, string>
-     */
-    private static function leadTypeOptions(HoldingFilter $filter, array $context, HoldingReleaseService $service): array
-    {
-        $slugs = $service->distinctFilteredLeadTypes(
-            $context['companyId'],
-            $filter,
-            $context['assignableOnly'],
-        );
-
-        if ($slugs === []) {
-            return [];
-        }
-
-        return array_intersect_key(LeadTypeDefinition::allOptions(), array_flip($slugs));
     }
 
     /**

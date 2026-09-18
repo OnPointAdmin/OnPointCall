@@ -12,6 +12,7 @@ use App\Enums\SoftScoreStatus;
 use App\Enums\UserRole;
 use App\Filament\Pages\AssignLeads;
 use App\Filament\Pages\QualifyLeads;
+use App\Filament\Support\LeadTableFilterCascade;
 use App\Filament\Resources\QualifyBatches\QualifyBatchResource;
 use App\Jobs\DncScrubJob;
 use App\Jobs\QualifyLeadJob;
@@ -228,6 +229,29 @@ class QualifyLeadsTest extends TestCase
         $this->assertSame(FiltersLayout::Hidden, $table->getFiltersLayout());
         $this->assertFalse($table->hasDeferredFilters());
         $this->assertTrue($table->hasColumnManager());
+    }
+
+    public function test_qualify_leads_lists_tnb_even_when_holding_has_only_standard(): void
+    {
+        [$admin] = $this->setUpQualifyPage();
+
+        LeadTypeDefinition::createFromName('TNB', 'tnb');
+        $this->makeHoldingLead($admin->company_id, '4045551501');
+
+        $component = Livewire::actingAs($admin)
+            ->test(QualifyLeads::class)
+            ->assertOk()
+            ->assertSee('TNB');
+
+        $this->assertSame(
+            ['standard' => 'Standard', 'tnb' => 'TNB'],
+            LeadTableFilterCascade::optionsFor('lead_type', $component->instance()->getTable()),
+        );
+
+        $component
+            ->filterTable('lead_type', 'tnb')
+            ->assertSet('tableFilters.lead_type.value', 'tnb')
+            ->assertSet('holdingCount', 0);
     }
 
     /**
