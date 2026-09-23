@@ -19,3 +19,8 @@ opcontact.com, www.opcontact.com {
 http://86.48.30.69 {
     redir https://opcontact.com{uri} permanent
 }
+
+gid.opcontact.com {
+    reverse_proxy getitdone-web-1:3000
+    encode gzip
+}
