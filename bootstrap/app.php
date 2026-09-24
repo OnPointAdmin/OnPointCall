@@ -19,6 +19,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withSchedule(function (Schedule $schedule): void {
         $schedule->command('claims:expire')->everyMinute();
         $schedule->command('dashboard:email-digest')->everyMinute();
+        $schedule->command('salesforce:sync-booking-callbacks --scheduled')->everyMinute()->withoutOverlapping();
         $schedule->command('db:backup')->dailyAt('02:00');
     })
     ->withMiddleware(function (Middleware $middleware): void {

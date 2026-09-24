@@ -693,7 +693,10 @@ class Workspace extends Component
         $query->visibleInCallHistory()->with('actor')->orderByDesc('occurred_at')->limit(20);
 
         if (! $user->role->canAccessAdmin()) {
-            $query->where('actor_id', $user->id);
+            $query->where(function ($history) use ($user): void {
+                $history->where('actor_id', $user->id)
+                    ->orWhere('event_type', LeadHistoryType::BookingCallbackSync->value);
+            });
         }
 
         return $query;

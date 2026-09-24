@@ -85,6 +85,7 @@ class LeadHistory extends Model
                     ? 'Expired (user #'.$payload['user_id'].')'
                     : 'Expired'),
             LeadHistoryType::Recycle => 'Attempt count reset',
+            LeadHistoryType::BookingCallbackSync => $this->formatBookingCallbackSyncDetails($payload),
             default => '—',
         };
     }
@@ -103,6 +104,20 @@ class LeadHistory extends Model
         }
 
         return $parts !== [] ? implode(' — ', array_unique($parts)) : null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function formatBookingCallbackSyncDetails(array $payload): string
+    {
+        $parts = array_filter([
+            is_string($payload['booking_number'] ?? null) ? $payload['booking_number'] : null,
+            is_string($payload['employee_id'] ?? null) ? 'Rep '.$payload['employee_id'] : null,
+            ($payload['action'] ?? null) === 'closed' ? 'Closed in Salesforce' : null,
+        ]);
+
+        return $parts !== [] ? implode(' · ', $parts) : 'Booking callback';
     }
 
     /**

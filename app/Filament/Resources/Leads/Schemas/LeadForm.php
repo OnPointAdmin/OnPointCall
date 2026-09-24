@@ -65,6 +65,10 @@ class LeadForm
                 ->label('Tour / no show'),
             TextInput::make('external_lead_id'),
             TextInput::make('booking_id'),
+            Textarea::make('notes')
+                ->label('Notes')
+                ->rows(3)
+                ->columnSpanFull(),
             TextInput::make('timezone'),
             Select::make('status')
                 ->options(LeadStatus::class)

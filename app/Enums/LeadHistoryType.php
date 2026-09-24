@@ -21,6 +21,7 @@ enum LeadHistoryType: string
     case BookingCheck = 'booking_check';
     case DncPush = 'dnc_push';
     case FieldEdit = 'field_edit';
+    case BookingCallbackSync = 'booking_callback_sync';
 
     public function label(): string
     {
@@ -42,6 +43,7 @@ enum LeadHistoryType: string
             self::BookingCheck => 'Booking Check',
             self::DncPush => 'DNC Push',
             self::FieldEdit => 'Field Edit',
+            self::BookingCallbackSync => 'Booking Callback',
         };
     }
 }

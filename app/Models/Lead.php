@@ -53,6 +53,8 @@ class Lead extends Model
         'tour_or_no_show',
         'external_lead_id',
         'booking_id',
+        'notes',
+        'salesforce_booking_id',
         'consent_token',
         'timezone',
         'status',

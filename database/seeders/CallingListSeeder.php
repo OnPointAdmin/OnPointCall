@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\Cadence;
 use App\Models\CallingList;
+use App\Services\Leads\AgentCallbacksProvisioner;
 use Illuminate\Database\Seeder;
 
 class CallingListSeeder extends Seeder
@@ -39,5 +40,7 @@ class CallingListSeeder extends Seeder
                 $list + ['company_id' => $companyId],
             );
         }
+
+        app(AgentCallbacksProvisioner::class)->ensure($companyId);
     }
 }

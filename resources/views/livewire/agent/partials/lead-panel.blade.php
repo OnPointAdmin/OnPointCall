@@ -285,6 +285,12 @@
                     <p class="m-0 mt-0.5 text-sm text-slate-900 dark:text-slate-100">{{ \App\Support\CompanyTimezone::display($lead->last_attempt_at) ?? '—' }}</p>
                 </div>
             </div>
+            @if ($filled($lead->notes))
+                <div class="mt-4 border-t border-slate-100 pt-4 dark:border-slate-800">
+                    <h3 class="m-0 mb-2.5 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Notes</h3>
+                    <p class="m-0 select-none whitespace-pre-wrap text-sm text-slate-900 dark:text-slate-100" oncopy="return false">{{ $lead->notes }}</p>
+                </div>
+            @endif
         </div>
 
         <div class="mt-4 border-t border-slate-100 pt-4 dark:border-slate-800">

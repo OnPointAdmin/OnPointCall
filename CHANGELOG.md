@@ -6,6 +6,10 @@ Work that has landed on `master` but is not yet dated sits under **Unreleased**.
 
 ## Unreleased
 
+### Added
+
+- Import Salesforce Callback bookings into an Agent Callbacks list, assigned to the agent whose Salesforce Id matches the booking representative, with notes on the lead and an optional morning schedule.
+
 ## 2026-09-17
 
 ### Added

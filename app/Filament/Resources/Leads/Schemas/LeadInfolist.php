@@ -92,6 +92,10 @@ class LeadInfolist
                         TextEntry::make('email')
                             ->label('Email address')
                             ->placeholder('—'),
+                        TextEntry::make('notes')
+                            ->label('Notes')
+                            ->placeholder('—')
+                            ->columnSpanFull(),
                         TextEntry::make('timezone')
                             ->placeholder('—'),
                     ])

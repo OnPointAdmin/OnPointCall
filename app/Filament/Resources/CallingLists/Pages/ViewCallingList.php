@@ -2,10 +2,18 @@
 
 namespace App\Filament\Resources\CallingLists\Pages;
 
+use App\Filament\Resources\CallingLists\Actions\EditCallbackScheduleAction;
+use App\Filament\Resources\CallingLists\Actions\ImportAgentCallbacksAction;
 use App\Filament\Resources\CallingLists\CallingListResource;
 use App\Filament\Resources\CallingLists\RelationManagers\LeadsRelationManager;
 use App\Filament\Resources\CallingLists\RelationManagers\ListAssignmentHistoryRelationManager;
+use App\Models\BookingCallbackSchedule;
+use App\Models\BookingCallbackSyncRun;
+use App\Models\CallingList;
 use App\Services\CallingLists\CallingListDispositionCountService;
+use App\Services\Leads\AgentCallbacksProvisioner;
+use App\Services\Leads\DialableInventoryService;
+use App\Support\CompanyTimezone;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Resources\Pages\ViewRecord;
@@ -24,10 +32,17 @@ class ViewCallingList extends ViewRecord
 
     protected function getHeaderActions(): array
     {
-        return [
-            EditAction::make(),
-            DeleteAction::make(),
-        ];
+        $actions = [];
+
+        if ($this->getRecord() instanceof CallingList && AgentCallbacksProvisioner::isList($this->getRecord())) {
+            $actions[] = ImportAgentCallbacksAction::make();
+            $actions[] = EditCallbackScheduleAction::make();
+        }
+
+        $actions[] = EditAction::make();
+        $actions[] = DeleteAction::make();
+
+        return $actions;
     }
 
     public function content(Schema $schema): Schema
@@ -45,7 +60,7 @@ class ViewCallingList extends ViewRecord
                             ->compact()
                             ->schema([
                                 Html::make(function (): HtmlString {
-                                    $inventory = app(\App\Services\Leads\DialableInventoryService::class)
+                                    $inventory = app(DialableInventoryService::class)
                                         ->forList($this->getRecord());
 
                                     return new HtmlString(view('filament.resources.calling-lists.queue-status', [
@@ -68,6 +83,34 @@ class ViewCallingList extends ViewRecord
                     ])->columnSpan(['lg' => 1]),
                 ]),
                 $this->getRelationManagersContentComponent(),
+                ...array_filter([$this->bookingCallbackSection()]),
+            ]);
+    }
+
+    private function bookingCallbackSection(): ?Section
+    {
+        $record = $this->getRecord();
+
+        if (! $record instanceof CallingList || ! AgentCallbacksProvisioner::isList($record)) {
+            return null;
+        }
+
+        return Section::make('Agent Callbacks import')
+            ->compact()
+            ->schema([
+                Html::make(function () use ($record): HtmlString {
+                    $run = BookingCallbackSyncRun::latestForCompany($record->company_id);
+                    $schedule = BookingCallbackSchedule::withoutGlobalScopes()
+                        ->where('company_id', $record->company_id)
+                        ->first();
+
+                    return new HtmlString(view('filament.resources.calling-lists.booking-callback-sync', [
+                        'run' => $run,
+                        'errors' => $run?->errors()->orderBy('id')->get() ?? collect(),
+                        'schedule' => $schedule,
+                        'timezone' => CompanyTimezone::for($record->company_id),
+                    ])->render());
+                }),
             ]);
     }
 
