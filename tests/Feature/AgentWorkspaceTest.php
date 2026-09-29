@@ -920,6 +920,43 @@ class AgentWorkspaceTest extends TestCase
             ->assertSet('leadReadOnly', false);
     }
 
+    public function test_lookup_opens_terminal_lead_read_only_without_claim(): void
+    {
+        [$user, $lead] = $this->makeLookupLead([
+            'status' => LeadStatus::Terminal,
+            'first_name' => 'Jason',
+            'last_name' => 'Vicente',
+        ]);
+        $this->actingAs($user, 'agent');
+
+        Livewire::test(Workspace::class)
+            ->call('selectLookupLead', $lead->id)
+            ->assertSet('leadId', $lead->id)
+            ->assertSet('leadReadOnly', true)
+            ->assertSee('Terminal — read only')
+            ->assertSee('Jason Vicente')
+            ->assertSee('Get Next Lead')
+            ->assertDontSee('Disposition');
+
+        $this->assertDatabaseMissing('lead_claims', ['lead_id' => $lead->id]);
+    }
+
+    public function test_get_next_leaves_a_terminal_claim(): void
+    {
+        [$user, $lead] = $this->makeWorkableLead();
+        $lead->update(['status' => LeadStatus::Terminal]);
+        $this->actingAs($user, 'agent');
+
+        Livewire::test(Workspace::class)
+            ->assertSee('Terminal — read only')
+            ->assertSee('Get Next Lead')
+            ->call('getNextLead')
+            ->assertSet('leadId', null)
+            ->assertSee('No active lead');
+
+        $this->assertDatabaseMissing('lead_claims', ['lead_id' => $lead->id]);
+    }
+
     public function test_lookup_opens_dnc_lead_read_only_with_message(): void
     {
         [$user, $lead] = $this->makeLookupLead([

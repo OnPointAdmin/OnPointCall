@@ -39,10 +39,10 @@ class NextLeadService
 
         $this->claimService->expireStaleClaims($user->company_id);
 
-        $existing = $this->claimService->activeClaimForUser($user);
+        $existing = $this->claimService->releaseClosedClaims($user);
 
-        if ($existing?->lead) {
-            return new NextLeadResult(lead: $existing->lead->load(self::LEAD_RELATIONS));
+        if ($existing) {
+            return new NextLeadResult(lead: $existing->load(self::LEAD_RELATIONS));
         }
 
         $lead = $this->claimNextLead($user, $listIds);

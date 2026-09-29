@@ -126,7 +126,7 @@ class Workspace extends Component
         $claim = app(LeadClaimService::class)->activeClaimForUser(Auth::guard('agent')->user());
 
         if ($claim?->lead) {
-            $this->leadReadOnly = false;
+            $this->leadReadOnly = app(LeadClaimService::class)->isClosed($claim->lead);
             $this->leadReadOnlyMessage = '';
             $this->loadLead($claim->lead);
         }
@@ -261,7 +261,7 @@ class Workspace extends Component
 
         $lead = $this->currentLead();
 
-        if (! $lead) {
+        if (! $lead || app(LeadClaimService::class)->isClosed($lead)) {
             return;
         }
 
@@ -474,9 +474,11 @@ class Workspace extends Component
         $this->showSoftScoreRecentModal = false;
         $this->emptyMessage = null;
 
-        if ($lead->status === LeadStatus::Dnc) {
+        if (app(LeadClaimService::class)->isClosed($lead)) {
             $this->leadReadOnly = true;
-            $this->leadReadOnlyMessage = 'DNC — this lead cannot be worked';
+            $this->leadReadOnlyMessage = $lead->status === LeadStatus::Dnc
+                ? 'DNC — this lead cannot be worked'
+                : '';
             $this->loadLead($lead);
 
             return;
@@ -711,6 +713,10 @@ class Workspace extends Component
         $this->showSoftScoreRecentModal = false;
         $this->softScoreQueuedAt = null;
         $this->qualificationQueuedAt = null;
+
+        if (app(LeadClaimService::class)->isClosed($lead)) {
+            return;
+        }
 
         $needSoftScore = app(SoftScoreService::class)->isBlank($lead);
         $needQualification = app(QualificationService::class)->isBlank($lead);

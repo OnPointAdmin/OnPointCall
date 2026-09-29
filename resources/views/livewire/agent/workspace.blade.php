@@ -65,6 +65,18 @@
     {{-- RIGHT COLUMN: disposition (primary action) above secondary panels --}}
     <div class="sticky top-4 flex flex-col gap-3.5 overflow-visible" x-data="{ tab: @js($defaultSecondaryTab) }">
 
+        @if ($lead && ! $leadIsWorkable)
+            <div class="rounded-xl border border-slate-200 bg-white px-4 py-4 shadow-[0_2px_12px_rgba(15,23,42,0.06)] dark:border-slate-800 dark:bg-slate-900">
+                <button
+                    type="button"
+                    wire:click="getNextLead"
+                    class="w-full rounded-md bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+                >
+                    Get Next Lead
+                </button>
+            </div>
+        @endif
+
         @if ($leadIsWorkable)
             <div
                 class="rounded-xl border border-slate-200 bg-white px-4 py-4 shadow-[0_2px_12px_rgba(15,23,42,0.06)] dark:border-slate-800 dark:bg-slate-900"

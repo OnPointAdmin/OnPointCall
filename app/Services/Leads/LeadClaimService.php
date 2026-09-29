@@ -3,6 +3,7 @@
 namespace App\Services\Leads;
 
 use App\Enums\LeadHistoryType;
+use App\Enums\LeadStatus;
 use App\Models\Lead;
 use App\Models\LeadClaim;
 use App\Models\LeadHistory;
@@ -93,6 +94,46 @@ class LeadClaimService
             ->where('expires_at', '>', now())
             ->with('lead')
             ->first();
+    }
+
+    /**
+     * Drop claims on booked, terminal, or DNC leads. Those leads cannot be
+     * dispositioned, so holding the claim traps the agent on a read-only screen.
+     * Returns another live claim when the agent still has one.
+     */
+    public function releaseClosedClaims(User $user): ?Lead
+    {
+        $claims = LeadClaim::withoutGlobalScopes()
+            ->where('user_id', $user->id)
+            ->where('expires_at', '>', now())
+            ->with('lead')
+            ->orderBy('claimed_at')
+            ->get();
+
+        $workable = null;
+
+        foreach ($claims as $claim) {
+            $lead = $claim->lead;
+
+            if ($lead === null || $this->isClosed($lead)) {
+                if ($lead) {
+                    $this->releaseClaimForLead($lead, $user->id);
+                } else {
+                    $claim->delete();
+                }
+
+                continue;
+            }
+
+            $workable ??= $lead;
+        }
+
+        return $workable;
+    }
+
+    public function isClosed(Lead $lead): bool
+    {
+        return in_array($lead->status, [LeadStatus::Booked, LeadStatus::Terminal, LeadStatus::Dnc], true);
     }
 
     public function isLeased(Lead $lead, ?CarbonInterface $at = null): bool

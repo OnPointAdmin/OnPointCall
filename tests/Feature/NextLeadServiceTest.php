@@ -11,6 +11,7 @@ use App\Models\CallingList;
 use App\Models\Company;
 use App\Models\DispositionReason;
 use App\Models\Lead;
+use App\Models\LeadClaim;
 use App\Models\ListAssignment;
 use App\Models\StateRule;
 use App\Models\User;
@@ -61,6 +62,33 @@ class NextLeadServiceTest extends TestCase
         $this->assertNotSame($poolLead->id, $result->lead?->id);
         $this->assertDatabaseHas('lead_claims', [
             'lead_id' => $callbackLead->id,
+            'user_id' => $user->id,
+        ]);
+    }
+
+    public function test_closed_claim_is_released_and_pool_lead_is_served(): void
+    {
+        [$user, $list] = $this->makeAgentWithList();
+
+        $terminal = $this->makeCallableLead($user->company_id, $list->id, '4045551501', 1);
+        $terminal->update(['status' => LeadStatus::Terminal]);
+        $pool = $this->makeCallableLead($user->company_id, $list->id, '4045551502', 2);
+
+        LeadClaim::withoutGlobalScopes()->create([
+            'company_id' => $user->company_id,
+            'lead_id' => $terminal->id,
+            'user_id' => $user->id,
+            'claimed_at' => now(),
+            'expires_at' => now()->addMinutes(20),
+        ]);
+
+        $result = app(NextLeadService::class)->getNext($user);
+
+        $this->assertTrue($result->hasLead());
+        $this->assertSame($pool->id, $result->lead?->id);
+        $this->assertDatabaseMissing('lead_claims', ['lead_id' => $terminal->id]);
+        $this->assertDatabaseHas('lead_claims', [
+            'lead_id' => $pool->id,
             'user_id' => $user->id,
         ]);
     }
