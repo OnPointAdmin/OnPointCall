@@ -14,6 +14,7 @@ class SyncBookingCallbacksCommand extends Command
     protected $signature = 'salesforce:sync-booking-callbacks
                             {--dry-run : Show what would change without writing}
                             {--company= : Limit to a company ID}
+                            {--list= : Import into this calling list ID}
                             {--scheduled : Run only when a company schedule matches the current minute}';
 
     protected $description = 'Pull Salesforce Callback bookings into the Agent Callbacks list';
@@ -47,6 +48,8 @@ class SyncBookingCallbacksCommand extends Command
         }
 
         $dryRun = (bool) $this->option('dry-run');
+        $list = $this->option('list');
+        $callingListId = is_string($list) && $list !== '' ? (int) $list : null;
         $failed = false;
 
         foreach ($companyIds as $companyId) {
@@ -54,7 +57,12 @@ class SyncBookingCallbacksCommand extends Command
                 $this->warn('Dry run — no rows written.');
             }
 
-            $result = Bus::dispatchNow(new SyncBookingCallbacksJob($companyId, $dryRun, 'command'));
+            $result = Bus::dispatchNow(new SyncBookingCallbacksJob(
+                $companyId,
+                $dryRun,
+                'command',
+                $callingListId,
+            ));
             $this->report((int) $companyId, $result, $dryRun);
 
             if (! empty($result['refused']) || ! empty($result['failed'])) {

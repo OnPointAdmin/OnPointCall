@@ -34,10 +34,14 @@ class BookingCallbackScheduleRunner
             $localNow = ($now ?? Carbon::now($timezone))->copy()->timezone($timezone);
             $slot = $localNow->format('Y-m-d H:i');
 
+            $callingListId = $schedule->calling_list_id
+                ?? app(AgentCallbacksProvisioner::class)->listFor($schedule->company_id)->id;
+
             $result = Bus::dispatchNow(new SyncBookingCallbacksJob(
                 $schedule->company_id,
                 false,
                 'schedule',
+                $callingListId,
             ));
 
             if (! empty($result['refused']) || ! empty($result['failed'])) {

@@ -6,6 +6,7 @@
             @if ($schedule->enabled)
                 at {{ collect($schedule->normalizedRunTimes())->map(fn (string $time) => \Carbon\Carbon::parse($time)->format('g:i A'))->implode(', ') }}
             @endif
+            into {{ $schedule->callingList?->name ?? 'the configured list' }}
             ({{ $timezone }}).
         @else
             Schedule is not set up yet.
@@ -17,6 +18,9 @@
     @else
         <p style="margin:0 0 0.75rem;font-size:0.875rem;">
             Last run {{ \App\Support\CompanyTimezone::display($run->finished_at, $run->company_id) }}
+            @if ($run->callingList)
+                into {{ $run->callingList->name }}
+            @endif
             · created {{ $run->created_count }}
             · updated {{ $run->updated_count }}
             · closed {{ $run->closed_count }}

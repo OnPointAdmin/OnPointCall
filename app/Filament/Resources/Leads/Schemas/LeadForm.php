@@ -65,6 +65,15 @@ class LeadForm
                 ->label('Tour / no show'),
             TextInput::make('external_lead_id'),
             TextInput::make('booking_id'),
+            TextInput::make('booking_number')
+                ->label('Booking Number'),
+            TextInput::make('salesforce_booking_id')
+                ->label('Booking Id'),
+            TextInput::make('deposit_amount')
+                ->label('Deposit amount')
+                ->numeric(),
+            TextInput::make('deposit_type')
+                ->label('Deposit type'),
             Textarea::make('notes')
                 ->label('Notes')
                 ->rows(3)

@@ -5,7 +5,7 @@ namespace Tests\Feature;
 use App\Enums\LeadHistoryType;
 use App\Enums\LeadStatus;
 use App\Enums\UserRole;
-use App\Filament\Resources\CallingLists\Pages\ViewCallingList;
+use App\Filament\Pages\ImportAgentCallbacks;
 use App\Livewire\Agent\Workspace;
 use App\Models\BookingCallbackSchedule;
 use App\Models\BookingCallbackSyncRun;
@@ -101,6 +101,7 @@ class BookingCallbackSyncTest extends TestCase
         $this->assertSame('https://book.example/tour', $list->booking_url_template);
         $this->assertSame(['phone' => 'Phone'], $list->booking_param_map);
         $this->assertSame('B-43314', $lead->booking_id);
+        $this->assertSame('B-43314', $lead->booking_number);
         $this->assertSame(self::BOOKING_ID, $lead->salesforce_booking_id);
         $this->assertSame('Navy', $lead->notes);
         $this->assertSame('Ada', $lead->first_name);
@@ -125,6 +126,9 @@ class BookingCallbackSyncTest extends TestCase
 
             return str_contains($url, "Type__c = 'Callback'")
                 && str_contains($url, 'Call_Back_Date__c')
+                && str_contains($url, 'Tour_Location_Name__c')
+                && str_contains($url, 'CreatedDate')
+                && str_contains($url, 'Deposit_Type__c')
                 && str_contains($url, '2026-06-25')
                 && str_contains($url, '2026-10-23');
         });
@@ -142,7 +146,80 @@ class BookingCallbackSyncTest extends TestCase
         Livewire::test(Workspace::class)
             ->assertSee('Notes')
             ->assertSee('Navy')
+            ->assertSee('Booking')
+            ->assertSee('Booking Number')
+            ->assertSee('B-43314')
             ->assertSee('Booking Callback');
+    }
+
+    public function test_callback_report_fields_are_mapped_to_lead_columns(): void
+    {
+        [$company] = $this->companyWithAgent();
+
+        $this->fakeBookings([$this->booking([
+            'CreatedDate' => '2026-09-20T16:44:35.000+0000',
+            'Tour_Location_Name__c' => 'Club Wyndham Palm Aire',
+            'Premium_Combined_2__c' => 'RCI 8/7 Vacation Certificate',
+            'Deposit_Amount__c' => 40,
+            'Deposit_Type__c' => 'Card',
+        ])]);
+
+        app(BookingCallbackSyncService::class)->sync($company->id);
+
+        $lead = Lead::withoutGlobalScopes()->where('company_id', $company->id)->first();
+
+        $this->assertSame('B-43314', $lead->booking_number);
+        $this->assertSame('Club Wyndham Palm Aire', $lead->tour_location);
+        $this->assertSame('RCI 8/7 Vacation Certificate', $lead->premiums);
+        $this->assertSame('40.00', $lead->deposit_amount);
+        $this->assertSame('Card', $lead->deposit_type);
+        $this->assertSame('2026-09-20 16:44:35', $lead->created_at->utc()->format('Y-m-d H:i:s'));
+
+        $this->fakeBookings([$this->booking([
+            'CreatedDate' => '2026-09-21T10:00:00.000+0000',
+            'Tour_Location_Name__c' => 'Updated location',
+            'Booking_Notes__c' => 'Updated note',
+        ])]);
+
+        app(BookingCallbackSyncService::class)->sync($company->id);
+
+        $lead->refresh();
+
+        $this->assertSame('Updated location', $lead->tour_location);
+        $this->assertSame('Updated note', $lead->notes);
+        $this->assertSame('2026-09-20 16:44:35', $lead->created_at->utc()->format('Y-m-d H:i:s'));
+    }
+
+    public function test_afternoon_callback_times_fix_salesforce_am_storage(): void
+    {
+        [$company] = $this->companyWithAgent();
+
+        $this->fakeBookings([$this->booking([
+            'Call_Back_Time__c' => '02:00:00.000Z',
+            'Callback_Time_Text__c' => '02:00 AM',
+        ])]);
+
+        app(BookingCallbackSyncService::class)->sync($company->id);
+
+        $lead = Lead::withoutGlobalScopes()->where('company_id', $company->id)->first();
+
+        $this->assertSame('2026-09-24 18:00:00', $lead->callback_at->utc()->format('Y-m-d H:i:s'));
+    }
+
+    public function test_morning_callback_times_before_noon_stay_am(): void
+    {
+        [$company] = $this->companyWithAgent();
+
+        $this->fakeBookings([$this->booking([
+            'Call_Back_Time__c' => '10:00:00.000Z',
+            'Callback_Time_Text__c' => '10:00 AM',
+        ])]);
+
+        app(BookingCallbackSyncService::class)->sync($company->id);
+
+        $lead = Lead::withoutGlobalScopes()->where('company_id', $company->id)->first();
+
+        $this->assertSame('2026-09-24 14:00:00', $lead->callback_at->utc()->format('Y-m-d H:i:s'));
     }
 
     public function test_blank_notes_stay_null_and_changed_notes_update_the_same_lead(): void
@@ -264,14 +341,30 @@ class BookingCallbackSyncTest extends TestCase
         CompanyContext::set($company->id);
 
         Livewire::actingAs($admin)
-            ->test(ViewCallingList::class, ['record' => $list->getRouteKey()])
+            ->test(ImportAgentCallbacks::class)
             ->assertSee('No representative on booking')
             ->assertSee('No user with this Salesforce Id')
             ->assertSee('User inactive')
             ->assertSee('No callback date')
             ->assertSee('B-2')
-            ->callAction('importAgentCallbacks')
+            ->fillForm(['calling_list_id' => $list->id])
+            ->call('import')
             ->assertNotified();
+    }
+
+    public function test_import_uses_the_selected_calling_list(): void
+    {
+        [$company] = $this->companyWithAgent();
+        $customList = $this->createCallingList($company->id, overrides: ['name' => 'Field Callbacks']);
+
+        $this->fakeBookings([$this->booking()]);
+        app(BookingCallbackSyncService::class)->sync($company->id, callingListId: $customList->id);
+
+        $lead = Lead::withoutGlobalScopes()->where('company_id', $company->id)->first();
+        $run = BookingCallbackSyncRun::latestForCompany($company->id);
+
+        $this->assertSame($customList->id, $lead->calling_list_id);
+        $this->assertSame($customList->id, $run->calling_list_id);
     }
 
     public function test_setting_the_employee_id_attaches_the_owner_on_the_next_sync(): void
@@ -449,8 +542,8 @@ class BookingCallbackSyncTest extends TestCase
         $list = app(AgentCallbacksProvisioner::class)->ensure($company->id);
 
         $mock = Mockery::mock(BookingCallbackSyncService::class);
-        $mock->shouldReceive('sync')->once()->with($company->id, false, 'schedule')->andReturn($this->blankResult());
-        $mock->shouldReceive('sync')->once()->with($company->id, false, 'import_now')->andReturn($this->blankResult());
+        $mock->shouldReceive('sync')->once()->with($company->id, false, 'schedule', $list->id)->andReturn($this->blankResult());
+        $mock->shouldReceive('sync')->once()->with($company->id, false, 'import_now', $list->id)->andReturn($this->blankResult());
         $this->app->instance(BookingCallbackSyncService::class, $mock);
 
         $this->artisan('salesforce:sync-booking-callbacks', ['--scheduled' => true])->assertSuccessful();
@@ -463,8 +556,9 @@ class BookingCallbackSyncTest extends TestCase
         CompanyContext::set($company->id);
 
         Livewire::actingAs($admin)
-            ->test(ViewCallingList::class, ['record' => $list->getRouteKey()])
-            ->callAction('importAgentCallbacks')
+            ->test(ImportAgentCallbacks::class)
+            ->fillForm(['calling_list_id' => $list->id])
+            ->call('import')
             ->assertNotified();
     }
 
@@ -522,8 +616,9 @@ class BookingCallbackSyncTest extends TestCase
         CompanyContext::set($company->id);
 
         Livewire::actingAs($admin)
-            ->test(ViewCallingList::class, ['record' => $list->getRouteKey()])
-            ->callAction('importAgentCallbacks')
+            ->test(ImportAgentCallbacks::class)
+            ->fillForm(['calling_list_id' => $list->id])
+            ->call('import')
             ->assertNotified('1 agent match errors');
 
         $lead = Lead::withoutGlobalScopes()->where('company_id', $company->id)->first();
@@ -608,6 +703,9 @@ class BookingCallbackSyncTest extends TestCase
             'Representative__r' => ['Name' => 'Iranays Ferro'],
             'Call_Back_Date__c' => '2026-09-24',
             'Call_Back_Time__c' => '16:30:00.000Z',
+            'CreatedDate' => '2026-09-20T16:44:35.000+0000',
+            'Tour_Location_Name__c' => 'Club Wyndham Palm Aire',
+            'Deposit_Type__c' => 'No Deposit',
         ], $overrides);
     }
 

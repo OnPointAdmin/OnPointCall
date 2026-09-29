@@ -114,7 +114,15 @@ return [
                 'representative' => 'Representative__c',
                 'callback_date' => 'Call_Back_Date__c',
                 'callback_time' => 'Call_Back_Time__c',
+                'callback_time_text' => 'Callback_Time_Text__c',
+                'created_at' => 'CreatedDate',
+                'tour_location' => 'Tour_Location_Name__c',
+                'premiums' => 'Premium_Combined_2__c',
+                'deposit_amount' => 'Deposit_Amount__c',
+                'deposit_type' => 'Deposit_Type__c',
             ],
+            // Add premiums and deposit_amount here after Salesforce FLS exposes those fields.
+            'optional_soql_fields' => [],
         ],
         'leads' => [
             'object' => 'Lead',

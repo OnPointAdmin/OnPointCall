@@ -6,6 +6,15 @@ Work that has landed on `master` but is not yet dated sits under **Unreleased**.
 
 ## Unreleased
 
+### Added
+
+- Callback import maps Katie's Callback Report fields onto leads — booking number, booking id, tour location, premiums, deposit type, and a shared Booking section on the agent and admin lead views.
+
+### Changed
+
+- Move Agent Callbacks import and schedule to Imports → Import Agent Callbacks, with a calling list picker for where callbacks land.
+- Set lead created date from the Salesforce booking entry date on callback import; treat early-morning callback times as afternoon when Salesforce stores them as AM.
+
 ## 2026-09-28
 
 ### Added

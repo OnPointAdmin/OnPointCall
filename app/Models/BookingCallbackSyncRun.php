@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\Concerns\BelongsToCompany;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class BookingCallbackSyncRun extends Model
@@ -12,6 +13,7 @@ class BookingCallbackSyncRun extends Model
 
     protected $fillable = [
         'company_id',
+        'calling_list_id',
         'trigger',
         'started_at',
         'finished_at',
@@ -36,11 +38,17 @@ class BookingCallbackSyncRun extends Model
         return $this->hasMany(BookingCallbackSyncError::class);
     }
 
+    public function callingList(): BelongsTo
+    {
+        return $this->belongsTo(CallingList::class);
+    }
+
     public static function latestForCompany(int $companyId): ?self
     {
         return static::withoutGlobalScopes()
             ->where('company_id', $companyId)
             ->whereNotNull('finished_at')
+            ->with('callingList')
             ->latest('id')
             ->first();
     }

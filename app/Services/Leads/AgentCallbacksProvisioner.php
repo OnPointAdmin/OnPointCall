@@ -50,9 +50,12 @@ class AgentCallbacksProvisioner
 
     public function scheduleFor(int $companyId): BookingCallbackSchedule
     {
+        $list = $this->listFor($companyId);
+
         return BookingCallbackSchedule::withoutGlobalScopes()->firstOrCreate(
             ['company_id' => $companyId],
             [
+                'calling_list_id' => $list->id,
                 'enabled' => true,
                 'days_of_week' => [1, 2, 3, 4, 5, 6, 7],
                 'run_times' => ['07:00'],

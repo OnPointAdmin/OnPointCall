@@ -3,6 +3,7 @@
     use App\Enums\LeadHistoryType;
     use App\Enums\QualificationStatus;
     use App\Enums\SoftScoreStatus;
+    use App\Support\LeadBookingFields;
     use App\Support\LeadDemographicOptions;
     use App\Support\LeadDisplayFields;
 
@@ -24,34 +25,19 @@
     $isTnb = $lead->lead_type === 'tnb';
     $filled = fn ($value) => $value !== null && $value !== '';
 
-    $tourFields = collect([
-        ['label' => 'Tour location', 'value' => $lead->tour_location],
-        ['label' => 'Tour date start', 'value' => $lead->tour_date_start],
-        ['label' => 'Tour date', 'value' => $lead->tour_date],
-        ['label' => 'Premiums', 'value' => $lead->premiums],
-        ['label' => 'Tour result', 'value' => $lead->tour_result],
-        ['label' => 'Tour / no show', 'value' => $lead->tour_or_no_show],
-        ['label' => 'Booking ID', 'value' => $lead->booking_id],
-    ])->filter(fn (array $field) => $filled($field['value']));
+    $bookingFields = collect(LeadBookingFields::rows($lead));
 
     if ($isTnb) {
-        foreach ($lead->extra_fields ?? [] as $key => $value) {
-            if (! $filled($value)) {
-                continue;
-            }
-            $tourFields->push([
-                'label' => ucwords(str_replace('_', ' ', (string) $key)),
-                'value' => is_array($value) ? json_encode($value) : (string) $value,
-            ]);
-        }
+        $bookingFields = $bookingFields->concat(LeadBookingFields::extraRowsForTnb($lead));
     }
 
-    $showTour = $tourFields->isNotEmpty();
+    $showBooking = LeadBookingFields::hasData($lead);
 
     $sectionedKeys = [
         'address', 'address_2', 'zip', 'email', 'age_range', 'annual_income', 'marital_status',
-        'gender', 'home_owner', 'credit_card_type', 'original_lead_submit_date', 'booking_id', 'phone_2',
-        'tour_location', 'tour_date_start', 'tour_date', 'premiums', 'tour_result', 'tour_or_no_show',
+        'gender', 'home_owner', 'credit_card_type', 'original_lead_submit_date', 'booking_id', 'booking_number',
+        'salesforce_booking_id', 'phone_2', 'tour_location', 'tour_date_start', 'tour_date', 'premiums',
+        'tour_result', 'tour_or_no_show', 'deposit_amount', 'deposit_type',
         'external_lead_id', 'first_name', 'last_name', 'phone', 'city', 'state',
     ];
 
@@ -428,11 +414,11 @@
             @endunless
         </div>
 
-        @if ($showTour)
+        @if ($showBooking)
             <div class="mt-4 border-t border-slate-100 pt-4 dark:border-slate-800">
-                <h3 class="m-0 mb-2.5 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Tour / TNB</h3>
+                <h3 class="m-0 mb-2.5 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Booking</h3>
                 <div class="grid gap-x-4 gap-y-3" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
-                    @foreach ($tourFields as $field)
+                    @foreach ($bookingFields as $field)
                         <div>
                             <p class="m-0 text-xs font-bold text-slate-700 dark:text-slate-300">{{ $field['label'] }}</p>
                             <p class="m-0 mt-0.5 text-sm text-slate-900 dark:text-slate-100">{{ $field['value'] }}</p>

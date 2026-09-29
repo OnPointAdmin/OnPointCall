@@ -1,47 +1,18 @@
 <?php
 
-namespace App\Filament\Resources\CallingLists\Actions;
+namespace App\Filament\Support;
 
-use App\Filament\Resources\CallingLists\CallingListResource;
-use App\Jobs\SyncBookingCallbacksJob;
+use App\Filament\Pages\ImportAgentCallbacks;
 use App\Models\CallingList;
-use Filament\Actions\Action;
 use Filament\Notifications\Notification;
-use Filament\Support\Icons\Heroicon;
-use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\HtmlString;
 
-class ImportAgentCallbacksAction
+class BookingCallbackImportNotifier
 {
-    public static function make(): Action
-    {
-        return Action::make('importAgentCallbacks')
-            ->label('Import Agent Callbacks')
-            ->icon(Heroicon::OutlinedArrowPath)
-            ->requiresConfirmation()
-            ->modalHeading('Import Agent Callbacks now?')
-            ->modalDescription('Pulls open Salesforce Callback bookings onto this list and assigns them to the matching agent.')
-            ->action(function (CallingList $record): void {
-                try {
-                    $result = Bus::dispatchNow(new SyncBookingCallbacksJob($record->company_id, false, 'import_now'));
-                } catch (\Throwable $exception) {
-                    Notification::make()
-                        ->title('Import failed')
-                        ->body($exception->getMessage())
-                        ->danger()
-                        ->send();
-
-                    return;
-                }
-
-                self::notify($record, $result);
-            });
-    }
-
     /**
      * @param  array<string, mixed>  $result
      */
-    public static function notify(CallingList $record, array $result): void
+    public static function notify(?CallingList $list, array $result): void
     {
         if (! empty($result['refused']) || ! empty($result['failed'])) {
             Notification::make()
@@ -75,7 +46,7 @@ class ImportAgentCallbacksAction
                 })
                 ->implode(', ');
 
-            $url = CallingListResource::getUrl('view', ['record' => $record]).'#booking-callback-errors';
+            $url = ImportAgentCallbacks::getUrl().'#booking-callback-errors';
 
             Notification::make()
                 ->title($agentErrors.' agent match errors')
@@ -86,8 +57,12 @@ class ImportAgentCallbacksAction
             return;
         }
 
+        $title = $list
+            ? 'Agent Callbacks imported to '.$list->name
+            : 'Agent Callbacks imported';
+
         Notification::make()
-            ->title('Agent Callbacks imported')
+            ->title($title)
             ->body($summary)
             ->success()
             ->send();

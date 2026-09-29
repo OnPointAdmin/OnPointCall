@@ -14,6 +14,7 @@ class SyncBookingCallbacksJob implements ShouldQueue
         public int $companyId,
         public bool $dryRun = false,
         public string $trigger = 'command',
+        public ?int $callingListId = null,
     ) {}
 
     /**
@@ -21,6 +22,11 @@ class SyncBookingCallbacksJob implements ShouldQueue
      */
     public function handle(BookingCallbackSyncService $sync): array
     {
-        return $sync->sync($this->companyId, $this->dryRun, $this->trigger);
+        return $sync->sync(
+            $this->companyId,
+            $this->dryRun,
+            $this->trigger,
+            $this->callingListId,
+        );
     }
 }

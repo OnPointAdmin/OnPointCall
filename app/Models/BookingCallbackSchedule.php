@@ -3,8 +3,10 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToCompany;
+use App\Models\CallingList;
 use App\Support\Weekdays;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class BookingCallbackSchedule extends Model
 {
@@ -12,6 +14,7 @@ class BookingCallbackSchedule extends Model
 
     protected $fillable = [
         'company_id',
+        'calling_list_id',
         'enabled',
         'days_of_week',
         'run_times',
@@ -49,5 +52,10 @@ class BookingCallbackSchedule extends Model
     public function normalizedRunTimes(): array
     {
         return ReportSchedule::normalizeSendTimes($this->run_times);
+    }
+
+    public function callingList(): BelongsTo
+    {
+        return $this->belongsTo(CallingList::class);
     }
 }

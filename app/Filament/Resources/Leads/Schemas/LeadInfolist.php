@@ -10,6 +10,7 @@ use App\Enums\SoftScoreStatus;
 use App\Models\Lead;
 use App\Support\CadenceDefaults;
 use App\Support\CompanyTimezone;
+use App\Support\LeadBookingFields;
 use App\Support\PhoneNormalizer;
 use Filament\Infolists\Components\KeyValueEntry;
 use Filament\Infolists\Components\TextEntry;
@@ -167,8 +168,15 @@ class LeadInfolist
                             ->placeholder('—'),
                     ])
                     ->columns(3),
-                Section::make('Tour')
+                Section::make('Booking')
                     ->schema([
+                        TextEntry::make('booking_number')
+                            ->label('Booking Number')
+                            ->state(fn (Lead $record): ?string => filled($record->booking_number) ? $record->booking_number : $record->booking_id)
+                            ->placeholder('—'),
+                        TextEntry::make('salesforce_booking_id')
+                            ->label('Booking Id')
+                            ->placeholder('—'),
                         TextEntry::make('tour_location')
                             ->label('Tour location')
                             ->placeholder('—'),
@@ -186,12 +194,15 @@ class LeadInfolist
                         TextEntry::make('tour_or_no_show')
                             ->label('Tour / no show')
                             ->placeholder('—'),
-                        TextEntry::make('booking_id')
-                            ->label('Booking ID')
+                        TextEntry::make('deposit_amount')
+                            ->label('Deposit amount')
+                            ->placeholder('—'),
+                        TextEntry::make('deposit_type')
+                            ->label('Deposit type')
                             ->placeholder('—'),
                     ])
                     ->columns(3)
-                    ->visible(fn (Lead $record): bool => self::hasTourData($record)),
+                    ->visible(fn (Lead $record): bool => LeadBookingFields::hasData($record)),
                 Section::make('Qualification')
                     ->schema([
                         TextEntry::make('qualification_status')
@@ -306,21 +317,6 @@ class LeadInfolist
                     ->visible(fn (Lead $record): bool => is_array($record->extra_fields) && $record->extra_fields !== [])
                     ->columnSpanFull(),
             ]);
-    }
-
-    private static function hasTourData(Lead $record): bool
-    {
-        if ($record->lead_type === 'tnb') {
-            return true;
-        }
-
-        return filled($record->tour_location)
-            || filled($record->tour_date_start)
-            || filled($record->tour_date)
-            || filled($record->premiums)
-            || filled($record->tour_result)
-            || filled($record->tour_or_no_show)
-            || filled($record->booking_id);
     }
 
     private static function qualifiedPartnersLabel(Lead $record): ?string

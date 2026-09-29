@@ -55,7 +55,13 @@ Permission set update validated **2026-09-23** against the Connected App (fresh 
 | Guest | `First_Name__c`, `Last_Name__c`, `First_Name_2__c`, `Last_Name_2__c`, `Phone__c` / `Phone_Cleaned__c`, `Phone_2__c`, `Email__c`, `Email_2__c`, `Booking_Notes__c` | Last name now readable. |
 | Address / demo | `Street__c`, `Unit_Number__c`, `State__c`, `Postal_Code__c`, `Age_Range__c`, `Income__c`, `Gender__c`, `Marital__c`, `HomeOwner_or_Renter__c` | Map onto lead columns / extra_fields. No `City__c` on Booking. |
 | Salesforce Lead | `Lead__c` | Optional match to OPC `external_lead_id`. |
-| Booking number | `Name` (e.g. `B-43314`) | Store on `leads.booking_id`. Salesforce Id (`a1E…`) is the upsert key. |
+| Booking number | `Name` (e.g. `B-43314`) | `leads.booking_number` (and legacy `booking_id` for compat). |
+| Booking Id | `Id` (`a1E…`) | `leads.salesforce_booking_id` (upsert key). |
+| Entry created | `CreatedDate` | `leads.created_at` on first import only. |
+| Tour location | `Tour_Location_Name__c` | `leads.tour_location`. |
+| Premium Combined 2 | `Premium_Combined_2__c` | `leads.premiums` (SOQL when FLS allows). |
+| Deposit amount | `Deposit_Amount__c` | `leads.deposit_amount` (SOQL when FLS allows). |
+| Deposit type | `Deposit_Type__c` | `leads.deposit_type`. |
 | Representative | `Representative__c` | Lookup to **`Employee__c`**. Live: Iranays booking `a0RVr000009zhVtMAI` = her OPC `users.salesforce_id`. |
 | Representative name | `Representative_Name__c` | Formula `Representative__r.Name`. |
 | Callback date | `Call_Back_Date__c` | Date. Tour date is unused on these rows. |

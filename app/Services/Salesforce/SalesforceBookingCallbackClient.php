@@ -49,7 +49,7 @@ class SalesforceBookingCallbackClient
         $typeValue = str_replace("'", "\\'", (string) config('services.salesforce.booking_callbacks.type', 'Callback'));
         $dateField = $fields['callback_date'];
 
-        $select = implode(', ', [
+        $selectFields = [
             $fields['id'],
             $fields['name'],
             $fields['type'],
@@ -78,7 +78,19 @@ class SalesforceBookingCallbackClient
             'Representative__r.Name',
             $fields['callback_date'],
             $fields['callback_time'],
-        ]);
+            $fields['callback_time_text'],
+            $fields['created_at'],
+            $fields['tour_location'],
+            $fields['deposit_type'],
+        ];
+
+        foreach (config('services.salesforce.booking_callbacks.optional_soql_fields', []) as $key) {
+            if (is_string($key) && isset($fields[$key])) {
+                $selectFields[] = $fields[$key];
+            }
+        }
+
+        $select = implode(', ', $selectFields);
 
         return 'SELECT '.$select
             .' FROM '.$object
@@ -170,7 +182,26 @@ class SalesforceBookingCallbackClient
             'representative_name' => $this->stringValue($relationshipName),
             'callback_date' => $this->stringValue($record[$fields['callback_date']] ?? null),
             'callback_time' => $this->stringValue($record[$fields['callback_time']] ?? null),
+            'callback_time_text' => $this->stringValue($record[$fields['callback_time_text']] ?? null),
+            'booking_created_at' => $this->stringValue($record[$fields['created_at']] ?? null),
+            'tour_location' => $this->stringValue($record[$fields['tour_location']] ?? null),
+            'premiums' => $this->stringValue($record[$fields['premiums']] ?? null),
+            'deposit_amount' => $this->decimalValue($record[$fields['deposit_amount']] ?? null),
+            'deposit_type' => $this->stringValue($record[$fields['deposit_type']] ?? null),
         ];
+    }
+
+    private function decimalValue(mixed $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        if (! is_numeric($value)) {
+            return null;
+        }
+
+        return (string) $value;
     }
 
     private function stringValue(mixed $value): ?string

@@ -58,8 +58,12 @@ class BookingCallbackSyncService
      *     }>
      * }
      */
-    public function sync(int $companyId, bool $dryRun = false, string $trigger = 'command'): array
-    {
+    public function sync(
+        int $companyId,
+        bool $dryRun = false,
+        string $trigger = 'command',
+        ?int $callingListId = null,
+    ): array {
         $stats = $this->blankStats();
 
         if (! $this->client->isConfigured()) {
@@ -82,7 +86,7 @@ class BookingCallbackSyncService
             $timezone = CompanyTimezone::for($companyId);
             $today = Carbon::now($timezone)->startOfDay();
             $records = $this->client->fetch($today);
-            $list = $dryRun ? null : $this->provisioner->ensure($companyId);
+            $list = $this->resolveList($companyId, $callingListId, $dryRun);
             $users = User::withoutGlobalScopes()
                 ->where('company_id', $companyId)
                 ->whereNotNull('salesforce_id')
@@ -94,13 +98,29 @@ class BookingCallbackSyncService
             }
 
             if (! $dryRun) {
-                $this->persistRun($companyId, $trigger, $stats);
+                $this->persistRun($companyId, $trigger, $stats, $list?->id);
             }
 
             return $stats;
         } finally {
             $lock->release();
         }
+    }
+
+    public function resolveList(int $companyId, ?int $callingListId, bool $dryRun): ?CallingList
+    {
+        if ($callingListId !== null) {
+            return CallingList::withoutGlobalScopes()
+                ->where('company_id', $companyId)
+                ->whereKey($callingListId)
+                ->firstOrFail();
+        }
+
+        if ($dryRun) {
+            return null;
+        }
+
+        return $this->provisioner->ensure($companyId);
     }
 
     /**
@@ -207,6 +227,8 @@ class BookingCallbackSyncService
             list: $list,
             existing: null,
         ));
+
+        $this->applyBookingCreatedAt($lead, $record);
 
         $this->assignOwner($match['user'], $list);
         $this->writeHistory($lead, $record, $callbackAt, 'created');
@@ -322,8 +344,13 @@ class BookingCallbackSyncService
             'gender' => $record['gender'] ?? null,
             'marital_status' => $record['marital'] ?? null,
             'home_owner' => $record['home_owner'] ?? null,
+            'booking_number' => $record['name'] ?? null,
             'booking_id' => $record['name'] ?? null,
             'salesforce_booking_id' => $record['id'],
+            'tour_location' => $this->nullable($record['tour_location'] ?? null),
+            'premiums' => $this->nullable($record['premiums'] ?? null),
+            'deposit_amount' => $this->nullable($record['deposit_amount'] ?? null),
+            'deposit_type' => $this->nullable($record['deposit_type'] ?? null),
             'callback_at' => $callbackAt,
             'callback_owner_id' => $owner?->id,
             'calling_list_id' => $list->id,
@@ -391,14 +418,93 @@ class BookingCallbackSyncService
             return now();
         }
 
-        $clock = '00:00:00';
-        $time = $record['callback_time'] ?? null;
-
-        if (is_string($time) && preg_match('/^(\d{2}:\d{2}:\d{2})/', $time, $matches) === 1) {
-            $clock = $matches[1];
-        }
+        $clock = $this->callbackClock($record);
 
         return Carbon::parse($date.' '.$clock, $today->timezone)->utc();
+    }
+
+    /**
+     * @param  array<string, mixed>  $record
+     */
+    private function callbackClock(array $record): string
+    {
+        $text = $record['callback_time_text'] ?? null;
+
+        if (is_string($text) && preg_match('/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i', trim($text), $matches) === 1) {
+            return $this->twelveHourClock((int) $matches[1], (int) $matches[2], strtoupper($matches[3]));
+        }
+
+        $time = $record['callback_time'] ?? null;
+
+        if (! is_string($time) || preg_match('/^(\d{2}):(\d{2}):(\d{2})/', $time, $matches) !== 1) {
+            return '00:00:00';
+        }
+
+        $hour = (int) $matches[1];
+        $minute = (int) $matches[2];
+
+        if ($hour >= 1 && $hour <= 6) {
+            return $this->twelveHourClock($hour, $minute, 'PM');
+        }
+
+        if ($hour === 0) {
+            return sprintf('00:%02d:00', $minute);
+        }
+
+        if ($hour === 12) {
+            return sprintf('12:%02d:00', $minute);
+        }
+
+        return sprintf('%02d:%02d:00', $hour, $minute);
+    }
+
+    /**
+     * @param  array<string, mixed>  $record
+     */
+    private function applyBookingCreatedAt(Lead $lead, array $record): void
+    {
+        $bookingCreatedAt = $this->bookingCreatedAt($record);
+
+        if (! $bookingCreatedAt instanceof Carbon) {
+            return;
+        }
+
+        $lead->forceFill(['created_at' => $bookingCreatedAt])->saveQuietly();
+    }
+
+    /**
+     * @param  array<string, mixed>  $record
+     */
+    private function bookingCreatedAt(array $record): ?Carbon
+    {
+        $value = $record['booking_created_at'] ?? null;
+
+        if (! is_string($value) || trim($value) === '') {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($value)->utc();
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    private function twelveHourClock(int $hour, int $minute, string $meridian): string
+    {
+        if ($meridian === 'AM' && $hour >= 1 && $hour <= 6) {
+            $meridian = 'PM';
+        }
+
+        if ($meridian === 'PM' && $hour !== 12) {
+            $hour += 12;
+        }
+
+        if ($meridian === 'AM' && $hour === 12) {
+            $hour = 0;
+        }
+
+        return sprintf('%02d:%02d:00', $hour, $minute);
     }
 
     /**
@@ -515,12 +621,13 @@ class BookingCallbackSyncService
     /**
      * @param  array<string, mixed>  $stats
      */
-    private function persistRun(int $companyId, string $trigger, array $stats): void
+    private function persistRun(int $companyId, string $trigger, array $stats, ?int $callingListId): void
     {
         $started = now();
 
         $run = BookingCallbackSyncRun::withoutGlobalScopes()->create([
             'company_id' => $companyId,
+            'calling_list_id' => $callingListId,
             'trigger' => $trigger,
             'started_at' => $started,
             'finished_at' => $started,
