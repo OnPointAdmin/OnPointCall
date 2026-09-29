@@ -29,9 +29,14 @@
                     <button
                         type="button"
                         wire:click="getNextLead"
-                        class="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                        wire:loading.attr="disabled"
+                        wire:target="getNextLead"
+                        class="inline-flex items-center justify-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-70"
                     >
-                        Get Next Lead
+                        <span wire:loading.remove wire:target="getNextLead">Get Next Lead</span>
+                        <span wire:loading wire:target="getNextLead">
+                            @include('livewire.agent.partials.loading-spinner', ['label' => 'Searching…', 'textClass' => 'text-white'])
+                        </span>
                     </button>
                 </div>
 
@@ -70,9 +75,14 @@
                 <button
                     type="button"
                     wire:click="getNextLead"
-                    class="w-full rounded-md bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+                    wire:loading.attr="disabled"
+                    wire:target="getNextLead"
+                    class="inline-flex w-full items-center justify-center gap-2 rounded-md bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-70"
                 >
-                    Get Next Lead
+                    <span wire:loading.remove wire:target="getNextLead">Get Next Lead</span>
+                    <span wire:loading wire:target="getNextLead">
+                        @include('livewire.agent.partials.loading-spinner', ['label' => 'Searching…', 'textClass' => 'text-white'])
+                    </span>
                 </button>
             </div>
         @endif
@@ -389,30 +399,41 @@
                         <button
                             type="button"
                             wire:click="searchLeads"
-                            class="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-950"
+                            wire:loading.attr="disabled"
+                            wire:target="searchLeads"
+                            class="inline-flex items-center justify-center rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-950"
                         >
-                            Search
+                            <span wire:loading.remove wire:target="searchLeads">Search</span>
+                            <span wire:loading wire:target="searchLeads">
+                                @include('livewire.agent.partials.loading-spinner', ['label' => null])
+                            </span>
                         </button>
                     </div>
 
-                    @if ($lookupResults !== [])
-                        <ul class="m-0 mt-2.5 flex list-none flex-col gap-1.5 p-0">
-                            @foreach ($lookupResults as $result)
-                                <li>
-                                    <button
-                                        type="button"
-                                        wire:key="lookup-{{ $result['id'] }}"
-                                        wire:click="selectLookupLead({{ $result['id'] }})"
-                                        class="w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-left text-sm hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-950 dark:hover:bg-slate-800"
-                                    >
-                                        <span class="font-semibold text-slate-700 dark:text-slate-300">{{ $result['name'] }}</span>
-                                        <span class="text-slate-500 dark:text-slate-400"> — {{ $result['phone'] }}</span>
-                                        <span class="ml-1.5 text-[11px] text-slate-400 dark:text-slate-500">{{ $result['status'] }}</span>
-                                    </button>
-                                </li>
-                            @endforeach
-                        </ul>
-                    @endif
+                    <div wire:loading wire:target="searchLeads" class="mt-2.5">
+                        @include('livewire.agent.partials.loading-spinner', ['label' => 'Searching…'])
+                    </div>
+
+                    <div wire:loading.remove wire:target="searchLeads">
+                        @if ($lookupResults !== [])
+                            <ul class="m-0 mt-2.5 flex list-none flex-col gap-1.5 p-0">
+                                @foreach ($lookupResults as $result)
+                                    <li>
+                                        <button
+                                            type="button"
+                                            wire:key="lookup-{{ $result['id'] }}"
+                                            wire:click="selectLookupLead({{ $result['id'] }})"
+                                            class="w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-left text-sm hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-950 dark:hover:bg-slate-800"
+                                        >
+                                            <span class="font-semibold text-slate-700 dark:text-slate-300">{{ $result['name'] }}</span>
+                                            <span class="text-slate-500 dark:text-slate-400"> — {{ $result['phone'] }}</span>
+                                            <span class="ml-1.5 text-[11px] text-slate-400 dark:text-slate-500">{{ $result['status'] }}</span>
+                                        </button>
+                                    </li>
+                                @endforeach
+                            </ul>
+                        @endif
+                    </div>
                 </div>
             </div>
         </div>

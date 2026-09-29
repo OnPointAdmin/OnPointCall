@@ -6,6 +6,10 @@ Work that has landed on `master` but is not yet dated sits under **Unreleased**.
 
 ## Unreleased
 
+### Added
+
+- Show a spinner while lookup search and Get Next Lead are running.
+
 ## 2026-09-28
 
 ### Added

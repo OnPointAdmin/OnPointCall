@@ -879,6 +879,18 @@ class AgentWorkspaceTest extends TestCase
             ->assertDontSee('Run Qualification');
     }
 
+    public function test_lookup_search_shows_spinner_while_searching(): void
+    {
+        [$user] = $this->makeLookupLead();
+        $this->actingAs($user, 'agent');
+
+        Livewire::test(Workspace::class)
+            ->assertSee('Get Next Lead')
+            ->assertSeeHtml('wire:target="getNextLead"')
+            ->assertSeeHtml('wire:target="searchLeads"')
+            ->assertSee('Searching…');
+    }
+
     public function test_lookup_opens_callable_lead_without_calling_list(): void
     {
         [$user, $lead] = $this->makeLookupLead([
