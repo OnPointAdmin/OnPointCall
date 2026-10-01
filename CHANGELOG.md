@@ -14,6 +14,12 @@ Work that has landed on `master` but is not yet dated sits under **Unreleased**.
 
 ### Removed
 
+## 2026-10-01
+
+### Fixed
+
+- Leave a Salesforce callback booking alone after the first import so later runs cannot reopen it or overwrite the agent's work.
+
 ## 2026-09-30
 
 ### Added

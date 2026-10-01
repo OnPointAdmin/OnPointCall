@@ -161,6 +161,10 @@ class BookingCallbackSyncService
             return;
         }
 
+        if ($existing) {
+            return;
+        }
+
         [$phone, $phone2] = $this->phones($record);
 
         if ($phone === null) {
@@ -181,25 +185,13 @@ class BookingCallbackSyncService
             $errors[] = BookingCallbackSyncErrorReason::NoCallbackDate;
         }
 
-        if ($existing) {
-            if (in_array($existing->status, [LeadStatus::Dnc, LeadStatus::Booked], true)) {
-                $stats['skipped_dnc_terminal']++;
-
-                return;
-            }
-
-            $this->updateLead($existing, $record, $phone, $phone2, $callbackAt, $match['user'], $list, $errors, $dryRun, $stats);
-
-            return;
-        }
-
         $byPhone = Lead::withoutGlobalScopes()
             ->where('company_id', $companyId)
             ->where('phone', $phone)
             ->first();
 
         if ($byPhone) {
-            if (in_array($byPhone->status, [LeadStatus::Dnc, LeadStatus::Booked, LeadStatus::Terminal], true)) {
+            if ($this->isProtectedFromCallbackReopen($byPhone) || $this->alreadyImportedCallback($byPhone)) {
                 $stats['skipped_dnc_terminal']++;
 
                 return;
@@ -523,6 +515,18 @@ class BookingCallbackSyncService
         }
 
         return [$primary, $secondary];
+    }
+
+    private function isProtectedFromCallbackReopen(Lead $lead): bool
+    {
+        return in_array($lead->status, [LeadStatus::Dnc, LeadStatus::Booked, LeadStatus::Terminal], true);
+    }
+
+    private function alreadyImportedCallback(Lead $lead): bool
+    {
+        $bookingId = $lead->salesforce_booking_id;
+
+        return is_string($bookingId) && $bookingId !== '';
     }
 
     private function leadByBookingId(int $companyId, string $bookingId): ?Lead

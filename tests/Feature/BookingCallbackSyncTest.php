@@ -181,12 +181,14 @@ class BookingCallbackSyncTest extends TestCase
             'Booking_Notes__c' => 'Updated note',
         ])]);
 
-        app(BookingCallbackSyncService::class)->sync($company->id);
+        $result = app(BookingCallbackSyncService::class)->sync($company->id);
 
         $lead->refresh();
 
-        $this->assertSame('Updated location', $lead->tour_location);
-        $this->assertSame('Updated note', $lead->notes);
+        $this->assertSame(0, $result['created']);
+        $this->assertSame(0, $result['updated']);
+        $this->assertSame('Club Wyndham Palm Aire', $lead->tour_location);
+        $this->assertSame('Navy', $lead->notes);
         $this->assertSame('2026-09-20 16:44:35', $lead->created_at->utc()->format('Y-m-d H:i:s'));
     }
 
@@ -222,7 +224,7 @@ class BookingCallbackSyncTest extends TestCase
         $this->assertSame('2026-09-24 14:00:00', $lead->callback_at->utc()->format('Y-m-d H:i:s'));
     }
 
-    public function test_blank_notes_stay_null_and_changed_notes_update_the_same_lead(): void
+    public function test_blank_notes_stay_null_and_later_sync_does_not_touch_the_lead(): void
     {
         [$company] = $this->companyWithAgent();
 
@@ -248,13 +250,13 @@ class BookingCallbackSyncTest extends TestCase
         $result = app(BookingCallbackSyncService::class)->sync($company->id);
 
         $this->assertSame(0, $result['created']);
-        $this->assertSame(1, $result['updated']);
+        $this->assertSame(0, $result['updated']);
         $this->assertSame(1, Lead::withoutGlobalScopes()->where('company_id', $company->id)->count());
 
         $lead->refresh();
-        $this->assertSame('Wyn getting married', $lead->notes);
+        $this->assertSame('Kept locally', $lead->notes);
         $this->assertSame(4, $lead->attempt_count);
-        $this->assertSame('2026-09-24 22:00:00', $lead->callback_at->utc()->format('Y-m-d H:i:s'));
+        $this->assertSame('2026-09-24 20:30:00', $lead->callback_at->utc()->format('Y-m-d H:i:s'));
         $this->assertSame($lead->callback_owner_id, LeadClaim::withoutGlobalScopes()->where('lead_id', $lead->id)->value('user_id'));
     }
 
@@ -367,7 +369,7 @@ class BookingCallbackSyncTest extends TestCase
         $this->assertSame($customList->id, $run->calling_list_id);
     }
 
-    public function test_setting_the_employee_id_attaches_the_owner_on_the_next_sync(): void
+    public function test_already_imported_booking_is_not_updated_on_later_sync(): void
     {
         $company = Company::factory()->create();
         $agent = User::factory()->create([
@@ -385,13 +387,15 @@ class BookingCallbackSyncTest extends TestCase
         $this->assertSame(1, BookingCallbackSyncRun::latestForCompany($company->id)->error_count);
 
         $agent->update(['salesforce_id' => self::EMPLOYEE_ID]);
-        $this->fakeBookings([$this->booking()]);
+        $this->fakeBookings([$this->booking(['Booking_Notes__c' => 'Changed in Salesforce'])]);
         $result = app(BookingCallbackSyncService::class)->sync($company->id);
 
         $lead->refresh();
-        $this->assertSame($agent->id, $lead->callback_owner_id);
+        $this->assertNull($lead->callback_owner_id);
+        $this->assertSame('Navy', $lead->notes);
+        $this->assertSame(0, $result['created']);
+        $this->assertSame(0, $result['updated']);
         $this->assertSame(0, $result['agent_match_errors']);
-        $this->assertSame(0, BookingCallbackSyncRun::latestForCompany($company->id)->error_count);
         $this->assertSame(1, Lead::withoutGlobalScopes()->where('company_id', $company->id)->count());
     }
 
@@ -457,6 +461,60 @@ class BookingCallbackSyncTest extends TestCase
         $this->assertSame(LeadStatus::Terminal, $lead->status);
         $this->assertNull($lead->callback_owner_id);
         $this->assertSame(self::BOOKING_ID, $lead->salesforce_booking_id);
+    }
+
+    public function test_not_interested_callback_is_not_reopened_on_later_sync(): void
+    {
+        [$company] = $this->companyWithAgent();
+
+        $this->fakeBookings([$this->booking()]);
+        app(BookingCallbackSyncService::class)->sync($company->id);
+
+        $lead = Lead::withoutGlobalScopes()->where('company_id', $company->id)->first();
+        $lead->update([
+            'status' => LeadStatus::Terminal,
+            'callback_owner_id' => null,
+            'callback_at' => null,
+            'attempt_count' => 1,
+        ]);
+
+        $this->fakeBookings([$this->booking(['Booking_Notes__c' => 'Still open in Salesforce'])]);
+        $result = app(BookingCallbackSyncService::class)->sync($company->id);
+
+        $lead->refresh();
+        $this->assertSame(0, $result['updated']);
+        $this->assertSame(0, $result['skipped_dnc_terminal']);
+        $this->assertSame(LeadStatus::Terminal, $lead->status);
+        $this->assertNull($lead->callback_owner_id);
+        $this->assertNull($lead->callback_at);
+        $this->assertSame(1, $lead->attempt_count);
+        $this->assertSame('Navy', $lead->notes);
+        $this->assertSame(1, Lead::withoutGlobalScopes()->where('company_id', $company->id)->count());
+    }
+
+    public function test_agent_rescheduled_callback_date_is_not_overwritten(): void
+    {
+        [$company] = $this->companyWithAgent();
+
+        $this->fakeBookings([$this->booking()]);
+        app(BookingCallbackSyncService::class)->sync($company->id);
+
+        $lead = Lead::withoutGlobalScopes()->where('company_id', $company->id)->first();
+        $lead->update([
+            'callback_at' => Carbon::parse('2026-12-01 22:32:00', 'UTC'),
+            'attempt_count' => 1,
+        ]);
+
+        $this->fakeBookings([$this->booking(['Booking_Notes__c' => 'Checking schedule'])]);
+        $result = app(BookingCallbackSyncService::class)->sync($company->id);
+
+        $lead->refresh();
+        $this->assertSame(0, $result['updated']);
+        $this->assertSame(0, $result['skipped_dnc_terminal']);
+        $this->assertSame(LeadStatus::Callback, $lead->status);
+        $this->assertSame('2026-12-01 22:32:00', $lead->callback_at->utc()->format('Y-m-d H:i:s'));
+        $this->assertSame('Navy', $lead->notes);
+        $this->assertSame(1, $lead->attempt_count);
     }
 
     public function test_date_outside_the_window_is_not_pulled_and_a_missing_phone_is_skipped(): void
