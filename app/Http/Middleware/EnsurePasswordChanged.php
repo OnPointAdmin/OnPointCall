@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\User;
+use App\Services\Auth\Impersonation;
 use Closure;
 use Filament\Facades\Filament;
 use Illuminate\Http\Request;
@@ -12,6 +13,10 @@ class EnsurePasswordChanged
 {
     public function handle(Request $request, Closure $next): Response
     {
+        if (app(Impersonation::class)->isActive()) {
+            return $next($request);
+        }
+
         $user = $request->user();
 
         if (! $user instanceof User || ! $user->mustChangePassword()) {
@@ -40,6 +45,7 @@ class EnsurePasswordChanged
             'agent.password.update',
             'agent.password.change',
             'agent.password.change.update',
+            'agent.impersonation.stop',
             'agent.logout',
             'filament.admin.auth.profile',
             'filament.admin.auth.logout',

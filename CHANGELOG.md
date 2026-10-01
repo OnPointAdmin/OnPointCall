@@ -8,6 +8,17 @@ Work that has landed on `master` but is not yet dated sits under **Unreleased**.
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Removed
+
+## 2026-09-30
+
+### Added
+
+- Let admins log in as another user from the Users list to see the agent workspace as them, with a banner to return to their account.
 - Callback import maps Katie's Callback Report fields onto leads — booking number, booking id, tour location, premiums, deposit type, and a shared Booking section on the agent and admin lead views.
 
 ### Changed

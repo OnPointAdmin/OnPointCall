@@ -14,11 +14,12 @@
     x-init="$watch('dark', v => { localStorage.setItem('opc-theme', v ? 'dark' : 'light'); document.documentElement.classList.toggle('dark', v); }); document.documentElement.classList.toggle('dark', dark);"
     class="min-h-screen bg-slate-100 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100"
 >
+    @php($impersonating = app(\App\Services\Auth\Impersonation::class)->isActive())
     <header class="relative z-50 border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <div class="mx-auto flex max-w-[1440px] items-center justify-between gap-4 px-6 py-3">
             <x-brand-mark size="sm" />
             <div class="flex items-center gap-3.5 text-sm">
-                @if (auth('agent')->user()?->role->canAccessAdmin())
+                @if (! $impersonating && auth('agent')->user()?->role->canAccessAdmin())
                     <a
                         href="{{ url('/admin') }}"
                         target="_blank"
@@ -48,6 +49,7 @@
                         class="absolute right-0 z-50 mt-1 w-48 overflow-hidden rounded-md border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
                         role="menu"
                     >
+                        @unless ($impersonating)
                         <form method="POST" action="{{ route('agent.logout') }}">
                             @csrf
                             <button
@@ -65,6 +67,7 @@
                         >
                             Change password
                         </a>
+                        @endunless
                     </div>
                 </div>
                 <div class="flex items-center gap-1 rounded-lg bg-slate-100 p-0.5 dark:bg-slate-950">
@@ -92,6 +95,23 @@
     </header>
 
     <main class="mx-auto max-w-[1440px] px-6 py-5">
+        @if ($impersonating)
+            <div class="mb-4 flex flex-col gap-3 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 sm:flex-row sm:items-center sm:justify-between dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100">
+                <p>
+                    Viewing as <span class="font-semibold">{{ auth('agent')->user()->name }}</span>.
+                    Actions you take are saved as this user.
+                </p>
+                <form method="POST" action="{{ route('agent.impersonation.stop') }}" class="shrink-0">
+                    @csrf
+                    <button
+                        type="submit"
+                        class="rounded-md border border-amber-300 bg-white px-3 py-1.5 text-sm font-medium text-amber-950 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-900 dark:text-amber-50 dark:hover:bg-amber-900/80"
+                    >
+                        Return to my account
+                    </button>
+                </form>
+            </div>
+        @endif
         @if (session('status'))
             <div class="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200">
                 {{ session('status') }}

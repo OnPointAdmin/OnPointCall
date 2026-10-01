@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Agent;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\Auth\Impersonation;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -83,6 +84,12 @@ class AuthController extends Controller
 
     public function logout(Request $request): RedirectResponse
     {
+        $impersonation = app(Impersonation::class);
+
+        if ($impersonation->isActive()) {
+            return $impersonation->stop();
+        }
+
         Auth::guard(self::AGENT_GUARD)->logout();
 
         // Keep the Filament (web) session intact if present.

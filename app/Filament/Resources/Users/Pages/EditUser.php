@@ -2,8 +2,10 @@
 
 namespace App\Filament\Resources\Users\Pages;
 
+use App\Filament\Resources\Users\Actions\LogInAsUserAction;
 use App\Filament\Resources\Users\UserResource;
 use App\Models\User;
+use App\Services\Auth\Impersonation;
 use App\Services\Users\UserInviteService;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
@@ -18,6 +20,26 @@ class EditUser extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
+            LogInAsUserAction::configure(
+                Action::make('logInAs')
+                    ->visible(function (): bool {
+                        /** @var User $actor */
+                        $actor = auth()->user();
+                        /** @var User $user */
+                        $user = $this->getRecord();
+
+                        return LogInAsUserAction::isVisible($actor, $user);
+                    })
+                    ->action(function (Impersonation $impersonation) {
+                        /** @var User $actor */
+                        $actor = auth()->user();
+                        /** @var User $user */
+                        $user = $this->getRecord();
+                        LogInAsUserAction::run($actor, $user, $impersonation);
+
+                        return redirect()->route('agent.workspace');
+                    })
+            ),
             Action::make('resendInvite')
                 ->label('Resend invite')
                 ->icon(Heroicon::OutlinedEnvelope)

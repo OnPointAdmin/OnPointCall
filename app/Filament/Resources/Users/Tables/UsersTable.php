@@ -2,7 +2,9 @@
 
 namespace App\Filament\Resources\Users\Tables;
 
+use App\Filament\Resources\Users\Actions\LogInAsUserAction;
 use App\Models\User;
+use App\Services\Auth\Impersonation;
 use App\Services\Users\UserInviteService;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
@@ -54,6 +56,22 @@ class UsersTable
                 //
             ])
             ->recordActions([
+                LogInAsUserAction::configure(
+                    Action::make('logInAs')
+                        ->visible(function (User $record): bool {
+                            $actor = auth()->user();
+
+                            return $actor instanceof User
+                                && LogInAsUserAction::isVisible($actor, $record);
+                        })
+                        ->action(function (User $record, Impersonation $impersonation) {
+                            /** @var User $actor */
+                            $actor = auth()->user();
+                            LogInAsUserAction::run($actor, $record, $impersonation);
+
+                            return redirect()->route('agent.workspace');
+                        })
+                ),
                 Action::make('resendInvite')
                     ->label('Resend invite')
                     ->icon(Heroicon::OutlinedEnvelope)

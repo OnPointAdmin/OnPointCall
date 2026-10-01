@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\User;
+use App\Services\Auth\Impersonation;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -12,6 +13,10 @@ class RestoreAdminWebGuard
 {
     public function handle(Request $request, Closure $next): Response
     {
+        if (session()->has(Impersonation::SESSION_KEY)) {
+            return $next($request);
+        }
+
         if (! Auth::guard('web')->check()) {
             $agent = Auth::guard('agent')->user();
 

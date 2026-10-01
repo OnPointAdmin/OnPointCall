@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Agent\AuthController;
 use App\Http\Controllers\Agent\ChangePasswordController;
+use App\Http\Controllers\Agent\ImpersonationController;
 use App\Http\Controllers\Agent\PasswordResetController;
 use App\Http\Middleware\EnsureCanCall;
 use App\Http\Middleware\EnsurePasswordChanged;
@@ -29,6 +30,8 @@ Route::post('/agent/reset-password', [PasswordResetController::class, 'resetPass
 Route::middleware(['auth:agent', SetCompanyContext::class])
     ->prefix('agent')
     ->group(function (): void {
+        Route::post('/impersonation/stop', [ImpersonationController::class, 'stop'])->name('agent.impersonation.stop');
+
         Route::get('/change-password', [ChangePasswordController::class, 'show'])->name('agent.password.change');
         Route::post('/change-password', [ChangePasswordController::class, 'update'])->name('agent.password.change.update');
 
