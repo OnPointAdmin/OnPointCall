@@ -116,6 +116,8 @@ return [
                 'callback_time' => 'Call_Back_Time__c',
                 'callback_time_text' => 'Callback_Time_Text__c',
                 'created_at' => 'CreatedDate',
+                'venue' => 'Venue__c',
+                'event' => 'Event__c',
                 'tour_location' => 'Tour_Location_Name__c',
                 'premiums' => 'Premium_Combined_2__c',
                 'deposit_amount' => 'Deposit_Amount__c',

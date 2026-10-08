@@ -58,6 +58,8 @@ Permission set update validated **2026-09-23** against the Connected App (fresh 
 | Booking number | `Name` (e.g. `B-43314`) | `leads.booking_number` (and legacy `booking_id` for compat). |
 | Booking Id | `Id` (`a1E…`) | `leads.salesforce_booking_id` (upsert key). |
 | Entry created | `CreatedDate` | `leads.created_at` on first import only. |
+| Venue | `Venue__c` → `Venue__r.Name` | `leads.venue` (booking lookup, not Lead). |
+| Event | `Event__c` → `Event__r.Name` | `leads.event` (booking lookup). Integration user needs **Read** on both fields (permission set). |
 | Tour location | `Tour_Location_Name__c` | `leads.tour_location`. |
 | Premium Combined 2 | `Premium_Combined_2__c` | `leads.premiums` (SOQL when FLS allows). |
 | Deposit amount | `Deposit_Amount__c` | `leads.deposit_amount` (SOQL when FLS allows). |

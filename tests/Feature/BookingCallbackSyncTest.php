@@ -105,6 +105,8 @@ class BookingCallbackSyncTest extends TestCase
         $this->assertSame(self::BOOKING_ID, $lead->salesforce_booking_id);
         $this->assertSame('Navy', $lead->notes);
         $this->assertSame('Ada', $lead->first_name);
+        $this->assertSame('Florida Event 1', $lead->venue);
+        $this->assertSame('South Florida Fair - 1/15/26 - to 4/5/26', $lead->event);
         $this->assertSame('00QVr00000LeadAAAAA', $lead->external_lead_id);
         $this->assertSame('2026-09-24 20:30:00', $lead->callback_at->utc()->format('Y-m-d H:i:s'));
         $this->assertTrue(ListAssignment::withoutGlobalScopes()
@@ -396,7 +398,32 @@ class BookingCallbackSyncTest extends TestCase
         $this->assertSame(0, $result['created']);
         $this->assertSame(0, $result['updated']);
         $this->assertSame(0, $result['agent_match_errors']);
+        $this->assertSame(0, $result['source_refreshed'] ?? 0);
         $this->assertSame(1, Lead::withoutGlobalScopes()->where('company_id', $company->id)->count());
+    }
+
+    public function test_backfill_refreshes_venue_and_event_on_callback_leads(): void
+    {
+        [$company] = $this->companyWithAgent();
+
+        $lead = Lead::withoutGlobalScopes()->create([
+            'company_id' => $company->id,
+            'phone' => '4045559999',
+            'status' => LeadStatus::Callback,
+            'salesforce_booking_id' => self::BOOKING_ID,
+            'lead_type' => 'standard',
+            'imported_at' => now(),
+        ]);
+
+        $this->fakeBookings([$this->booking()]);
+
+        $result = app(BookingCallbackSyncService::class)->backfillSourceFields($company->id);
+
+        $lead->refresh();
+
+        $this->assertSame(1, $result['updated']);
+        $this->assertSame('Florida Event 1', $lead->venue);
+        $this->assertSame('South Florida Fair - 1/15/26 - to 4/5/26', $lead->event);
     }
 
     public function test_existing_callable_phone_is_attached_and_dnc_is_skipped(): void
@@ -764,6 +791,10 @@ class BookingCallbackSyncTest extends TestCase
             'CreatedDate' => '2026-09-20T16:44:35.000+0000',
             'Tour_Location_Name__c' => 'Club Wyndham Palm Aire',
             'Deposit_Type__c' => 'No Deposit',
+            'Venue__c' => 'a0OVr00000CjYppMAF',
+            'Venue__r' => ['Name' => 'Florida Event 1'],
+            'Event__c' => 'a0X000000000001AAA',
+            'Event__r' => ['Name' => 'South Florida Fair - 1/15/26 - to 4/5/26'],
         ], $overrides);
     }
 

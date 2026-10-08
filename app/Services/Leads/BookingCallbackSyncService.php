@@ -107,6 +107,67 @@ class BookingCallbackSyncService
         }
     }
 
+    /**
+     * Backfill venue and event from Salesforce for callback leads that already exist in OPC.
+     *
+     * @return array{failed: bool, message: string, scanned: int, updated: int, unchanged: int, not_found: int}
+     */
+    public function backfillSourceFields(?int $companyId = null, bool $dryRun = false): array
+    {
+        $result = [
+            'failed' => false,
+            'message' => '',
+            'scanned' => 0,
+            'updated' => 0,
+            'unchanged' => 0,
+            'not_found' => 0,
+        ];
+
+        if (! $this->client->isConfigured()) {
+            $result['failed'] = true;
+            $result['message'] = 'Salesforce credentials are not configured.';
+
+            return $result;
+        }
+
+        $query = Lead::withoutGlobalScopes()
+            ->where('status', LeadStatus::Callback)
+            ->whereNotNull('salesforce_booking_id')
+            ->where('salesforce_booking_id', '!=', '');
+
+        if ($companyId !== null) {
+            $query->where('company_id', $companyId);
+        }
+
+        $leads = $query->get(['id', 'company_id', 'salesforce_booking_id', 'venue', 'event', 'tour_location']);
+        $result['scanned'] = $leads->count();
+
+        if ($leads->isEmpty()) {
+            return $result;
+        }
+
+        $records = collect($this->client->fetchByIds($leads->pluck('salesforce_booking_id')->all()))
+            ->keyBy(fn (array $record): string => (string) ($record['id'] ?? ''));
+
+        foreach ($leads as $lead) {
+            $record = $records->get((string) $lead->salesforce_booking_id);
+
+            if ($record === null) {
+                $result['not_found']++;
+
+                continue;
+            }
+
+            if ($this->refreshSourceFields($lead, $record, $dryRun)) {
+                $result['updated']++;
+            } else {
+                $result['unchanged']++;
+            }
+        }
+
+        return $result;
+    }
+
     public function resolveList(int $companyId, ?int $callingListId, bool $dryRun): ?CallingList
     {
         if ($callingListId !== null) {
@@ -162,6 +223,8 @@ class BookingCallbackSyncService
         }
 
         if ($existing) {
+            $this->refreshSourceFields($existing, $record, $dryRun, $stats);
+
             return;
         }
 
@@ -339,6 +402,8 @@ class BookingCallbackSyncService
             'booking_number' => $record['name'] ?? null,
             'booking_id' => $record['name'] ?? null,
             'salesforce_booking_id' => $record['id'],
+            'venue' => $this->nullable($record['venue'] ?? null),
+            'event' => $this->nullable($record['event'] ?? null),
             'tour_location' => $this->nullable($record['tour_location'] ?? null),
             'premiums' => $this->nullable($record['premiums'] ?? null),
             'deposit_amount' => $this->nullable($record['deposit_amount'] ?? null),
@@ -696,6 +761,44 @@ class BookingCallbackSyncService
         return $value === '' ? null : $value;
     }
 
+    /**
+     * @param  array<string, mixed>  $record
+     * @param  array<string, mixed>|null  $stats
+     */
+    private function refreshSourceFields(Lead $lead, array $record, bool $dryRun, ?array &$stats = null): bool
+    {
+        $values = [
+            'venue' => $this->nullable($record['venue'] ?? null),
+            'event' => $this->nullable($record['event'] ?? null),
+        ];
+
+        $dirty = false;
+
+        foreach ($values as $key => $value) {
+            if ($lead->{$key} !== $value) {
+                $dirty = true;
+
+                break;
+            }
+        }
+
+        if (! $dirty) {
+            return false;
+        }
+
+        if ($stats !== null) {
+            $stats['source_refreshed'] = ($stats['source_refreshed'] ?? 0) + 1;
+        }
+
+        if ($dryRun) {
+            return true;
+        }
+
+        $lead->update($values);
+
+        return true;
+    }
+
     private function stateCode(?string $state): ?string
     {
         if ($state === null) {
@@ -745,6 +848,7 @@ class BookingCallbackSyncService
             'message' => '',
             'created' => 0,
             'updated' => 0,
+            'source_refreshed' => 0,
             'skipped_no_phone' => 0,
             'skipped_dnc_terminal' => 0,
             'closed' => 0,

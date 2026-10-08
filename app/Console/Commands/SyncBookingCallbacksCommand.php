@@ -91,6 +91,7 @@ class SyncBookingCallbacksCommand extends Command
             [
                 [$dryRun ? 'Would create' : 'Created', $result['created']],
                 [$dryRun ? 'Would update' : 'Updated', $result['updated']],
+                [$dryRun ? 'Would refresh source' : 'Source refreshed', $result['source_refreshed'] ?? 0],
                 ['Skipped (no phone)', $result['skipped_no_phone']],
                 ['Skipped (DNC / booked / terminal)', $result['skipped_dnc_terminal']],
                 ['Closed', $result['closed']],

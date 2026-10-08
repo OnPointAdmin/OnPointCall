@@ -8,6 +8,8 @@ Work that has landed on `master` but is not yet dated sits under **Unreleased**.
 
 ### Added
 
+- Map callback venue and event from Salesforce Booking lookups, with a backfill command and refresh on later callback imports.
+
 ### Changed
 
 ### Fixed

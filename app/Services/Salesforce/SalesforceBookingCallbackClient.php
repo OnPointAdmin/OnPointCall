@@ -29,6 +29,47 @@ class SalesforceBookingCallbackClient
     }
 
     /**
+     * @param  list<string>  $bookingIds
+     * @return list<array<string, mixed>>
+     */
+    public function fetchByIds(array $bookingIds): array
+    {
+        $bookingIds = array_values(array_unique(array_filter(
+            $bookingIds,
+            fn (mixed $id): bool => is_string($id) && $id !== '',
+        )));
+
+        if ($bookingIds === []) {
+            return [];
+        }
+
+        $object = (string) config('services.salesforce.booking_callbacks.object', 'Booking__c');
+        $fields = config('services.salesforce.booking_callbacks.fields');
+        $selectFields = array_merge(
+            [$fields['id']],
+            $this->referenceSelectFields($fields, ['venue', 'event']),
+        );
+        $select = implode(', ', $selectFields);
+
+        $records = [];
+
+        foreach (array_chunk($bookingIds, 200) as $chunk) {
+            $quoted = implode(', ', array_map(
+                fn (string $id): string => "'".str_replace("'", "\\'", $id)."'",
+                $chunk,
+            ));
+
+            foreach ($this->salesforce->query("SELECT {$select} FROM {$object} WHERE Id IN ({$quoted})") as $row) {
+                if (is_array($row)) {
+                    $records[] = $this->parse($row);
+                }
+            }
+        }
+
+        return $records;
+    }
+
+    /**
      * @return array{from: string, to: string}
      */
     public function window(Carbon $today): array
@@ -83,6 +124,8 @@ class SalesforceBookingCallbackClient
             $fields['tour_location'],
             $fields['deposit_type'],
         ];
+
+        $selectFields = array_merge($selectFields, $this->referenceSelectFields($fields, ['venue', 'event']));
 
         foreach (config('services.salesforce.booking_callbacks.optional_soql_fields', []) as $key) {
             if (is_string($key) && isset($fields[$key])) {
@@ -184,6 +227,8 @@ class SalesforceBookingCallbackClient
             'callback_time' => $this->stringValue($record[$fields['callback_time']] ?? null),
             'callback_time_text' => $this->stringValue($record[$fields['callback_time_text']] ?? null),
             'booking_created_at' => $this->stringValue($record[$fields['created_at']] ?? null),
+            'venue' => $this->referenceLabel($record, $fields['venue'] ?? null),
+            'event' => $this->referenceLabel($record, is_string($fields['event'] ?? null) ? $fields['event'] : null),
             'tour_location' => $this->stringValue($record[$fields['tour_location']] ?? null),
             'premiums' => $this->stringValue($record[$fields['premiums']] ?? null),
             'deposit_amount' => $this->decimalValue($record[$fields['deposit_amount']] ?? null),
@@ -213,5 +258,61 @@ class SalesforceBookingCallbackClient
         $value = trim((string) $value);
 
         return $value === '' ? null : $value;
+    }
+
+    /**
+     * @param  array<string, mixed>  $fields
+     * @param  list<string>  $keys
+     * @return list<string>
+     */
+    private function referenceSelectFields(array $fields, array $keys): array
+    {
+        $select = [];
+
+        foreach ($keys as $key) {
+            $apiName = $fields[$key] ?? null;
+
+            if (! is_string($apiName) || $apiName === '') {
+                continue;
+            }
+
+            $select[] = $apiName;
+            $select[] = $this->referenceRelationshipName($apiName);
+        }
+
+        return $select;
+    }
+
+    /**
+     * @param  array<string, mixed>  $record
+     */
+    private function referenceLabel(array $record, ?string $fieldApiName): ?string
+    {
+        if ($fieldApiName === null || $fieldApiName === '') {
+            return null;
+        }
+
+        $relationship = $this->referenceRelationshipName($fieldApiName);
+        $relatedKey = str_replace('.Name', '', $relationship);
+        $related = $record[$relatedKey] ?? null;
+
+        if (is_array($related)) {
+            $name = $this->stringValue($related['Name'] ?? null);
+
+            if ($name !== null) {
+                return $name;
+            }
+        }
+
+        return $this->stringValue($record[$fieldApiName] ?? null);
+    }
+
+    private function referenceRelationshipName(string $fieldApiName): string
+    {
+        if (! str_ends_with($fieldApiName, '__c')) {
+            return $fieldApiName.'.Name';
+        }
+
+        return substr($fieldApiName, 0, -3).'__r.Name';
     }
 }
